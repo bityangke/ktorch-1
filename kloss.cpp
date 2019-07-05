@@ -110,7 +110,7 @@ KAPI multilabel(K x)  {return kloss(x, torch::multilabel_margin_loss, "multi-lab
 KAPI smoothl1(K x)    {return kloss(x, torch::smooth_l1_loss,         "smooth l1");}
 KAPI softmargin(K x)  {return kloss(x, torch::soft_margin_loss,       "soft margin");}
 
-Z B bcearg(K x) {return x->t==-KS || x->t==KS || xempty(x) || xdict(x);}  // true if setting (rather than wt tensor)
+Z B bcearg(K x) {return x->t==-KS || x->t==KS || xempty(x) || xdict(x);}  // true if arg is a setting (rather than wt tensor)
 
 KAPI bce(K a) {
  KTRY

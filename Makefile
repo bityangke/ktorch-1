@@ -14,7 +14,7 @@ ifeq ($(OS),Darwin)
 endif
 
 lib := ktorch.so
-src := ktorch.cpp krandom.cpp ktensor.cpp kmath.cpp kmodule.cpp kloss.cpp kopt.cpp ktest.cpp
+src := ktorch.cpp ktensor.cpp kmath.cpp kmodule.cpp kloss.cpp kopt.cpp ktest.cpp
 
 all: $(lib)
 *.o: k.h ktorch.h

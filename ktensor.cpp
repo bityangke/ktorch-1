@@ -14,14 +14,14 @@
 K kten(const Tensor &t) {
  auto o=torch::make_unique<Obj>();
  auto u=torch::make_unique<Tensor>(t);
- o->t=Tag::tensor;
+ o->t=Class::tensor;
  o->c=Cast::tensor;
  o->v=u.release();
  return kptr(o.release());
 }
 
 V kswitch(Ptr &p,const Tensor &t) {
- if(p->t != Tag::tensor) AT_ERROR("Invalid tensor pointer from k");
+ if(p->t != Class::tensor) AT_ERROR("Invalid tensor pointer from k");
  auto u=torch::make_unique<Tensor>(t);
  delete (Tensor*)p->v;
  p->v=u.release();

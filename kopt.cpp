@@ -147,7 +147,7 @@ ZV optpairs(Cast c,V *v,Pairs &p) {
 
 ZV optparms(Ptr k,std::vector<Tensor>& v) {
  switch(k->t) {
-  case Tag::tensor: v.emplace_back(*(Tensor*)k->v); break;
+  case Class::tensor: v.emplace_back(*(Tensor*)k->v); break;
   default: break;
  }
 }
@@ -157,7 +157,7 @@ ZK optinit(S s,F lr,Ptr &k,Pairs &p) {
  if(k) optparms(k,v);              // set vector of tensor parms to optimize
  omap(s,c,r);
  if(lr == lr) r=lr; // use learning rate if specified directly
- auto u=torch::make_unique<Obj>(); u->t=Tag::optimizer; u->c=c;
+ auto u=torch::make_unique<Obj>(); u->t=Class::optimizer; u->c=c;
  switch(c) {
   case Cast::adagrad: {auto a=torch::optim::AdagradOptions(r); optpairs(c,&a,p); u->v=new torch::optim::Adagrad(v,a); break;}
   case Cast::adam:    {auto a=torch::optim::AdamOptions(r);    optpairs(c,&a,p); u->v=new torch::optim::Adam(v,a);    break;}

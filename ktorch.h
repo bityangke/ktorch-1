@@ -84,7 +84,7 @@ typedef struct {
  };
 } Pairs;
 
-enum class Tag:char {
+enum class Class:char {
  undefined,
  tensor,
  sequential,
@@ -152,7 +152,7 @@ enum class State:char {
 };
 
 typedef struct {
- Tag t;            // general tag: tensor, optimizer, etc.
+ Class t;          // tensor, optimizer, etc.
  Cast c;           // used to cast pointer
  V *v;             // underlying tensor, module,..
 } Obj,*Ptr;

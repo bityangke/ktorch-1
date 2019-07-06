@@ -381,7 +381,7 @@ KAPI ctc(K a) {
 // ------------------------------------------------------------------------------------------------------
 ZK lossinit(Cast c,S s,K x,J i) {
  J j; F m; Tensor w; int64_t r;
- auto u=torch::make_unique<Obj>(); u->t=Tag::loss; u->c=c;
+ auto u=torch::make_unique<Obj>(); u->t=Class::loss; u->c=c;
  switch(c) {
   case Cast::bce:         u->v=new BCELoss(reduce(s,x,i)); break;
   case Cast::kl:          u->v=new KLDivLoss(reduce(s,x,i)); break;

@@ -263,7 +263,7 @@ B xsize(K x,J i,J d,F       *a) {return xind(x,i) && xsize(kK(x)[i],d,a);}
 // ------------------------------------------------------------------------------------------------------
 B xten(K x,Tensor &t) {
  Ptr p;
- return (xptr(x,p) && p->t==Tag::tensor && p->c==Cast::tensor) ? t=*(Tensor*)p->v,true : false;
+ return (xptr(x,p) && p->t==Class::tensor && p->c==Cast::tensor) ? t=*(Tensor*)p->v,true : false;
 }
 
 B xten(K x,J i,Tensor& t) {return xind(x,i) && xten(kK(x)[i],t);}
@@ -297,15 +297,15 @@ B xtenarg(K x,Tensor& a,Tensor &b,Tensor &c) {return xtenarg(x,0,a,b,c);}
 // ------------------------------------------------------------------------------------------------------
 B xseq(K x,Sequential &s) {
  Ptr p;
- return (xptr(x,p) && p->t==Tag::sequential) ? s=*(Sequential*)p->v,true : false;
+ return (xptr(x,p) && p->t==Class::sequential) ? s=*(Sequential*)p->v,true : false;
 }
 
 B xseq(K x,J i,Sequential& s) {return xind(x,i) && xseq(kK(x)[i],s);}
 
-B xloss(K x,Ptr &p) {return xptr(x,p) && p->t==Tag::loss;}
+B xloss(K x,Ptr &p) {return xptr(x,p) && p->t==Class::loss;}
 B xloss(K x,J i,Ptr &p) {return xind(x,i) && xloss(kK(x)[i],p);}
 
-B xoptim(K x,Ptr &p) {return xptr(x,p) && p->t==Tag::optimizer;}
+B xoptim(K x,Ptr &p) {return xptr(x,p) && p->t==Class::optimizer;}
 B xoptim(K x,J i,Ptr &p) {return xind(x,i) && xoptim(kK(x)[i],p);}
 
 // ------------------------------------------------------------------------------------------------------
@@ -751,10 +751,10 @@ K kexpand(J n,const F       *e) {return kex<F>      (n,e) ? kf(e[0]) : klist(n,e
 KAPI kfree(K x){
  KTRY
   Ptr p=nullptr;
-  switch(xptr(x,p) ? p->t : Tag::undefined) {
-   case Tag::tensor:     delete (Tensor*)p->v; break;
-   case Tag::sequential: delete (Sequential*)p->v; break;
-   case Tag::optimizer:  optfree(p->c,p->v); break;
+  switch(xptr(x,p) ? p->t : Class::undefined) {
+   case Class::tensor:     delete (Tensor*)p->v; break;
+   case Class::sequential: delete (Sequential*)p->v; break;
+   case Class::optimizer:  optfree(p->c,p->v); break;
    default: return KERR("Not a recognized pointer");
   }
   return delete p,(K)0;
@@ -776,8 +776,8 @@ KAPI kto(K x,K y,K z) {
    if(!(o.has_device() || o.has_dtype()))
     AT_ERROR("No device or datatype specified");
    switch(p->t) {
-    case Tag::tensor:     ktento(p,o,b); break;
-    case Tag::sequential: kseqto(p,o,b); break;
+    case Class::tensor:     ktento(p,o,b); break;
+    case Class::sequential: kseqto(p,o,b); break;
     default: AT_ERROR("Unrecognized pointer from k, expecting allocated tensor or module");
    }
   }
@@ -792,7 +792,7 @@ KAPI kdetail(K x) {
    if(n<0 || n>2)
     return KERR("Specify level of detail: 0,1,2");
    switch(p->t) {
-    case Tag::tensor:  return tensordetail(p,n);
+    case Class::tensor:  return tensordetail(p,n);
     default:           return KERR("Unrecognized pointer");
    }
   } else {
@@ -804,10 +804,10 @@ KAPI kdetail(K x) {
 KAPI kzerograd(K x) {
  KTRY
   Ptr p=nullptr;
-  switch(xptr(x,p) ? p->t : Tag::undefined) {
-   case Tag::tensor: {auto *t=(Tensor*)p->v; if(t->grad().defined()) t->grad().detach().zero_(); break;}
-   case Tag::sequential:(*(Sequential*)p->v)->zero_grad(); break;
-   case Tag::optimizer:  ((Optimizer*) p->v)->zero_grad(); break;
+  switch(xptr(x,p) ? p->t : Class::undefined) {
+   case Class::tensor: {auto *t=(Tensor*)p->v; if(t->grad().defined()) t->grad().detach().zero_(); break;}
+   case Class::sequential:(*(Sequential*)p->v)->zero_grad(); break;
+   case Class::optimizer:  ((Optimizer*) p->v)->zero_grad(); break;
    default: AT_ERROR("Expecting pointer to tensor, module or optimizer");
   }
   return (K)0;

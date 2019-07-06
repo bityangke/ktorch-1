@@ -18,7 +18,7 @@
 K kseq(const Sequential &s,Cast c) {  //c:cast used to signal single module
  auto o=torch::make_unique<Obj>();
  auto p=torch::make_unique<Sequential>(s);
- o->t=Tag::sequential;
+ o->t=Class::sequential;
  o->c=c;
  o->v=p.release();
  return kptr(o.release());

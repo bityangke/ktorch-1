@@ -70,7 +70,7 @@ KAPI namecheck(K x) {
 template<typename M> K mptr(const M &m,Cast c) {
  auto o=torch::make_unique<Obj>();
  auto p=torch::make_unique<M>(m);
- o->t=Tag::sequential;
+ o->t=Class::sequential;
  o->c=c;
  o->v=p.release();
  return kptr(o.release());
@@ -484,18 +484,4 @@ KAPI tensorhelp(K x) {
  return kp((S)tensorhelp(Tensormode::zeros));
 }
 
-enum class Tagtype {
- tensor,
- linear,
- conv
-};
-
-V ftest(Tagtype x) {
- I y=(I)x;
- auto z=(I)x;
- auto t=(Tagtype)z;
-// auto T=(Tagtype)99;
- if(t==Tagtype::linear) std::cout << "yes\n";
- std::cout << y << "\n";
-}
 */

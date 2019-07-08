@@ -85,7 +85,7 @@ typedef struct {
 } Pairs;
 
 enum class Class:char {
- undefined,
+ undefined=0,
  tensor,
  sequential,
  loss,
@@ -148,7 +148,7 @@ enum class Setting:char {
 };
 
 enum class State:char {
- module,name,options,parms,buffers
+ Class,module,name,options,parms,buffers
 };
 
 typedef struct {
@@ -317,6 +317,7 @@ V kseqto(Ptr&,TensorOptions&,B);
 V modfn(K);
 
 // loss functions:
+V lossfree(Ptr);
 V lossfn(K);
 
 // optimization functions:
@@ -500,7 +501,8 @@ typedef struct {
   std::make_tuple(cs("value"),      Setting::value)
  }};
 
- std::array<std::tuple<S,State>,5> state = {{         //state dictionary keys: map symbol -> enum
+ std::array<std::tuple<S,State>,6> state = {{         //state dictionary keys: map symbol -> enum
+  std::make_tuple(cs("class"),   State::Class),
   std::make_tuple(cs("module"),  State::module),
   std::make_tuple(cs("name"),    State::name),
   std::make_tuple(cs("options"), State::options),

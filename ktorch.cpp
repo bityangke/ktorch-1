@@ -144,6 +144,15 @@ TypeMeta maptype(A k) {
  AT_ERROR("No torch type found for k: ",kname(k));
 }
 
+K statekeys(B a,Class c) {
+ K x=ktn(KS,env().state.size());
+ for(auto &m:env().state)
+  kS(x)[(J)std::get<1>(m)]=std::get<0>(m);
+ return x;
+}
+
+KAPI keytest(K x) {return statekeys(true,Class::undefined);}
+
 // --------------------------------------------------------------------------------------
 // xnull  - true if null, i.e. (::)
 // xempty - true if null or empty K list without type, i.e. :: or ()
@@ -292,7 +301,7 @@ B xtenarg(K x,Tensor& a,Tensor &b,Tensor &c) {return xtenarg(x,0,a,b,c);}
  
 // ------------------------------------------------------------------------------------------------------
 // xseq - check arg(s) for allocated sequential modules
-// xloss - check arg(s) for allocated loss function
+// xloss - check arg(s) for allocated loss module
 // xoptim - check arg(s) for allocated optimizer pointer
 // ------------------------------------------------------------------------------------------------------
 B xseq(K x,Sequential &s) {
@@ -754,6 +763,7 @@ KAPI kfree(K x){
   switch(xptr(x,p) ? p->t : Class::undefined) {
    case Class::tensor:     delete (Tensor*)p->v; break;
    case Class::sequential: delete (Sequential*)p->v; break;
+   case Class::loss:       lossfree(p); break;
    case Class::optimizer:  optfree(p->c,p->v); break;
    default: return KERR("Not a recognized pointer");
   }

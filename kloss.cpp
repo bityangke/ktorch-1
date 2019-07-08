@@ -376,9 +376,13 @@ KAPI ctc(K a) {
 }
 
 // ------------------------------------------------------------------------------------------------------
+// lossfree - free previously allocated loss module
 // lossinit - initialize loss modules, return k pointer
 // lossopt - retrieve loss module options, return k dictionary of symbol -> setting
+// lossdict - return dictionary of loss module, options
 // ------------------------------------------------------------------------------------------------------
+V lossfree(Ptr p) {delete(Loss*)p->v;}
+
 ZK lossinit(Cast c,S s,K x,J i) {
  J j; F m; Tensor w; int64_t r;
  auto u=torch::make_unique<Obj>(); u->t=Class::loss; u->c=c;
@@ -457,6 +461,28 @@ ZK lossopt(B a,Cast c,Loss *l) {
  return x;
 }
  
+K statekeys(B,Class);
+
+ZK lossdict(B a,B b,Ptr p) {
+ K k,v; Cast c=p->c; auto *l=(Loss*)p->v;
+ if(b) {
+  k=statekeys(true,Class::loss); v=ktn(0,k->n);
+  kK(v)[0]=kc('l');
+  kK(v)[2]=ks((S)"");
+  kK(v)[4]=ktn(0,0);
+  kK(v)[5]=ktn(0,0);
+ } else {
+  k=ktn(KS,2),v=ktn(0,2);
+  for(auto &m:env().state) {
+        if(std::get<1>(m)==State::module)  kS(k)[0]=std::get<0>(m);
+   else if(std::get<1>(m)==State::options) kS(k)[1]=std::get<0>(m);
+  }
+ }
+ kK(v)[b ? 1 : 0]=ks(lmap(c));
+ kK(v)[b ? 3 : 1]=lossopt(a,c,l);
+ return xD(k,v);
+}
+ 
 ZK lossfwd(Cast c,Loss *l,K a) {
  B p; Tensor r,x,y,z;
  if(a->n==3) {
@@ -478,11 +504,11 @@ ZK lossfwd(Cast c,Loss *l,K a) {
 
 KAPI loss(K x) {
  KTRY
-  S s; Ptr p; B a=env().alloptions;
+  S s; Ptr p; B a=env().alloptions,b=true;
   if(xsyms(x,s) || xsym(x,0,s)) {
    return lossinit(lmap(s),s,x,1);
   } else if(xloss(x,p) || (xbool(x,1,a) && x->n==2 && xloss(x,0,p))) {
-   return lossopt(a,p->c,(Loss*)p->v);
+   return lossdict(a,b,p);
   } else if(xloss(x,0,p) && x->n>1) {
    return lossfwd(p->c,(Loss*)p->v,x);
   } else {

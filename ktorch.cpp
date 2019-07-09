@@ -151,8 +151,6 @@ K statekeys(B a,Class c) {
  return x;
 }
 
-KAPI keytest(K x) {return statekeys(true,Class::undefined);}
-
 // --------------------------------------------------------------------------------------
 // xnull  - true if null, i.e. (::)
 // xempty - true if null or empty K list without type, i.e. :: or ()

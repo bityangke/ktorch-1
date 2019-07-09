@@ -154,8 +154,11 @@ ZV wtargs(Cast c,cS s,K x,J i,Tensor& w,J& j,int64_t &r) {
 ZK wtloss(K a,Cast c,cS s) {
  KTRY
   B p=false; J j; int64_t r; Tensor l,x,y,w;
-  if(a->t || a->n<2 || a->n>5)
-   AT_ERROR(s," loss expects (input;target), (input;target;weight) or (input;target;weight;reduction)");
+  if(a->t) {
+   AT_ERROR(s," loss not implemented for ",kname(a->t));
+  } else if(a->n < 2) {
+   AT_ERROR(s," loss expects at least 2 args, (input;target)");
+  }
   wtargs(c,s,a,2,w,j,r);
   p=xtenarg(a,x,y);
   switch(c) {
@@ -171,6 +174,31 @@ ZK wtloss(K a,Cast c,cS s) {
 KAPI ce(K x)        {return wtloss(x, Cast::ce,        "cross entropy");}
 KAPI nll(K x)       {return wtloss(x, Cast::nll,       "negative log-likelihood");}
 KAPI multisoft(K x) {return wtloss(x, Cast::multisoft, "multi-label soft margin");}
+
+// ---------------------------------------------------------------------------------------
+// bceloss - handle binary cross-entropy with logits, separate call if batch weights
+// bcelogits - input & target, with options for reduction and class weights
+// bcelogitw - input, target & batch weights, along with options for reduction & class wts
+// ---------------------------------------------------------------------------------------
+ZK bceloss(K a,B b,cS s) {  //a:args, b:true if batch wts
+ KTRY
+  B p=false; J i=2+b,j; int64_t r; Tensor l,x,y,bw,w;
+  if(a->t) {
+   AT_ERROR(s," loss not implemented for ",kname(a->t));
+  } else if(a->n < i) {
+   AT_ERROR(s,(b ? " loss expects at least 3 args, (input;target;batch weights)"
+                 : " loss expects at least 2 args, (input;target)"));
+  }
+  wtargs(Cast::bcelogits,s,a,i,w,j,r);
+  p=xtenarg(a,x,y);
+  if(b && !xten(a,2,bw)) bw=kput(a,2);
+  l=torch::binary_cross_entropy_with_logits(x,y,bw,w,r);
+  return p ? kten(l) : kget(l);
+ KCATCH(s)
+}
+
+KAPI bcelogits(K x) {return bceloss(x, false, "binary cross-entropy with logits");}
+KAPI bcelogitw(K x) {return bceloss(x, true,  "binary cross-entropy with logits & batch weights");}
 
 // ------------------------------------------------------------------------------------------------------
 // marginval  - default margin value given loss type
@@ -220,7 +248,8 @@ KAPI margin(K x)     {return marginloss(x, Cast::margin,     "margin ranking");}
 // multimargin - funcional form of multi margin loss function
 // ------------------------------------------------------------------------------------------------------
 ZV multiargs(K x,J i,Scalar &pw,Scalar& m,Tensor& w,int64_t &r) {
- Pairs p; J n=xargc(x,i,p); r=reduce(); pw=1; m=1.0;
+ Pairs p; J n=xargc(x,i,p); MultiMarginLossOptions o;
+ r=o.reduce(); pw=o.p(); m=o.margin();
  if(n && xnum(x,i,pw)) i++,n--;
  if(n && xnum(x,i,m))  i++,n--;
  if(n && xreduce(x,i+n-1,r)) n--;
@@ -512,7 +541,7 @@ KAPI loss(K x) {
   } else if(xloss(x,0,p) && x->n>1) {
    return lossfwd(p->c,(Loss*)p->v,x);
   } else {
-    AT_ERROR("Unrecognized arg(s)");
+   AT_ERROR("Unrecognized arg(s)");
   }
  KCATCH("Loss module");
 }
@@ -523,6 +552,8 @@ KAPI loss(K x) {
 V lossfn(K x) {
  fn(x, "loss",        KFN(loss),1);
  fn(x, "bce",         KFN(bce),1);
+ fn(x, "bcelogits",   KFN(bcelogits),1);
+ fn(x, "bcelogitw",   KFN(bcelogitw),1);
  fn(x, "ce",          KFN(ce),1);
  fn(x, "cosineloss",  KFN(cosineloss),1);
  fn(x, "ctc",         KFN(ctc),1);

@@ -167,16 +167,16 @@ Tensor kput(K x,J i) {
 // --------------------------------------------------------------------------------------
 ZV tensorlike(K x,Tensormode m,Tensor &t,Tensor &r) {  // t:input, r:result tensor
  //use tensor options from input tensor, override if any supplied in final arg
- using M=Tensormode; J i,j; Scalar s; TensorOptions o=t.options();
+ using Tensormode=Tensormode; J i,j; Scalar s; TensorOptions o=t.options();
  B b=xopt(x,x->n-1,o); I nx=x->n-b;  //set flag if options given, count non-option args
  switch(m) {
-  case M::empty: if(nx==2) r=b ? torch::empty_like(t,o) : torch::empty_like(t); break;
-  case M::zeros: if(nx==2) r=b ? torch::zeros_like(t,o) : torch::zeros_like(t); break;
-  case M::ones:  if(nx==2) r=b ? torch::ones_like(t,o)  : torch::ones_like(t);  break;
-  case M::rand:  if(nx==2) r=b ? torch::rand_like(t,o)  : torch::rand_like(t);  break;
-  case M::randn: if(nx==2) r=b ? torch::randn_like(t,o) : torch::randn_like(t); break;
-  case M::full:  if(nx==3 && xnum(x,1,s))r=b ? torch::full_like(t,s,o) : torch::full_like(t,s); break;
-  case M::randint:
+  case Tensormode::empty: if(nx==2) r=b ? torch::empty_like(t,o) : torch::empty_like(t); break;
+  case Tensormode::zeros: if(nx==2) r=b ? torch::zeros_like(t,o) : torch::zeros_like(t); break;
+  case Tensormode::ones:  if(nx==2) r=b ? torch::ones_like(t,o)  : torch::ones_like(t);  break;
+  case Tensormode::rand:  if(nx==2) r=b ? torch::rand_like(t,o)  : torch::rand_like(t);  break;
+  case Tensormode::randn: if(nx==2) r=b ? torch::randn_like(t,o) : torch::randn_like(t); break;
+  case Tensormode::full:  if(nx==3 && xnum(x,1,s))r=b ? torch::full_like(t,s,o) : torch::full_like(t,s); break;
+  case Tensormode::randint:
    if     (nx==3 && xlong(x,2,j))                 r=b ? torch::randint_like(t,j,o)   : torch::randint_like(t,j);
    else if(nx==4 && xlong(x,2,i) && xlong(x,3,j)) r=b ? torch::randint_like(t,i,j,o) : torch::randint_like(t,i,j);
    break;
@@ -186,71 +186,71 @@ ZV tensorlike(K x,Tensormode m,Tensor &t,Tensor &r) {  // t:input, r:result tens
 }
 
 ZV tensorout(K x,Tensormode m,Tensor &t,Tensor &r) {  // t:output, r:result tensor
- using M=Tensormode; J i,j; Scalar a,z,n; JRef s;
+ F e; J i,j; Scalar a,z,n; JRef s;
  B b=xsize(x,1,s);  //true if size is given as 2nd arg (last arg is output tensor)
  switch(m) {
-  case M::empty: if(b && x->n==3) r=torch::empty_out(t,s); break;
-  case M::zeros: if(b && x->n==3) r=torch::zeros_out(t,s); break;
-  case M::ones:  if(b && x->n==3) r=torch::ones_out(t,s); break;
-  case M::rand:  if(b && x->n==3) r=torch::rand_out(t,s); break;
-  case M::randn: if(b && x->n==3) r=torch::randn_out(t,s); break;
-  case M::full:  if(b && x->n==4 && xnum(x,2,n)) r=torch::full_out(t,s,n); break;
-  case M::randperm: if (x->n==3 && xlong(x,1,i)) r=torch::randperm_out(t,i); break;
-  case M::randint:
+  case Tensormode::empty: if(b && x->n==3) r=torch::empty_out(t,s); break;
+  case Tensormode::zeros: if(b && x->n==3) r=torch::zeros_out(t,s); break;
+  case Tensormode::ones:  if(b && x->n==3) r=torch::ones_out(t,s); break;
+  case Tensormode::rand:  if(b && x->n==3) r=torch::rand_out(t,s); break;
+  case Tensormode::randn: if(b && x->n==3) r=torch::randn_out(t,s); break;
+  case Tensormode::full:  if(b && x->n==4 && xnum(x,2,n)) r=torch::full_out(t,s,n); break;
+  case Tensormode::randperm: if (x->n==3 && xlong(x,1,i)) r=torch::randperm_out(t,i); break;
+  case Tensormode::randint:
    b=xsize(x,x->n-2,s);
    if     (b && x->n==4 && xlong(x,1,j))                 r=torch::randint_out(t,j,s);
    else if(b && x->n==5 && xlong(x,1,i) && xlong(x,2,j)) r=torch::randint_out(t,i,j,s);
    break;
-  case M::eye:
+  case Tensormode::eye:
     if     (x->n==3 && xlong(x,1,i))                 r=torch::eye_out(t,i);
     else if(x->n==4 && xlong(x,1,i) && xlong(x,2,j)) r=torch::eye_out(t,i,j);
     break;
-  case M::range:
-  case M::arange:
+  case Tensormode::range:
+  case Tensormode::arange:
    b=m==Tensormode::range;
    if     (x->n==3 && xnum(x,1,z))                              r = b ? torch::range_out(t,0,z)   : torch::arange_out(t,z);
    else if(x->n==4 && xnum(x,1,a) && xnum(x,2,z))               r = b ? torch::range_out(t,a,z)   : torch::arange_out(t,a,z);
    else if(x->n==5 && xnum(x,1,a) && xnum(x,2,z) && xnum(x,3,n))r = b ? torch::range_out(t,a,z,n) : torch::arange_out(t,a,z,n);
    break;
-  case M::linspace:
-  case M::logspace:
-   b=m==Tensormode::linspace; i=100; //default of 100 steps
-   if(xnum(x,1,a) && xnum(x,2,z) && (x->n==4 || (x->n==5 && xlong(x,3,i))))
-    r = b ? torch::linspace_out(t,a,z,i) : torch::logspace_out(t,a,z,i,10.0);  // base=10.0
+  case Tensormode::linspace:
+  case Tensormode::logspace:
+   b=m==Tensormode::logspace; i=100; e=10.0; //default of 100 steps, base 10
+   if(xnum(x,1,a) && xnum(x,2,z) && (x->n==4 || (xlong(x,3,i) && (x->n==5 || (x->n==6 && b && xnum(x,4,e))))))
+    r = b ? torch::logspace_out(t,a,z,i,e) : torch::linspace_out(t,a,z,i);
    break;
   default: break;
  }
 }
 
 ZV tensoropt(K x,Tensormode m,Tensor &r) {
- using M=Tensormode; J i,j; Scalar a,z,n; JRef s; TensorOptions o;
- B b=xopt(x,x->n-1,o); I nx=x->n-b;               //track if options in last arg
- B sz=xsize(x,1,s) && nx==((m==M::full) ? 3 : 2); //2nd arg is size and correct arg count
+ F e; J i,j; Scalar a,z,n; JRef s; TensorOptions o;
+ B b=xopt(x,x->n-1,o); I nx=x->n-b;                        //track if options in last arg
+ B sz=xsize(x,1,s) && nx==((m==Tensormode::full) ? 3 : 2); //2nd arg is size & correct arg count
  switch(m) {
-  case M::empty: if(sz) r=torch::empty(s,o); break;
-  case M::zeros: if(sz) r=torch::zeros(s,o); break;
-  case M::ones:  if(sz) r=torch::ones(s,o); break;
-  case M::rand:  if(sz) r=torch::rand(s,o); break;
-  case M::randn: if(sz) r=torch::randn(s,o); break;
-  case M::full:  if(sz && xnum(x,2,n)) r=torch::full(s,n,o); break;
-  case M::randperm:
+  case Tensormode::empty: if(sz) r=torch::empty(s,o); break;
+  case Tensormode::zeros: if(sz) r=torch::zeros(s,o); break;
+  case Tensormode::ones:  if(sz) r=torch::ones(s,o); break;
+  case Tensormode::rand:  if(sz) r=torch::rand(s,o); break;
+  case Tensormode::randn: if(sz) r=torch::randn(s,o); break;
+  case Tensormode::full:  if(sz && xnum(x,2,n)) r=torch::full(s,n,o); break;
+  case Tensormode::randperm:
    if (!o.has_dtype()) o=o.dtype(torch::kLong);
    if (nx==2 && xlong(x,1,i)) r = torch::randperm(i,o);
    break;
-  case M::randint:
+  case Tensormode::randint:
    sz=xsize(x,nx-1,s); // true if size is supplied as last non-options arg
    if     (sz && nx==3 && xlong(x,1,j))                 r=torch::randint(j,s,o);
    else if(sz && nx==4 && xlong(x,1,i) && xlong(x,2,j)) r=torch::randint(i,j,s,o);
    break;
-  case M::eye:
+  case Tensormode::eye:
     if     (xn==2 && xlong(x,1,i))                 r=torch::eye(i,o);
     else if(xn==3 && xlong(x,1,i) && xlong(x,2,j)) r=torch::eye(i,j,o);
     break;
-  case M::range:
+  case Tensormode::range:
    if     (nx==3 && xnum(x,1,a) && xnum(x,2,z))               r=torch::range(a,z,o);
    else if(nx==4 && xnum(x,1,a) && xnum(x,2,z) && xnum(x,3,n))r=torch::range(a,z,n,o);
    break;
-  case M::arange:
+  case Tensormode::arange:
    b=!o.has_dtype();
    if(nx==2 && xnum(x,1,z)) {
     if(b && z.isIntegral()) o=o.dtype(torch::kLong);
@@ -263,25 +263,24 @@ ZV tensoropt(K x,Tensormode m,Tensor &r) {
     r=torch::arange(a,z,n,o);
    }
    break;
-  case M::linspace:
-  case M::logspace:
-   b=m==Tensormode::linspace; i=100; //default of 100 steps
-   if(xnum(x,1,a) && xnum(x,2,z) && (nx==3 || (nx==4 && xlong(x,3,i))))
-    r = b ? torch::linspace(a,z,i,o) : torch::logspace(a,z,i,10.0,o);
+  case Tensormode::linspace:
+  case Tensormode::logspace:
+   b=m==Tensormode::logspace; i=100; e=10.0; //default of 100 steps, base 10
+   if(xnum(x,1,a) && xnum(x,2,z) && (nx==3 || (xlong(x,3,i) && (nx==4 || (nx==5 && b && xnum(x,4,e))))))
+    r = b ? torch::logspace(a,z,i,e,o) : torch::linspace(a,z,i,o);
    break;
   default: break;
  }
 }
 
-ZK tensormode(K x,Tensormode m) {
+ZK tensormode(K x,S s,Tensormode m) {
  Tensor t,r; B in=false,out=false;
  if((in=xten(x,1,t)))            tensorlike(x,m,t,r); // input tensor is 2nd arg
  else if((out=xten(x,x->n-1,t))) tensorout(x,m,t,r);  // output tensor is final arg
  else                            tensoropt(x,m,r);    // no input/output tensor
- if(r.defined())
-  return out ? (K)0 : kten(r);
- else
-  return KERR("mode arg error"); //tensorerr(x,m,in,out);
+ if(!r.defined())
+  AT_ERROR("Unrecognized argument(s) for tensor creation mode: ",s);
+ return out ? (K)0 : kten(r);
 }
 
 ZK tensorput(K x) {
@@ -304,12 +303,12 @@ ZK tensorput(K x) {
 }
 
 KAPI tensor(K x) {
- Tensormode m; Tensor t;
+ S s; Tensormode m; Tensor t;
  KTRY
   if(xten(x,t))
    return kget(t);
-  else if(xmode(x,0,m))
-   return tensormode(x,m);
+  else if(xmode(x,0,s,m))
+   return tensormode(x,s,m);
   else
    return tensorput(x);
  KCATCH("Unable to complete tensor operation");

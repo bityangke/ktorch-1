@@ -223,8 +223,8 @@ B xloss(K,J,Ptr&);
 B xoptim(K,Ptr&);
 B xoptim(K,J,Ptr&);
 
-B xnum(K,F);
-B xnum(K,J,F);
+B xnum(K,F&);
+B xnum(K,J,F&);
 B xnum(K,Scalar&);
 B xnum(K,J,Scalar&);
 B xnumn(K,c10::optional<Scalar>&);
@@ -256,8 +256,8 @@ B xopt(K,TensorOptions&);
 B xopt(K,J,TensorOptions&);
 B xto(S,TensorOptions&);
 B xto(K,TensorOptions&);
-B xmode(K,Tensormode&);
-B xmode(K,J,Tensormode&);
+B xmode(K,S&,Tensormode&);
+B xmode(K,J,S&,Tensormode&);
 B xbacksym(K,B&,B&);
 B xbacksym(K,J,B&,B&);
 

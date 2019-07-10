@@ -324,14 +324,14 @@ B xoptim(K x,J i,Ptr &p) {return xind(x,i) && xoptim(kK(x)[i],p);}
 // xbyte - convert k bool,char,byte -> torch scalar
 // xscalar - convert k number or byte -> torch scalar
 // ------------------------------------------------------------------------------------------------------
-B xnum(K x,F f) {
+B xnum(K x,F &f) {
  switch(x->t) {
   case -KF: return f=x->f,true;
   case -KJ: return f=x->j,true;
   default: return false;
  }
 }
-B xnum(K x,J i,F f) {return xind(x,i) && xnum(kK(x)[i],f);}
+B xnum(K x,J i,F &f) {return xind(x,i) && xnum(kK(x)[i],f);}
 
 B xnum(K x,Scalar& s) {
  switch(x->t) {
@@ -483,16 +483,16 @@ B xto(K x,TensorOptions &o) {
  }
 }
 
-B xmode(K x,Tensormode &m) {
+B xmode(K x,S &s,Tensormode &m) {
  if(x->t == -KS) {
   for(auto &v:env().tensormode)
-   if(x->s == std::get<0>(v)) return m=std::get<1>(v), true;
+   if(x->s == std::get<0>(v)) return s=x->s,m=std::get<1>(v), true;
   AT_ERROR("Unrecognized tensor creation mode: ",x->s);
  }
  return false;
 }
 
-B xmode(K x,J i,Tensormode &m) {return xind(x,i) && xmode(kK(x)[i],m);}
+B xmode(K x,J i,S &s,Tensormode &m) {return xind(x,i) && xmode(kK(x)[i],s,m);}
 
 B xbacksym(K x,B& a,B& b) {
  if(x->t == -KS) {

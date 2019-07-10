@@ -1068,27 +1068,54 @@ KAPI Tensordot(K x) {
  KCATCH("tensordot");
 }
 
+ZK uniqres(B p,B bi,B bc,Tensor &u,Tensor &i, Tensor &c) {
+ if(bi && bc)return kten3(p,u,i,c);
+ else if(bi) return ktenpair(p,u,i);
+ else if(bc) return ktenpair(p,u,c);
+ else        return p ? kten(u) : kget(u);
+}
+
 KAPI Unique(K x) {
  KTRY
-  B p,s=true,b=false; J d=nj,n=xlen(x); Tensor t,u,i,c;
+  B p,bs=true,bi=false,bc=false; J d=nj,n=xlen(x); Tensor t,u,i,c;
+  if(xten(x,t)) {
+   p=true;
+  } else if(!xmixed(x,5)) {
+   p=false, t=kput(x);
+  } else if(
+   (n==2 && (xbool(x,1,bs) ||  xlong(x,1,d)))||
+   (n==3 &&  xbool(x,1,bs) && (xbool(x,2,bi) || xlong(x,2,d))) ||
+   (n==4 &&  xbool(x,1,bs) &&  xbool(x,2,bi) && (xbool(x,3,bc) || xlong(x,3,d))) ||
+   (n==5 &&  xbool(x,1,bs) &&  xbool(x,2,bi) &&  xbool(x,3,bc) && xlong(x,4,d))) {
+   if(!(p=xten(x,0,t))) t=kput(x,0);
+  } else {
+   AT_ERROR("unique expects input array/tensor, followed by optional flag(s) and optional dimension as last arg:\n"
+            "(input;sort flag;indices flag;counts flag;dimension)");
+  }
+  std::tie(u,i,c)=(d==nj) ? torch::_unique2(t,bs,bi,bc) : torch::unique_dim(t,d,bs,bi,bc);
+  return uniqres(p,bi,bc,u,i,c);
+ KCATCH("unique");
+}
+
+KAPI Uniquec(K x) {
+ KTRY
+  B p,bi=false,bc=false; J n=xlen(x); int64_t d=nj; Tensor t,u,i,c;
   if(xten(x,t)) {
    p=true;
   } else if(!xmixed(x,4)) {
    p=false, t=kput(x);
-  } else if( (n==2 &&  (xbool(x,1,s) || xlong(x,1,d)))  ||
-             (n==3 && ((xbool(x,1,s) && xbool(x,2,b)) ||
-                       (xbool(x,1,s) && xlong(x,2,d)) ||
-                       (xlong(x,1,d) && xbool(x,2,s)))) ||
-             (n==4 && ((xlong(x,1,d) && xbool(x,2,s) && xbool(x,3,b)) ||
-                       (xbool(x,1,s) && xbool(x,2,b) && xlong(x,3,d)) ||
-                       (xbool(x,1,s) && xlong(x,2,d) && xbool(x,3,b))))) {
+  } else if(
+   (n==2 && (xbool(x,1,bi) || xint64(x,1,d))) ||
+   (n==3 &&  xbool(x,1,bi) && (xbool(x,2,bc) || xint64(x,2,d))) ||
+   (n==4 &&  xbool(x,1,bi) &&  xbool(x,2,bc) && xint64(x,3,d))) {
    if(!(p=xten(x,0,t))) t=kput(x,0);
   } else {
-   AT_ERROR("unique expects input array/tensor, followed by optional flag(s) for sort,indices and optional dimension");
+   AT_ERROR("unique consecutive expects input array/tensor, followed by optional flag(s) and optional dimension as last arg:\n"
+            "(input;indices flag;counts flag;dimension)");
   }
-  std::tie(u,i,c)=(d==nj) ? torch::_unique2(t,s,b) : torch::unique_dim(t,d,s,b);
-  return b ? ktenpair(p,u,i) : (p ? kten(u) : kget(u));
- KCATCH("unique");
+  std::tie(u,i,c)=torch::unique_consecutive(t,bi,bc,(d==nj) ? torch::nullopt : torch::make_optional(d));
+  return uniqres(p,bi,bc,u,i,c);
+ KCATCH("unique consecutive");
 }
 
 // --------------------------------------------------------------------------
@@ -1685,5 +1712,6 @@ V mathfn(K x) {
  fn(x, "triangular_solve",   KFN(Triangular_solve),   1);
  fn(x, "trunc",              KFN(Trunc),              1);
  fn(x, "unique",             KFN(Unique),             1);
+ fn(x, "uniquec",            KFN(Uniquec),            1);
  fn(x, "Var",                KFN(Var),                1);
 }

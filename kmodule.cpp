@@ -75,18 +75,9 @@ Z Setting mset(S s) {
 }
 
 // ------------------------------------------------------------------------------------------
-// mkey - map from module attribute enumeration to symbol, e.g. State::parms -> `parms
 // mkeys - initialize keys for dict/table of module state: `module`name`options`parms`buffers
 // mvals - initialize corresponding k values for state dictionary or table
-// mfind - given state enum, look in symbol list to find index into dict values/table cols
-// mtag - given dict/table defining module(s), find symbols for module type & name else null
-// mdict - given enumeration, return k dictionary stored at matching key/col else null
 // ------------------------------------------------------------------------------------------
-ZS mkey(State e) {
- for(auto &m:env().state) if(e==std::get<1>(m)) return std::get<0>(m);
- AT_ERROR("Unrecognized module attribute: ",(I)e);
-}
-
 ZK mkeys(B b) { // b:true if including parms & buffers
  K x=ktn(KS,b ? 5 : 3);
  for(auto &m:env().state) {
@@ -106,54 +97,6 @@ ZK mvals(B b,J n) {
  return x;
 }
  
-ZJ mfind(State e,K x) {
- if(!xstate(x))
-  AT_ERROR("Unrecognized module state: ",kname(x->t),", expected dictionary or table");
- S s=mkey(e); K k=kK(x->t == 98 ? x->k : x)[0];
- for(J i=0;i<k->n;++i) if(kS(k)[i]==s) return i;
- return -1;
-}
-
-ZS mtag(State e,K x,J j=-1);  // default row for dictionary is -1, else called w'table row
-ZS mtag(State e,K x,J j) {
- J i=mfind(e,x);
- if(i<0) {
-  if(e==State::module) AT_ERROR("Unable to find module ",(x->t==98 ? "column" : "key"));
-  return nullptr;
- } else {
-  K v=x->t == 98 ? kK(kK(x->k)[1])[i] : kK(x)[1];
-  if(v->t && v->t != KS)
-   AT_ERROR("Module ",(e==State::module ? "type" : "name")," expected as symbol, given as: ",kname(kK(v)[j]->t));
-  if(x->t == 99) j=i;
-  if(j<0 || j>=v->n) {
-   AT_ERROR("Attempting to index element[",j,"] from module definition of length ",v->n);
-  } else if(!v->t && kK(v)[j]->t != -KS) {
-   AT_ERROR("Module ",(e==State::module ? "type" : "name")," is a ",kname(kK(v)[j]->t),", expected a symbol\n");
-  }
-  return v->t ? kS(v)[j] : kK(v)[j]->s;
- }
-}
-
-ZK mdict(State e,K x,J j=-1);  // default row for dictionary is -1, else called w'table row
-ZK mdict(State e,K x,J j) {
- J i=mfind(e,x);
- if(-1 < i) {
-  K v=x->t == 98 ? kK(kK(x->k)[1])[i] : kK(x)[1];
-  if(x->t == 99) j=i;
-  if(v->t) {
-    AT_ERROR("Unexpected ",kname(v->t)," for module ",mkey(e));
-  } else if(j<0 || j>=v->n) {
-   AT_ERROR("Attempting to index element[",j,"] from module definition of length ",v->n);
-  }
-  K r=kK(v)[j];
-  if(r->t != 99)
-   AT_ERROR("Unexpected ",kname(v->t)," for module ",mkey(e),", expected dictionary");
-  return r;
- } else {
-  return nullptr;
- }
-}
-
 // --------------------------------------------------------------------------------------
 // bnorm - create batchnorm module given options/set dictionary of options given module
 // conv - create 1-3 dimensional convolution/set dictionary given module
@@ -780,13 +723,14 @@ KAPI kprelu(K x) {
  KCATCH("prelu");
 }
 
-// -----------------------------------------------------------------------------------------------------
+// ----------------------------------------------------------------------------------------------------
 // mparms - set parameters/buffers in a defined module from k values in dictionary with matching names
-// mdefine - define a module and add to a sequence, reading options (and sometimes parms/buffers) from k
-// -----------------------------------------------------------------------------------------------------
+// mdefine - define module and add to a sequence, reading options (and sometimes parms/buffers) from k
+// ----------------------------------------------------------------------------------------------------
 V mparms(S s,Module &m,K x,B p) { // set named parms/buffers in module m from dict x, p true if parms
  K k=kK(x)[0],v=kK(x)[1]; Tensor V; if(v->t) V=kput(v);
  for(auto &a:p ? m.named_parameters() : m.named_buffers()) {
+  std::cerr << "name: " << a.key() << "\n";
   J i=kfind(k,a.key());
   if(i<0) {
    AT_ERROR("Unable to find ",s,(p ? " parameter" : " buffer"),": `",a.key());
@@ -895,10 +839,14 @@ V mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) {
 
 V mtable(Sequential &q,K x) {
  J n=x->t==99 ? 0 : xlen(x);
-  // SHOULD mtag(module,) still check for valid module type?, mdict(options) ..error if not found or handle further on..?
  for(J i=98-x->t;i<n;++i)
-   mdefine(q, mtag(State::module,x,i),  mtag(State::name,x,i), -1,
-             mdict(State::options,x,i), mdict(State::parms,x,i), mdict(State::buffers,x,i));
+   mdefine(q,
+    statesym(State::module,x,i),
+    statesym(State::name,x,i),
+    -1,
+    statedict(State::options,x,i),
+    statedict(State::parms,x,i),
+    statedict(State::buffers,x,i));
 }
 
 // --------------------------------------------------------------------------------------------

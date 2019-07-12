@@ -175,6 +175,12 @@ J ksizeof(A);
 A maptype(TypeMeta);
 TypeMeta maptype(A);
 
+S statekey(State);
+//statekeys??
+J statefind(State,K);
+S statesym(State e,K x,J j=-1);
+K statedict(State e,K x,J j=-1);
+
 B xnull(K);
 B xnull(K,J);
 B xempty(K);

@@ -144,12 +144,71 @@ TypeMeta maptype(A k) {
  AT_ERROR("No torch type found for k: ",kname(k));
 }
 
+// ------------------------------------------------------------------------------------------
+// statekey - map from state attribute enumeration to symbol, e.g. State::parms -> `parms
+// statekeys -
+// statefind -
+// statesym - given dict/table defining module(s), find symbols for module else null
+// statedict - given enumeration, return k dictionary stored at matching key/col else null
+// ------------------------------------------------------------------------------------------
+S statekey(State e) {
+ for(auto &m:env().state) if(e==std::get<1>(m)) return std::get<0>(m);
+ AT_ERROR("Unrecognized module attribute: ",(I)e);
+}
+
 K statekeys(B a,Class c) {
  K x=ktn(KS,env().state.size());
  for(auto &m:env().state)
   kS(x)[(J)std::get<1>(m)]=std::get<0>(m);
  return x;
 }
+
+J statefind(State e,K x) {
+ if(!xstate(x))
+  AT_ERROR("Unrecognized module state: ",kname(x->t),", expected dictionary or table");
+ S s=statekey(e); K k=kK(x->t == 98 ? x->k : x)[0];
+ for(J i=0;i<k->n;++i) if(kS(k)[i]==s) return i;
+ return -1;
+}
+
+S statesym(State e,K x,J j) { //e:enum, e.g. State::module, x:dict/table, j:table row (-1 for dict)
+ J i=statefind(e,x);
+ if(i<0) {
+  if(e==State::module) AT_ERROR("Unable to find module ",(x->t==98 ? "column" : "key"));
+  return nullptr;
+ } else {
+  K v=x->t == 98 ? kK(kK(x->k)[1])[i] : kK(x)[1];
+  if(v->t && v->t != KS)
+   AT_ERROR("Module ",(e==State::module ? "type" : "name")," expected as symbol, given as: ",kname(kK(v)[j]->t));
+  if(x->t == 99) j=i;
+  if(j<0 || j>=v->n) {
+   AT_ERROR("Attempting to index element[",j,"] from module definition of length ",v->n);
+  } else if(!v->t && kK(v)[j]->t != -KS) {
+   AT_ERROR("Module ",(e==State::module ? "type" : "name")," is a ",kname(kK(v)[j]->t),", expected a symbol\n");
+  }
+  return v->t ? kS(v)[j] : kK(v)[j]->s;
+ }
+}
+
+K statedict(State e,K x,J j) {  // e:enum, e.g. State::options, x:dict/table, j:row (-1 if dict)
+ J i=statefind(e,x);
+ if(-1 < i) {
+  K v=x->t == 98 ? kK(kK(x->k)[1])[i] : kK(x)[1];
+  if(x->t == 99) j=i;
+  if(v->t) {
+    AT_ERROR("Unexpected ",kname(v->t)," for module ",statekey(e));
+  } else if(j<0 || j>=v->n) {
+   AT_ERROR("Attempting to index element[",j,"] from module definition of length ",v->n);
+  }
+  K r=kK(v)[j];
+  if(r->t != 99)
+   AT_ERROR("Unexpected ",kname(v->t)," for module ",statekey(e),", expected dictionary");
+  return r;
+ } else {
+  return nullptr;
+ }
+}
+
 
 // --------------------------------------------------------------------------------------
 // xnull  - true if null, i.e. (::)

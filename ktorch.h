@@ -180,6 +180,7 @@ S statekey(State);
 J statefind(State,K);
 S statesym(State e,K x,J j=-1);
 K statedict(State e,K x,J j=-1);
+V stateparms(S,Module&,K,B);
 
 B xnull(K);
 B xnull(K,J);

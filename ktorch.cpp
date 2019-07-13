@@ -147,9 +147,10 @@ TypeMeta maptype(A k) {
 // ------------------------------------------------------------------------------------------
 // statekey - map from state attribute enumeration to symbol, e.g. State::parms -> `parms
 // statekeys -
-// statefind -
+// statefind - search dictionary keys/table colums for symbol matching given enumeration
 // statesym - given dict/table defining module(s), find symbols for module else null
 // statedict - given enumeration, return k dictionary stored at matching key/col else null
+// stateparms - set parms/buffers from k values in dictionary with matching names/types/dims
 // ------------------------------------------------------------------------------------------
 S statekey(State e) {
  for(auto &m:env().state) if(e==std::get<1>(m)) return std::get<0>(m);
@@ -209,6 +210,27 @@ K statedict(State e,K x,J j) {  // e:enum, e.g. State::options, x:dict/table, j:
  }
 }
 
+V stateparms(S s,Module &m,K x,B p) { // set named parms/buffers in module m from dict x, p true if parms
+ K k=kK(x)[0],v=kK(x)[1]; Tensor V; if(v->t) V=kput(v);
+ for(auto &a:p ? m.named_parameters() : m.named_buffers()) {
+  std::cerr << "name: " << a.key() << "\n";
+  J i=kfind(k,a.key());
+  if(i<0) {
+   AT_ERROR("Unable to find ",s,(p ? " parameter" : " buffer"),": `",a.key());
+   break;
+  }
+  Tensor t=v->t ? V[i] : kput(kK(v)[i]);
+  if(a.value().dtype() != t.dtype()) {
+   AT_ERROR("Type mismatch: ",s,(p ? " parameter" : " buffer")," `",a.key()," is ",a.value().dtype()," but k data is ",t.dtype());
+   break;
+  } else if(!a.value().is_same_size(t)) {
+   AT_ERROR("Size mismatch: ",s,(p ? " parameter" : " buffer")," `",a.key()," is ",a.value().sizes()," but k data is ",t.sizes());
+   break;
+  } else {
+   a.value().copy_(t.to(a.value().device()));
+  }
+ }
+}
 
 // --------------------------------------------------------------------------------------
 // xnull  - true if null, i.e. (::)

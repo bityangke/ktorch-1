@@ -412,8 +412,8 @@ KAPI ctc(K a) {
 // ------------------------------------------------------------------------------------------------------
 V lossfree(Ptr p) {delete(Loss*)p->v;}
 
-ZK lossinit(Cast c,S s,K x,J i) {
- J j; F m; Tensor w; int64_t r;
+ZK lossinit(S s,K x,J i) {
+ J j; F m; Cast c=lmap(s); Tensor w; int64_t r;
  auto u=torch::make_unique<Obj>(); u->t=Class::loss; u->c=c;
  switch(c) {
   case Cast::bce:         u->v=new BCELoss(reduce(s,x,i)); break;
@@ -535,11 +535,13 @@ KAPI loss(K x) {
  KTRY
   S s; Ptr p; B a=env().alloptions,b=true;
   if(xsyms(x,s) || xsym(x,0,s)) {
-   return lossinit(lmap(s),s,x,1);
+   return lossinit(s,x,1); //define loss from sym or (sym;option(s)..)
+  } else if(xdict(x)) {    //define loss from state dictionary
+   return lossinit(statesym(State::module,x),statedict(State::options,x),-1);
   } else if(xloss(x,p) || (xbool(x,1,a) && x->n==2 && xloss(x,0,p))) {
-   return lossdict(a,b,p);
+   return lossdict(a,b,p); //given allocated loss ptr or ptr w'boolean, return options
   } else if(xloss(x,0,p) && x->n>1) {
-   return lossfwd(p->c,(Loss*)p->v,x);
+   return lossfwd(p->c,(Loss*)p->v,x); //else, run forward calculation w'loss and input,target,..
   } else {
    AT_ERROR("Unrecognized arg(s)");
   }

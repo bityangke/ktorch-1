@@ -1030,13 +1030,15 @@ KAPI ksetting(K x) {
 
 KAPI config(K x) {
  KTRY
-  auto c=torch::show_config();
+  auto c1=torch::show_config(),c2=torch::get_parallel_info();
   if(xnull(x)) {
-   std::cerr << c << "\n";
+   std::cerr << c1 << "\n";
+   std::cerr << c2 << "\n";
    return (K)0;
   } else if(xempty(x)) {
-   std::stringstream s(c); std::string t; K z=ktn(0,0);
-   while(std::getline(s,t,'\n')) jk(&z,kp((S)t.c_str()));
+   std::stringstream s1(c1),s2(c2); std::string t; K z=ktn(0,0);
+   while(std::getline(s1,t,'\n')) jk(&z,kp((S)t.c_str()));
+   while(std::getline(s2,t,'\n')) jk(&z,kp((S)t.c_str()));
    return z;
   } else {
    return KERR("config expects empty argument: config[] prints to stderr, config() returns strings");

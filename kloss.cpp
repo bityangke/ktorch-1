@@ -404,12 +404,12 @@ KAPI ctc(K a) {
  KCATCH("CTC loss");
 }
 
-// ------------------------------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------
 // lossfree - free previously allocated loss module
 // lossinit - initialize loss modules, return k pointer
 // lossopt - retrieve loss module options, return k dictionary of symbol -> setting
-// lossdict - return dictionary of loss module, options
-// ------------------------------------------------------------------------------------------------------
+// lossdict - dictionary of loss module & options or full state (w'class, empty name, parms & buffers)
+// ---------------------------------------------------------------------------------------------------
 V lossfree(Ptr p) {delete(Loss*)p->v;}
 
 ZK lossinit(S s,K x,J i) {
@@ -492,20 +492,19 @@ ZK lossopt(B a,Cast c,Loss *l) {
  
 K statekeys(B,Class);
 
-ZK lossdict(B a,B b,Ptr p) {
+K lossdict(B a,B b,Ptr p) {
+ //a:true if all options, b:true if full state
  K k,v; Cast c=p->c; auto *l=(Loss*)p->v;
  if(b) {
   k=statekeys(true,Class::loss); v=ktn(0,k->n);
-  kK(v)[0]=kc('l');
-  kK(v)[2]=ks((S)"");
-  kK(v)[4]=ktn(0,0);
-  kK(v)[5]=ktn(0,0);
+  kK(v)[0]=kc('l');   //class="l" for loss
+  kK(v)[2]=ks((S)""); //empty user-defined name
+  kK(v)[4]=ktn(0,0);  //empty parms
+  kK(v)[5]=ktn(0,0);  //and buffers
  } else {
   k=ktn(KS,2),v=ktn(0,2);
-  for(auto &m:env().state) {
-        if(std::get<1>(m)==State::module)  kS(k)[0]=std::get<0>(m);
-   else if(std::get<1>(m)==State::options) kS(k)[1]=std::get<0>(m);
-  }
+  kS(k)[0]=statekey(State::module);
+  kS(k)[0]=statekey(State::options);
  }
  kK(v)[b ? 1 : 0]=ks(lmap(c));
  kK(v)[b ? 3 : 1]=lossopt(a,c,l);
@@ -533,13 +532,13 @@ ZK lossfwd(Cast c,Loss *l,K a) {
 
 KAPI loss(K x) {
  KTRY
-  S s; Ptr p; B a=env().alloptions,b=true;
+  S s; Ptr p; B a=env().alloptions;
   if(xsyms(x,s) || xsym(x,0,s)) {
    return lossinit(s,x,1); //define loss from sym or (sym;option(s)..)
   } else if(xdict(x)) {    //define loss from state dictionary
    return lossinit(statesym(State::module,x),statedict(State::options,x),-1);
   } else if(xloss(x,p) || (xbool(x,1,a) && x->n==2 && xloss(x,0,p))) {
-   return lossdict(a,b,p); //given allocated loss ptr or ptr w'boolean, return options
+   return lossdict(a,false,p); //given allocated loss ptr or ptr w'boolean, return options
   } else if(xloss(x,0,p) && x->n>1) {
    return lossfwd(p->c,(Loss*)p->v,x); //else, run forward calculation w'loss and input,target,..
   } else {

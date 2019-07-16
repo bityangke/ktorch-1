@@ -324,6 +324,7 @@ V kseqto(Ptr&,TensorOptions&,B);
 V modfn(K);
 
 // loss functions:
+K lossdict(B,B,Ptr);
 V lossfree(Ptr);
 V lossfn(K);
 

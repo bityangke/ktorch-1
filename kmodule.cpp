@@ -837,7 +837,7 @@ V mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) {
  if(p || f) mparms(s,q,p,f);  // set parms/buffers if k dictionaries supplied
 }
 
-V mtable(Sequential &q,K x) {
+V mdefine(Sequential &q,K x) { // define modules from k table of options or full state
  J n=x->t==99 ? 0 : xlen(x);
  for(J i=98-x->t;i<n;++i)
    mdefine(q,
@@ -1034,7 +1034,7 @@ KAPI module(K x) {
   } else if(p && x->n==2 && xseq(x,1,u)) {
     return q->extend(*u), (K)0;
   } else if(xstate(x) || (p && x->n==2 && xstate(x,1))) {
-   return mtable(q,p ? kK(x)[1] : x), p ? (K)0 : kseq(q);
+   return mdefine(q,p ? kK(x)[1] : x), p ? (K)0 : kseq(q);
   } else {
    return margs(p,q,x), p ? (K)0 : kseq(q);
   }

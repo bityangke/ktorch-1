@@ -850,6 +850,21 @@ KAPI kfree(K x){
  KCATCH("Unable to free object")
 }
 
+KAPI kstate(K x) {
+ KTRY
+  B a=env().alloptions; Ptr p=nullptr;
+  if(!(xptr(x,p) || (xbool(x,1,a) && x->n==2 && xptr(x,0,p))))
+   AT_ERROR("state requires pointer to previously allocated object or pointer & flag for options");
+  switch(p->t) {
+ //case Class::tensor:     return..;
+ //case Class::sequential: return mstate(..);
+   case Class::loss:       return lossdict(a,true,p);
+ //case Class::optimizer:  return..;
+   default: return KERR("Not a recognized pointer");
+  }
+ KCATCH("Unable to get object state")
+}
+
 KAPI kto(K x,K y,K z) {
  KTRY
   B b=false; Ptr p; Tensor t; TensorOptions o;

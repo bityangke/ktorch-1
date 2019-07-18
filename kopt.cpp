@@ -1,5 +1,42 @@
 #include "ktorch.h"
 
+#define OPTBUFFER(x,o,k) dictadd(x, #k, kvec(o.k))
+
+KAPI vec(K a) {
+ auto m=torch::nn::Linear(5,2); m->to(torch::kCUDA);
+ auto o=torch::optim::Adam(m->parameters(),torch::optim::AdamOptions(.001));
+ auto x=torch::ones({10,5},torch::kCUDA);
+ auto y=m->forward(x).sum();
+ y.backward();
+ o.step();
+ y=m->forward(x).sum();
+ y.backward();
+ o.step();
+ K r=xD(ktn(KS,0),ktn(0,0));
+ OPTBUFFER(r,o,step_buffers);
+ OPTBUFFER(r,o,exp_average_buffers);
+ OPTBUFFER(r,o,exp_average_sq_buffers);
+ OPTBUFFER(r,o,max_exp_average_sq_buffers);
+ return r;
+}
+
+/*
+adagrad.h:    _TORCH_OPTIM_SERIALIZE(sum_buffers);
+adagrad.h:    _TORCH_OPTIM_SERIALIZE(step_buffers);
+
+adam.h:    _TORCH_OPTIM_SERIALIZE(step_buffers);
+adam.h:    _TORCH_OPTIM_SERIALIZE(exp_average_buffers);
+adam.h:    _TORCH_OPTIM_SERIALIZE(exp_average_sq_buffers);
+adam.h:    _TORCH_OPTIM_SERIALIZE(max_exp_average_sq_buffers);
+
+rmsprop.h:    _TORCH_OPTIM_SERIALIZE(square_average_buffers);
+rmsprop.h:    _TORCH_OPTIM_SERIALIZE(momentum_buffers);
+rmsprop.h:    _TORCH_OPTIM_SERIALIZE(grad_average_buffers);
+
+sgd: std::vector<Tensor> momentum_buffers;
+
+*/
+
 // opt()
 // opt`adam
 // optdetail(o;..)  and/or opt(o;`parms) opt(o;`settings)

@@ -117,14 +117,15 @@ enum class Cast:char {
  softshrink,      softsign,    tanh,
  tanhshrink,      threshold,
 
- bce,             bcelogits,   ce,              //loss fns
- cosineloss,      ctc,         hinge,      
- kl,              l1,          margin,     
- mse,             multilabel,  multimargin,
- multisoft,       nll,         poissonloss,
- smoothl1,        softmargin,  triplet,    
+ bce,             bcelogits,   bcelogitw,      //loss fns
+ ce,              cosineloss,  ctc,
+ hinge,           kl,          l1,
+ margin,          mse,         multilabel,
+ multimargin,     multisoft,   nll,
+ poissonloss,     smoothl1,    softmargin,
+ triplet,    
 
- adagrad,         adam,        lbgfs,           //optimizers
+ adagrad,         adam,        lbgfs,          //optimizers
  rmsprop,         sgd
 };
 
@@ -520,9 +521,10 @@ typedef struct {
   std::make_tuple(cs("buffers"), State::buffers)
  }};
 
- std::array<std::tuple<S,Cast>,18> loss = {{             // loss: map symbol -> enum
+ std::array<std::tuple<S,Cast>,19> loss = {{             // loss: map symbol -> enum
   std::make_tuple(cs("bce"),          Cast::bce),
   std::make_tuple(cs("bcelogits"),    Cast::bcelogits),
+  std::make_tuple(cs("bcelogitw"),    Cast::bcelogitw),
   std::make_tuple(cs("ce"),           Cast::ce),
   std::make_tuple(cs("cosineloss"),   Cast::cosineloss),
   std::make_tuple(cs("ctc"),          Cast::ctc),

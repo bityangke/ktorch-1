@@ -35,6 +35,12 @@ rmsprop.h:    _TORCH_OPTIM_SERIALIZE(grad_average_buffers);
 
 sgd: std::vector<Tensor> momentum_buffers;
 
+   Adam(params, lr=0.001, betas=(0.9, 0.999), eps=1e-08, weight_decay=0, amsgrad=False) F r,b1,b2,e,w; B g;
+RMSprop(params, lr=0.01, alpha=0.99, eps=1e-08, weight_decay=0, momentum=0, centered=False)  F r,a,a,w,m; B c;
+    SGD(params, lr=??,    momentum=0, dampening=0, weight_decay=0, nesterov=False)  F m,d,w; B v;
+
+LBFGS(params, lr=1, max_iter=20, max_eval=None, tolerance_grad=1e-05, tolerance_change=1e-09, history_size=100)
+ F r,tg,tc; J mi,me,h;
 */
 
 // opt()
@@ -131,6 +137,25 @@ ZV odef(Cast c, const V* v, S s, Setting o, Pairs& p, K x) {
    break;
   }
   default: AT_ERROR("Unrecognized optimizer"); break;
+ }
+}
+
+//Adagrad(params, lr=0.01, lr_decay=0, weight_decay=0) F r,d,w;
+ZV adagrad(K x,J i,double& r,double &d,double& w) {
+ Pairs p; J n=xargc(x,i,p); torch::optim::AdagradOptions o(r);
+ d=o.lr_decay(); w=o.weight_decay();
+ if(n && xnum(x,i,r))  i++,n--;
+ if(n && xnum(x,i,d)) i++,n--;
+ if(n && xnum(x,i,w)) i++,n--;
+ if(n)
+  AT_ERROR("Unrecognized arg(s) for Adagrad optimizer");
+ while(xpair(p)) {
+  switch(oset(p.k)) {
+   case Setting::lr:      r=pdouble(p); break;
+   case Setting::lrdecay: d=pdouble(p); break;
+   case Setting::decay:   w=pdouble(p); break;
+   default: AT_ERROR("Unrecognized option: ",p.k," for Adagrad optimization"); break;
+  }
  }
 }
 

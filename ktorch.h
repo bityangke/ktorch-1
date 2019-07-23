@@ -125,7 +125,7 @@ enum class Cast:char {
  poissonloss,     smoothl1,    softmargin,
  triplet,    
 
- adagrad,         adam,        lbgfs,          //optimizers
+ adagrad,         adam,        lbfgs,          //optimizers
  rmsprop,         sgd
 };
 
@@ -560,7 +560,7 @@ typedef struct {
  std::array<std::tuple<S,Cast,double>,5> opt = {{        //optimizer: map symbol -> enum, default learning rate
   std::make_tuple(cs("adagrad"), Cast::adagrad, 0.010),
   std::make_tuple(cs("adam"),    Cast::adam,    0.001),
-  std::make_tuple(cs("lbgfs"),   Cast::lbgfs,   1.000),
+  std::make_tuple(cs("lbfgs"),   Cast::lbfgs,   1.000),
   std::make_tuple(cs("rmsprop"), Cast::rmsprop, 0.010),
   std::make_tuple(cs("sgd"),     Cast::sgd,     0.010)
  }};

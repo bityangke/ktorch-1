@@ -32,14 +32,6 @@ KAPI vec(K a) {
  OPTBUFFER(r,o,max_exp_average_sq_buffers);
  return r;
 }
-
-
-sgd: std::vector<Tensor> momentum_buffers;
-
-RMSprop(parms, lr=0.01, alpha=0.99, eps=1e-08, weight_decay=0, momentum=0, centered=False)  F r,a,a,w,m; B c;
-    SGD(parms, lr=??,    momentum=0, dampening=0, weight_decay=0, nesterov=False)  F m,d,w; B v;
-
-LBFGS(parms, lr=1, max_iter=20, max_eval=None, tolerance_grad=1e-05, tolerance_change=1e-09, history_size=100)
 */
 
 // --------------------------------------------------------------------------------------
@@ -99,7 +91,7 @@ ZV odef(Cast c, const V* v, S s, Setting o, Pairs& p, K x) {
    }
    break;
   }
-  case Cast::lbgfs: {
+  case Cast::lbfgs: {
    auto a=(torch::optim::LBFGSOptions*)v;
    switch(o) {
     case Setting::lr:        if(x) dictadd(x,s,kf(a->learning_rate()));    else a->learning_rate(pdouble(p));    break;
@@ -218,11 +210,58 @@ ZK adam(Adam* v) {  //return internal buffer state as k dictionary
  return x;
 }
 
+//LBFGS(parms, lr=1, max_iter=20, max_eval=None, tolerance_grad=1e-05, tolerance_change=1e-09, history_size=100)
+ZK lbfgs(B a,F r,LBFGS* v) { //return all or non-default options as k dictionary
+ K x=xD(ktn(KS,0),ktn(0,0)); LBFGSOptions d(r),o=v->options;
+ if(a || d.max_iter()         != o.max_iter())         OPTSET(x, iter,      kj(o.max_iter()));
+ if(a || d.max_eval()         != o.max_eval())         OPTSET(x, eval,      kj(o.max_eval()));
+ if(a || d.learning_rate()    != o.learning_rate())    OPTSET(x, lr,        kf(o.learning_rate()));
+ if(a || d.tolerance_grad()   != o.tolerance_grad())   OPTSET(x, gradtol,   kf(o.tolerance_grad()));
+ if(a || d.tolerance_change() != o.tolerance_change()) OPTSET(x, changetol, kf(o.tolerance_change()));
+ if(a || d.history_size()     != o.history_size())     OPTSET(x, history,   kj(o.history_size()));
+ return x;
+}
+
+ZK lbfgs(LBFGS* v) {  //return internal buffer state as k dictionary
+ K x=xD(ktn(KS,0),ktn(0,0));
+ //OPTBUFFER(x,v,momentum_buffers);
+ return x;
+}
+
+//RMSprop(parms, lr=0.01, alpha=0.99, eps=1e-08, weight_decay=0, momentum=0, centered=False)
+ZK rmsprop(B a,F r,RMSprop* v) { //return all or non-default options as k dictionary
+ K x=xD(ktn(KS,0),ktn(0,0)); RMSpropOptions d(r),o=v->options;
+ if(a || d.learning_rate() != o.learning_rate()) OPTSET(x, lr,       kf(o.learning_rate()));
+ if(a || d.alpha()         != o.alpha())         OPTSET(x, alpha,    kf(o.alpha()));
+ if(a || d.eps()           != o.eps())           OPTSET(x, eps,      kf(o.eps()));
+ if(a || d.weight_decay()  != o.weight_decay())  OPTSET(x, decay,    kf(o.weight_decay()));
+ if(a || d.momentum()      != o.momentum())      OPTSET(x, momentum, kf(o.momentum()));
+ if(a || d.centered()      != o.centered())      OPTSET(x, centered, kb(o.centered()));
+ return x;
+}
+
 ZK rmsprop(RMSprop* v) {  //return internal buffer state as k dictionary
  K x=xD(ktn(KS,0),ktn(0,0));
  OPTBUFFER(x,v,square_average_buffers);
  OPTBUFFER(x,v,momentum_buffers);
  OPTBUFFER(x,v,grad_average_buffers);
+ return x;
+}
+
+//SGD(parms, lr=??,    momentum=0, dampening=0, weight_decay=0, nesterov=False)
+ZK sgd(B a,F r,SGD* v) { //return all or non-default options as k dictionary
+ K x=xD(ktn(KS,0),ktn(0,0)); SGDOptions d(r),o=v->options;
+ if(a || d.learning_rate() != o.learning_rate()) OPTSET(x, lr,        kf(o.learning_rate()));
+ if(a || d.momentum()      != o.momentum())      OPTSET(x, momentum,  kf(o.momentum()));
+ if(a || d.dampening()     != o.dampening())     OPTSET(x, dampening, kf(o.dampening()));
+ if(a || d.weight_decay()  != o.weight_decay())  OPTSET(x, decay,     kf(o.weight_decay()));
+ if(a || d.nesterov()      != o.nesterov())      OPTSET(x, nesterov,  kb(o.nesterov()));
+ return x;
+}
+
+ZK sgd(SGD* v) {  //return internal buffer state as k dictionary
+ K x=xD(ktn(KS,0),ktn(0,0));
+ OPTBUFFER(x,v,momentum_buffers);
  return x;
 }
 
@@ -249,7 +288,7 @@ ZK optdefault(S s,Cast c,double r) {
  switch(c) {
   case Cast::adagrad: {auto a=torch::optim::AdagradOptions(r); x=optdict(c,&a); break;}
   case Cast::adam:    {auto a=torch::optim::AdamOptions(r);    x=optdict(c,&a); break;}
-  case Cast::lbgfs:   {auto a=torch::optim::LBFGSOptions(r);   x=optdict(c,&a); break;}
+  case Cast::lbfgs:   {auto a=torch::optim::LBFGSOptions(r);   x=optdict(c,&a); break;}
   case Cast::rmsprop: {auto a=torch::optim::RMSpropOptions(r); x=optdict(c,&a); break;}
   case Cast::sgd:     {auto a=torch::optim::SGDOptions(r);     x=optdict(c,&a); break;}
   default: x=optdict(c,nullptr); break;
@@ -300,7 +339,7 @@ ZK optinit(S s,K x) {
   case Cast::adagrad: {auto a=AdagradOptions(r); adagrad(x,2,a); u->v=new Adagrad(w,a); break;}
   case Cast::adam:    {auto a=AdamOptions(r);    adam(x,2,a);    u->v=new Adam(w,a);    break;}
 /*
-  case Cast::lbgfs:   {auto a=LBFGSOptions(r);   lbgfs(x,2,a);   u->v=new LBFGS(w,a);   break;}
+  case Cast::lbfgs:   {auto a=LBFGSOptions(r);   lbfgs(x,2,a);   u->v=new LBFGS(w,a);   break;}
   case Cast::rmsprop: {auto a=RMSpropOptions(r); rmsprop(x,2,a); u->v=new RMSprop(w,a); break;}
   case Cast::sgd:     {auto a=SGDOptions(r);     sgd(x,2,a);     u->v=new SGD(w,a);     break;}
 */
@@ -318,7 +357,7 @@ ZK optinit(S s,F lr,Ptr &k,Pairs &p) {
  switch(c) {
   case Cast::adagrad: {auto a=torch::optim::AdagradOptions(r); optpairs(c,&a,p); u->v=new torch::optim::Adagrad(v,a); break;}
   case Cast::adam:    {auto a=torch::optim::AdamOptions(r);    optpairs(c,&a,p); u->v=new torch::optim::Adam(v,a);    break;}
-  case Cast::lbgfs:   {auto a=torch::optim::LBFGSOptions(r);   optpairs(c,&a,p); u->v=new torch::optim::LBFGS(v,a);   break;}
+  case Cast::lbfgs:   {auto a=torch::optim::LBFGSOptions(r);   optpairs(c,&a,p); u->v=new torch::optim::LBFGS(v,a);   break;}
   case Cast::rmsprop: {auto a=torch::optim::RMSpropOptions(r); optpairs(c,&a,p); u->v=new torch::optim::RMSprop(v,a); break;}
   case Cast::sgd:     {auto a=torch::optim::SGDOptions(r);     optpairs(c,&a,p); u->v=new torch::optim::SGD(v,a);     break;}
   default: AT_ERROR("Unrecognized optimizer: ",s); break;
@@ -329,11 +368,14 @@ ZK optinit(S s,F lr,Ptr &k,Pairs &p) {
 ZK optstate(B a,B b,Cast c,V* v) {
  F r; S s; omap(c,s,r); K x,y;
  switch(c) {
-  case Cast::adagrad: {auto m=(torch::optim::Adagrad*)v; x=adagrad(a,r,m); if(b) y=adagrad(m); break;}
-  case Cast::adam:    {auto m=(torch::optim::Adam*)v;    x=adam(a,r,m);    if(b) y=adam(m);    break;}
+  case Cast::adagrad: {auto m=(Adagrad*)v; x=adagrad(a,r,m); if(b) y=adagrad(m); break;}
+  case Cast::adam:    {auto m=(Adam*)v;    x=adam(a,r,m);    if(b) y=adam(m);    break;}
+  case Cast::lbfgs:   {auto m=(LBFGS*)v;   x=lbfgs(a,r,m);   if(b) y=lbfgs(m);   break;}
+  case Cast::rmsprop: {auto m=(RMSprop*)v; x=rmsprop(a,r,m); if(b) y=rmsprop(m); break;}
+  case Cast::sgd:     {auto m=(SGD*)v;     x=sgd(a,r,m);     if(b) y=sgd(m);    break;}
   default: break;
-  }
-  return (K)0;
+ }
+ return (K)0;
 }
 
 ZK optdetail1(Cast c,V *v,const std::vector<Tensor>& p) {
@@ -362,7 +404,7 @@ K optdetail(Cast c,V *v) {
  switch(c) {
   case Cast::adagrad: {auto a=(torch::optim::Adagrad*)v; return optdetail1(c,&a->options,a->parameters());}
   case Cast::adam:    {auto a=(torch::optim::Adam*)v;    return optdetail1(c,&a->options,a->parameters());}
-  case Cast::lbgfs:   {auto a=(torch::optim::LBFGS*)v;   return optdetail1(c,&a->options,a->parameters());}
+  case Cast::lbfgs:   {auto a=(torch::optim::LBFGS*)v;   return optdetail1(c,&a->options,a->parameters());}
   case Cast::rmsprop: {auto a=(torch::optim::RMSprop*)v; return optdetail1(c,&a->options,a->parameters());}
   case Cast::sgd:     {auto a=(torch::optim::SGD*)v;     return optdetail1(c,&a->options,a->parameters());}
   default: AT_ERROR("Unrecognized optimizer: ",(int)c); return (K)0;
@@ -394,7 +436,7 @@ V optfree(Cast c,V *v) {
  switch(c) {
   case Cast::adagrad: delete(torch::optim::Adagrad*)v; break;
   case Cast::adam:    delete(torch::optim::Adam*)v;    break;
-  case Cast::lbgfs:   delete(torch::optim::LBFGS*)v;   break;
+  case Cast::lbfgs:   delete(torch::optim::LBFGS*)v;   break;
   case Cast::rmsprop: delete(torch::optim::RMSprop*)v; break;
   case Cast::sgd:     delete(torch::optim::SGD*)v;     break;
   default: AT_ERROR("Unrecognized optimizer: ",(I)c); break;

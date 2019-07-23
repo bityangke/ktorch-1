@@ -701,7 +701,7 @@ J xargc(K x,J i,Pairs &p) { // x:arg(s), i:offset, -1 if not applicable, p:pairs
  } else if(!(-1<i && i<=x->n)) {
   AT_ERROR("invalid offset: ",i,", for ",kname(x->t)," of length ",x->n);
  } else {
-  return x->n-i-xpairs(x,x->n-1,p);  // subtract pairs from regular args to process
+  return x->n-i-(x->n>i ? xpairs(x,x->n-1,p) : false);  // subtract name-value pairs from regular args to process
  }
 }
 

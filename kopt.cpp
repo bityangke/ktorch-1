@@ -14,26 +14,6 @@ using RMSpropOptions = torch::optim::RMSpropOptions;
 using SGD            = torch::optim::SGD;
 using SGDOptions     = torch::optim::SGDOptions;
 
-/*
-KAPI vec(K a) {
- auto m=torch::nn::Linear(5,2); m->to(torch::kCUDA);
- auto o=torch::optim::Adam(m->parameters(),torch::optim::AdamOptions(.001));
- auto x=torch::ones({10,5},torch::kCUDA);
- auto y=m->forward(x).sum();
- y.backward();
- o.step();
- y=m->forward(x).sum();
- y.backward();
- o.step();
- K r=xD(ktn(KS,0),ktn(0,0));
- OPTBUFFER(r,o,step_buffers);
- OPTBUFFER(r,o,exp_average_buffers);
- OPTBUFFER(r,o,exp_average_sq_buffers);
- OPTBUFFER(r,o,max_exp_average_sq_buffers);
- return r;
-}
-*/
-
 // --------------------------------------------------------------------------------------
 // omap - map to/from optimizer symbol/enumeration and default learning rate
 // oset - optimizer settings, map sym -> enum
@@ -134,7 +114,7 @@ ZV odef(Cast c, const V* v, S s, Setting o, Pairs& p, K x) {
 }
 
 // ----------------------------------------------------------------------------------------
-// adagrad - parse args (parms; lr; lrdecay; weightdecay) or (parms;..;name/val pairs/dict)
+// adagrad - parse args (lr;lrdecay;wtdecay) or (..;name/val pairs/dict)
 // ----------------------------------------------------------------------------------------
 ZV adagrad(K x,J i,AdagradOptions& o) {
  Pairs p; J n=xargc(x,i,p); F f;
@@ -167,7 +147,7 @@ ZK adagrad(Adagrad* v) {  //return internal buffer state as k dictionary
 }
 
 // ----------------------------------------------------------------------------------------
-// adagrad - parse args (parms; lr; beta1; beta2; eps; weightdecay; amsgrad)
+// adam - parse args (lr;beta1;beta2;eps;wtdecay;amsgrad) or (..;name-value pairs/dict)
 // ----------------------------------------------------------------------------------------
 ZV adam(K x,J i,AdamOptions& o) {
  Pairs p; J n=xargc(x,i,p); B b; F f;
@@ -210,12 +190,35 @@ ZK adam(Adam* v) {  //return internal buffer state as k dictionary
  return x;
 }
 
-//LBFGS(parms, lr=1, max_iter=20, max_eval=None, tolerance_grad=1e-05, tolerance_change=1e-09, history_size=100)
+// ---------------------------------------------------------------------------------------
+// lbfgs - (lr;max iter;max eval;tolerance grad;tolerance change;history size)
+// ---------------------------------------------------------------------------------------
+ZV lbfgs(K x,J i,LBFGSOptions& o) {
+ Pairs p; J j,n=xargc(x,i,p); F f;
+ if(n && xnum(x,i,f))  {i++; n--; if(f==f)  o.learning_rate(f);}
+ if(n && xlong(x,i,j)) {i++; n--; if(j!=nj) o.max_iter(j);}
+ if(n && xlong(x,i,j)) {i++; n--; if(j!=nj) o.max_eval(j);}
+ if(n && xnum(x,i,f))  {i++; n--; if(f==f)  o.tolerance_grad(f);}
+ if(n && xnum(x,i,f))  {i++; n--; if(f==f)  o.tolerance_change(f);}
+ if(n && xlong(x,i,j)) {i++; n--; if(j!=nj) o.history_size(j);}
+ if(n) AT_ERROR("Unrecognized arg(s) for LBFGS optimizer");
+ while(xpair(p))
+  switch(oset(p.k)) {
+   case Setting::lr:        f=pdouble(p); if(f==f)  o.learning_rate(f); break;
+   case Setting::iter:      j=plong(p);   if(j!=nj) o.max_iter(j); break;
+   case Setting::eval:      j=plong(p);   if(j!=nj) o.max_eval(j); break;
+   case Setting::gradtol:   f=pdouble(p); if(f==f)  o.tolerance_grad(f); break;
+   case Setting::changetol: f=pdouble(p); if(f==f)  o.tolerance_change(f); break;
+   case Setting::history:   j=plong(p);   if(j!=nj) o.history_size(j); break;
+   default: AT_ERROR("Unrecognized option: ",p.k," for LBFGS optimization"); break;
+  }
+}
+
 ZK lbfgs(B a,F r,LBFGS* v) { //return all or non-default options as k dictionary
  K x=xD(ktn(KS,0),ktn(0,0)); LBFGSOptions d(r),o=v->options;
+ if(a || d.learning_rate()    != o.learning_rate())    OPTSET(x, lr,        kf(o.learning_rate()));
  if(a || d.max_iter()         != o.max_iter())         OPTSET(x, iter,      kj(o.max_iter()));
  if(a || d.max_eval()         != o.max_eval())         OPTSET(x, eval,      kj(o.max_eval()));
- if(a || d.learning_rate()    != o.learning_rate())    OPTSET(x, lr,        kf(o.learning_rate()));
  if(a || d.tolerance_grad()   != o.tolerance_grad())   OPTSET(x, gradtol,   kf(o.tolerance_grad()));
  if(a || d.tolerance_change() != o.tolerance_change()) OPTSET(x, changetol, kf(o.tolerance_change()));
  if(a || d.history_size()     != o.history_size())     OPTSET(x, history,   kj(o.history_size()));
@@ -228,7 +231,30 @@ ZK lbfgs(LBFGS* v) {  //return internal buffer state as k dictionary
  return x;
 }
 
-//RMSprop(parms, lr=0.01, alpha=0.99, eps=1e-08, weight_decay=0, momentum=0, centered=False)
+// ----------------------------------------------------------------------------------------
+// rmsprop - parse arg(s) (lr;alpha;eps;decay;momentum;centered) or (..;nm-val pairs/dict)
+// ----------------------------------------------------------------------------------------
+ZV rmsprop(K x,J i,RMSpropOptions& o) {
+ Pairs p; J n=xargc(x,i,p); B b; F f;
+ if(n && xnum(x,i,f)) {i++; n--; if(f==f) o.learning_rate(f);}
+ if(n && xnum(x,i,f)) {i++; n--; if(f==f) o.alpha(f);}
+ if(n && xnum(x,i,f)) {i++; n--; if(f==f) o.eps(f);}
+ if(n && xnum(x,i,f)) {i++; n--; if(f==f) o.weight_decay(f);}
+ if(n && xnum(x,i,f)) {i++; n--; if(f==f) o.momentum(f);}
+ if(n && xbool(x,i,b)){i++; n--; o.centered(b);}
+ if(n) AT_ERROR("Unrecognized arg(s) for RMSprop optimizer");
+ while(xpair(p))
+  switch(oset(p.k)) {
+   case Setting::lr:        f=pdouble(p); if(f==f) o.learning_rate(f); break;
+   case Setting::alpha:     f=pdouble(p); if(f==f) o.alpha(f); break;
+   case Setting::eps:       f=pdouble(p); if(f==f) o.eps(f); break;
+   case Setting::decay:     f=pdouble(p); if(f==f) o.weight_decay(f); break;
+   case Setting::momentum:  f=pdouble(p); if(f==f) o.momentum(f); break;
+   case Setting::centered:  o.centered(pbool(p)); break;
+   default: AT_ERROR("Unrecognized option: ",p.k," for RMSprop optimization"); break;
+  }
+}
+
 ZK rmsprop(B a,F r,RMSprop* v) { //return all or non-default options as k dictionary
  K x=xD(ktn(KS,0),ktn(0,0)); RMSpropOptions d(r),o=v->options;
  if(a || d.learning_rate() != o.learning_rate()) OPTSET(x, lr,       kf(o.learning_rate()));
@@ -248,7 +274,28 @@ ZK rmsprop(RMSprop* v) {  //return internal buffer state as k dictionary
  return x;
 }
 
-//SGD(parms, lr=??,    momentum=0, dampening=0, weight_decay=0, nesterov=False)
+// ----------------------------------------------------------------------------------------
+// SGD parse args (lr;momentum;dampening;wtdecay;nesterov) or (..;name-value pairs/dict)
+// ----------------------------------------------------------------------------------------
+ZV sgd(K x,J i,SGDOptions& o) {
+ Pairs p; J n=xargc(x,i,p); B b; F f;
+ if(n && xnum(x,i,f)) {i++; n--; if(f==f) o.learning_rate(f);}
+ if(n && xnum(x,i,f)) {i++; n--; if(f==f) o.momentum(f);}
+ if(n && xnum(x,i,f)) {i++; n--; if(f==f) o.dampening(f);}
+ if(n && xnum(x,i,f)) {i++; n--; if(f==f) o.weight_decay(f);}
+ if(n && xbool(x,i,b)){i++; n--; o.nesterov(b);}
+ if(n) AT_ERROR("Unrecognized arg(s) for SGD optimizer");
+ while(xpair(p))
+  switch(oset(p.k)) {
+   case Setting::lr:        f=pdouble(p); if(f==f) o.learning_rate(f); break;
+   case Setting::momentum:  f=pdouble(p); if(f==f) o.momentum(f); break;
+   case Setting::dampening: f=pdouble(p); if(f==f) o.dampening(f); break;
+   case Setting::decay:     f=pdouble(p); if(f==f) o.weight_decay(f); break;
+   case Setting::nesterov:  o.nesterov(pbool(p)); break;
+   default: AT_ERROR("Unrecognized option: ",p.k," for SGD optimization"); break;
+  }
+}
+
 ZK sgd(B a,F r,SGD* v) { //return all or non-default options as k dictionary
  K x=xD(ktn(KS,0),ktn(0,0)); SGDOptions d(r),o=v->options;
  if(a || d.learning_rate() != o.learning_rate()) OPTSET(x, lr,        kf(o.learning_rate()));
@@ -338,28 +385,9 @@ ZK optinit(S s,K x) {
  switch(c) {
   case Cast::adagrad: {auto a=AdagradOptions(r); adagrad(x,2,a); u->v=new Adagrad(w,a); break;}
   case Cast::adam:    {auto a=AdamOptions(r);    adam(x,2,a);    u->v=new Adam(w,a);    break;}
-/*
   case Cast::lbfgs:   {auto a=LBFGSOptions(r);   lbfgs(x,2,a);   u->v=new LBFGS(w,a);   break;}
   case Cast::rmsprop: {auto a=RMSpropOptions(r); rmsprop(x,2,a); u->v=new RMSprop(w,a); break;}
   case Cast::sgd:     {auto a=SGDOptions(r);     sgd(x,2,a);     u->v=new SGD(w,a);     break;}
-*/
-  default: AT_ERROR("Unrecognized optimizer: ",s); break;
- }
- return kptr(u.release());
-}
-
-ZK optinit(S s,F lr,Ptr &k,Pairs &p) {
- Cast c; double r; std::vector<Tensor> v;
- if(k) optparms(k,v);              // set vector of tensor parms to optimize
- omap(s,c,r);
- if(lr == lr) r=lr; // use learning rate if specified directly
- auto u=torch::make_unique<Obj>(); u->t=Class::optimizer; u->c=c;
- switch(c) {
-  case Cast::adagrad: {auto a=torch::optim::AdagradOptions(r); optpairs(c,&a,p); u->v=new torch::optim::Adagrad(v,a); break;}
-  case Cast::adam:    {auto a=torch::optim::AdamOptions(r);    optpairs(c,&a,p); u->v=new torch::optim::Adam(v,a);    break;}
-  case Cast::lbfgs:   {auto a=torch::optim::LBFGSOptions(r);   optpairs(c,&a,p); u->v=new torch::optim::LBFGS(v,a);   break;}
-  case Cast::rmsprop: {auto a=torch::optim::RMSpropOptions(r); optpairs(c,&a,p); u->v=new torch::optim::RMSprop(v,a); break;}
-  case Cast::sgd:     {auto a=torch::optim::SGDOptions(r);     optpairs(c,&a,p); u->v=new torch::optim::SGD(v,a);     break;}
   default: AT_ERROR("Unrecognized optimizer: ",s); break;
  }
  return kptr(u.release());
@@ -372,7 +400,7 @@ ZK optstate(B a,B b,Cast c,V* v) {
   case Cast::adam:    {auto m=(Adam*)v;    x=adam(a,r,m);    if(b) y=adam(m);    break;}
   case Cast::lbfgs:   {auto m=(LBFGS*)v;   x=lbfgs(a,r,m);   if(b) y=lbfgs(m);   break;}
   case Cast::rmsprop: {auto m=(RMSprop*)v; x=rmsprop(a,r,m); if(b) y=rmsprop(m); break;}
-  case Cast::sgd:     {auto m=(SGD*)v;     x=sgd(a,r,m);     if(b) y=sgd(m);    break;}
+  case Cast::sgd:     {auto m=(SGD*)v;     x=sgd(a,r,m);     if(b) y=sgd(m);     break;}
   default: break;
  }
  return (K)0;
@@ -412,23 +440,17 @@ K optdetail(Cast c,V *v) {
 }
 
 KAPI opt(K x) {
- F r=nf; S s; Ptr k=nullptr; Pairs p={};
  KTRY
- if(xempty(x)) {
-  return optdefaults();
-/*
- } else if(xsym(x,s)) {
-  return optdefault(s);
- } else if(xsym(x,0,s) && (xptr(x,1,k) || xempty(x,1)) && (x->n==2 || (x->n==3 && (xdouble(x,2,r) || xpairs(x,2,p))))) {
-  return optinit(s,r,k,p);
-*/
- } else if(xsym(x,s) || xsym(x,0,s)) {
-  return optinit(s,x);
- } else if(xoptim(x,k)) {
-  return optdetail(k->c,k->v);
- } else {
-  return(K)0;
- }
+  S s; Ptr p=nullptr;
+  if(xempty(x)) {
+   return optdefaults();
+  } else if(xsym(x,s) || xsym(x,0,s)) {
+   return optinit(s,x);
+  } else if(xoptim(x,p)) {
+   return optdetail(p->c,p->v);
+  } else {
+   return(K)0;
+  }
  KCATCH("Optimizer error");
 }
 
@@ -468,4 +490,21 @@ eval      max_eval         TORCH_ARG(int64_t, max_eval) = 25;
 iter      max_iter         TORCH_ARG(int64_t, max_iter) = 20;        
 history   history_size     TORCH_ARG(size_t, history_size) = 100;   
 
+KAPI vec(K a) {
+ auto m=torch::nn::Linear(5,2); m->to(torch::kCUDA);
+ auto o=torch::optim::Adam(m->parameters(),torch::optim::AdamOptions(.001));
+ auto x=torch::ones({10,5},torch::kCUDA);
+ auto y=m->forward(x).sum();
+ y.backward();
+ o.step();
+ y=m->forward(x).sum();
+ y.backward();
+ o.step();
+ K r=xD(ktn(KS,0),ktn(0,0));
+ OPTBUFFER(r,o,step_buffers);
+ OPTBUFFER(r,o,exp_average_buffers);
+ OPTBUFFER(r,o,exp_average_sq_buffers);
+ OPTBUFFER(r,o,max_exp_average_sq_buffers);
+ return r;
+}
 */

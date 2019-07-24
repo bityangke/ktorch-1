@@ -3,6 +3,7 @@
 #define OPTBUFFER(x,o,k) dictadd(x, #k, kvec(o->k))
 #define OPTSET(x,k,v) dictadd(x, oset(Setting::k), v)
 
+using OptimizerBase  = torch::optim::detail::OptimizerBase;
 using Adagrad        = torch::optim::Adagrad;
 using AdagradOptions = torch::optim::AdagradOptions;
 using Adam           = torch::optim::Adam;
@@ -16,8 +17,7 @@ using SGDOptions     = torch::optim::SGDOptions;
 
 // --------------------------------------------------------------------------------------
 // omap - map to/from optimizer symbol/enumeration and default learning rate
-// oset - optimizer settings, map sym -> enum
-// odef - read/write optimizer definition via options structure, e.g. AdamOptions
+// oset - optimizer settings, map sym <-> enum
 // --------------------------------------------------------------------------------------
 ZV omap(S s,Cast &c,double &r) {
  for(auto& m:env().opt)
@@ -31,11 +31,6 @@ ZV omap(Cast c,S &s,double &r) {
  AT_ERROR("Unrecognized optimizer: ",(I)c);
 }
 
-ZS omap(Cast c) {
- for(auto& m:env().opt) if(c==std::get<1>(m)) return std::get<0>(m);
- AT_ERROR("Unrecognized optimizer: ",(int)c);
-}
-
 Z Setting oset(S s) {
  for(auto& m:env().oset)
   if(s==std::get<0>(m)) return std::get<1>(m);
@@ -45,72 +40,6 @@ Z Setting oset(S s) {
 ZS oset(Setting e) {
  for(auto& m:env().oset) if(e==std::get<1>(m)) return std::get<0>(m);
  AT_ERROR("Unrecognized optimizer setting: ",(I)e);
-}
-ZV odef(Cast c, const V* v, S s, Setting o, Pairs& p, K x) {
- switch(c) {
-  case Cast::adagrad: {
-   auto a=(torch::optim::AdagradOptions*)v;
-   switch(o) {
-    case Setting::lr:      if(x) dictadd(x,s,kf(a->learning_rate())); else a->learning_rate(pdouble(p)); break;
-    case Setting::lrdecay: if(x) dictadd(x,s,kf(a->lr_decay()));      else a->lr_decay(pdouble(p));      break;
-    case Setting::decay:   if(x) dictadd(x,s,kf(a->weight_decay()));  else a->weight_decay(pdouble(p));  break;
-    default: if(!x) AT_ERROR("Adagrad setting: ",s," not one of lr,lrdecay,decay"); break;
-   }
-   break;
-  }
-  case Cast::adam: {
-   auto a=(torch::optim::AdamOptions*)v;
-   switch(o) {
-    case Setting::lr:      if(x) dictadd(x,s,kf(a->learning_rate())); else a->learning_rate(pdouble(p)); break;
-    case Setting::beta1:   if(x) dictadd(x,s,kf(a->beta1()));         else a->beta1(pdouble(p));         break;
-    case Setting::beta2:   if(x) dictadd(x,s,kf(a->beta2()));         else a->beta2(pdouble(p));         break;
-    case Setting::decay:   if(x) dictadd(x,s,kf(a->weight_decay()));  else a->weight_decay(pdouble(p));  break;
-    case Setting::eps:     if(x) dictadd(x,s,kf(a->eps()));           else a->eps(pdouble(p));           break;
-    case Setting::amsgrad: if(x) dictadd(x,s,kb(a->amsgrad()));       else a->amsgrad(pbool(p));         break;
-    default: if(!x) AT_ERROR("Adam setting: ",s," not one of lr,beta1,beta2,decay,eps,amsgrad"); break;
-   }
-   break;
-  }
-  case Cast::lbfgs: {
-   auto a=(torch::optim::LBFGSOptions*)v;
-   switch(o) {
-    case Setting::lr:        if(x) dictadd(x,s,kf(a->learning_rate()));    else a->learning_rate(pdouble(p));    break;
-    case Setting::iter:      if(x) dictadd(x,s,kj(a->max_iter()));         else a->max_iter(plong(p));           break;
-    case Setting::eval:      if(x) dictadd(x,s,kj(a->max_eval()));         else a->max_eval(plong(p));           break;
-    case Setting::gradtol:   if(x) dictadd(x,s,ke(a->tolerance_grad()));   else a->tolerance_grad(pdouble(p));   break;
-    case Setting::changetol: if(x) dictadd(x,s,ke(a->tolerance_change())); else a->tolerance_change(pdouble(p)); break;
-    case Setting::history:   if(x) dictadd(x,s,kj(a->history_size()));     else a->history_size(plong(p));       break;
-    default: if(!x) AT_ERROR("LBFGS setting: ",s," not one of lr,iter,eval,gradtol,changetol,history"); break;
-   }
-   break;
-  }
-  case Cast::rmsprop: {
-   auto a=(torch::optim::RMSpropOptions*)v;
-   switch(o) {
-    case Setting::lr:        if(x) dictadd(x,s,kf(a->learning_rate())); else a->learning_rate(pdouble(p));break;
-    case Setting::alpha:     if(x) dictadd(x,s,kf(a->alpha()));         else a->alpha(pdouble(p));        break;
-    case Setting::eps:       if(x) dictadd(x,s,kf(a->eps()));           else a->eps(pdouble(p));          break;
-    case Setting::decay:     if(x) dictadd(x,s,kf(a->weight_decay()));  else a->weight_decay(pdouble(p)); break;
-    case Setting::momentum:  if(x) dictadd(x,s,kf(a->momentum()));      else a->momentum(pdouble(p));     break;
-    case Setting::centered:  if(x) dictadd(x,s,kb(a->centered()));      else a->centered(pbool(p));       break;
-    default: if(!x) AT_ERROR("RMSprop setting: ",s," not one of lr,alpha,eps,decay.momentum,centered");  break;
-   }
-   break;
-  }
-  case Cast::sgd: {
-   auto a=(torch::optim::SGDOptions*)v;
-   switch(o) {
-    case Setting::lr:        if(x) dictadd(x,s,kf(a->learning_rate())); else a->learning_rate(pdouble(p)); break;
-    case Setting::momentum:  if(x) dictadd(x,s,kf(a->momentum()));      else a->momentum(pdouble(p));      break;
-    case Setting::dampening: if(x) dictadd(x,s,kf(a->dampening()));     else a->dampening(pdouble(p));     break;
-    case Setting::decay:     if(x) dictadd(x,s,kf(a->weight_decay()));  else a->weight_decay(pdouble(p));  break;
-    case Setting::nesterov:  if(x) dictadd(x,s,kb(a->nesterov()));      else a->nesterov(pbool(p));        break;
-    default: if(!x) AT_ERROR("SGD setting: ",s," not one of lr,momentum,dampening,decay,nesterov"); break;
-   }
-   break;
-  }
-  default: AT_ERROR("Unrecognized optimizer"); break;
- }
 }
 
 // ----------------------------------------------------------------------------------------
@@ -313,61 +242,12 @@ ZK sgd(SGD* v) {  //return internal buffer state as k dictionary
 }
 
 // ---------------------------------------------------------------------------------------
-// optdict - return a dictionary of optimizer settings
-// optdefault - return a dictionary of default settings for a given optimizer
-// optdefaults - return dictionary of dictionaries: default settings for all optimizers
-// optpairs - process dictionary or list of name,value pairs of optimizer settings
-// optparms - set vector of parameters from given tensor(s),layer(s),model
+// optparms - return vector of parameters from given tensor/sequential ptr
 // optinit - initialize one of the supported optimizers, return pointer to k
+// optstate - return optimizer name & options and optionally, internal buffer values
+// optfree - free previously allocated optimizer module
 // opt - main optimizer interface function for q
 // ---------------------------------------------------------------------------------------
-ZV optdict(K &x,Cast c,const V *v) {
- Pairs p;
- if(v)
-  for(auto& m:env().oset)
-   odef(c,v,std::get<0>(m),std::get<1>(m),p,x);
-}
-
-ZK optdict(Cast c,const V *v) {K x=xD(ktn(KS,0),ktn(0,0)); optdict(x,c,v); return x;}
-
-ZK optdefault(S s,Cast c,double r) {
- K x;
- switch(c) {
-  case Cast::adagrad: {auto a=torch::optim::AdagradOptions(r); x=optdict(c,&a); break;}
-  case Cast::adam:    {auto a=torch::optim::AdamOptions(r);    x=optdict(c,&a); break;}
-  case Cast::lbfgs:   {auto a=torch::optim::LBFGSOptions(r);   x=optdict(c,&a); break;}
-  case Cast::rmsprop: {auto a=torch::optim::RMSpropOptions(r); x=optdict(c,&a); break;}
-  case Cast::sgd:     {auto a=torch::optim::SGDOptions(r);     x=optdict(c,&a); break;}
-  default: x=optdict(c,nullptr); break;
- }
- return x;
-}
-
-ZK optdefault(S s) {Cast c; double r; omap(s,c,r); return optdefault(s,c,r);}
-
-ZK optdefaults(V) {
- K d=xD(ktn(KS,0),ktn(0,0)), *y=kK(d);
- for(auto& m:env().opt) {
-  auto s=std::get<0>(m);    // sym for optimizer
-  auto c=std::get<1>(m);    // corresponding enum
-  auto r=std::get<2>(m);    // default learning rate
-  js(&y[0],s); jk(&y[1],optdefault(s,c,r));
- }
- return d;
-}
-
-ZV optpairs(Cast c,V *v,Pairs &p) {
- while(xpair(p)) odef(c,v,p.k,oset(p.k),p,nullptr);
-}
-
-ZV optparms(Ptr p,std::vector<Tensor>& v) {
- switch(p->t) {
-  case Class::tensor:     v.emplace_back(*(Tensor*)p->v); break;
-  case Class::sequential: 
-  default: break;
- }
-}
-
 Z std::vector<Tensor> optparms(Ptr p) {
  switch(p ? p->t : Class::undefined) {
   case Class::tensor:     return {*(Tensor*)p->v};
@@ -401,57 +281,16 @@ ZK optstate(B a,B b,Cast c,V* v) {
   case Cast::lbfgs:   {auto m=(LBFGS*)v;   x=lbfgs(a,r,m);   if(b) y=lbfgs(m);   break;}
   case Cast::rmsprop: {auto m=(RMSprop*)v; x=rmsprop(a,r,m); if(b) y=rmsprop(m); break;}
   case Cast::sgd:     {auto m=(SGD*)v;     x=sgd(a,r,m);     if(b) y=sgd(m);     break;}
-  default: break;
+  default: AT_ERROR("Unrecognized optimizer; ",(I)c); break;
  }
- return (K)0;
-}
-
-ZK optdetail1(Cast c,V *v,const std::vector<Tensor>& p) {
- S s=omap(c); K x=xD(ktn(KS,0),ktn(0,0)), *k=kK(x); J n=p.size();
- js(&k[0],cs("optimizer")); jk(&k[1],ks(s));
- optdict(x,c,v); js(&k[0],cs("size")); jk(&k[1],kj(n));
- K w=ktn(0,n),g=ktn(0,n);
- for(I i=0;i<n;++i) {
-  Tensor t=p[i];
-  if(t.defined()) {
-   kK(w)[i]=kget(t);
-   if(t.grad().defined())
-    kK(g)[i]=kget(t.grad());
-   else
-    kK(g)[i]=ktn(0,0);
-  } else {
-    kK(w)[i]=ktn(0,0); kK(g)[i]=ktn(0,0);
-  }
+ if(b) {
+  return (K)0;
+ } else {
+  K k=ktn(KS,2),v=ktn(0,2);
+  kS(k)[0]=statekey(State::module), kS(k)[1]=statekey(State::options);
+  kK(v)[0]=ks(s), kK(v)[1]=x;
+  return xD(k,v);
  }
- js(&k[0],cs("weight"));   jk(&k[1],w);
- js(&k[0],cs("gradient")); jk(&k[1],g);
- return x;
-}
-
-K optdetail(Cast c,V *v) {
- switch(c) {
-  case Cast::adagrad: {auto a=(torch::optim::Adagrad*)v; return optdetail1(c,&a->options,a->parameters());}
-  case Cast::adam:    {auto a=(torch::optim::Adam*)v;    return optdetail1(c,&a->options,a->parameters());}
-  case Cast::lbfgs:   {auto a=(torch::optim::LBFGS*)v;   return optdetail1(c,&a->options,a->parameters());}
-  case Cast::rmsprop: {auto a=(torch::optim::RMSprop*)v; return optdetail1(c,&a->options,a->parameters());}
-  case Cast::sgd:     {auto a=(torch::optim::SGD*)v;     return optdetail1(c,&a->options,a->parameters());}
-  default: AT_ERROR("Unrecognized optimizer: ",(int)c); return (K)0;
- }
-}
-
-KAPI opt(K x) {
- KTRY
-  S s; Ptr p=nullptr;
-  if(xempty(x)) {
-   return optdefaults();
-  } else if(xsym(x,s) || xsym(x,0,s)) {
-   return optinit(s,x);
-  } else if(xoptim(x,p)) {
-   return optdetail(p->c,p->v);
-  } else {
-   return(K)0;
-  }
- KCATCH("Optimizer error");
 }
 
 V optfree(Cast c,V *v) {
@@ -463,6 +302,21 @@ V optfree(Cast c,V *v) {
   case Cast::sgd:     delete(torch::optim::SGD*)v;     break;
   default: AT_ERROR("Unrecognized optimizer: ",(I)c); break;
  }
+}
+
+KAPI opt(K x) {
+ KTRY
+  B a=env().alloptions; S s; Ptr p,q;
+  if(xsym(x,s) || xsym(x,0,s)) {
+   return optinit(s,x);
+  } else if(xoptim(x,p) || (xbool(x,1,a) && xoptim(x,0,p) && x->n==2)) {
+   return optstate(a,false,p->c,p->v);
+  } else if(xoptim(x,0,p) && xptr(x,1,q)) {
+   return ((OptimizerBase*)p->v)->add_parameters(optparms(q)), (K)0;
+  } else {
+   return(K)0;
+  }
+ KCATCH("Optimizer error");
 }
 
 V optfn(K x) {

@@ -1505,9 +1505,13 @@ KAPI Pstrf(K x) {
   a=kput(x);
  }
  if(b.defined())
-  return torch::pstrf_out(b,c,a,u,s), (K)0;
+  //PATCH return torch::pstrf_out(b,c,a,u,s), (K)0;
+  //return torch::cholesky_out(b,c,a,u,s), (K)0;
+  return (K)0;
  else
-  return std::tie(b,c)=torch::pstrf(a,u,s), ktenpair(p,b,c);
+  //PATCH return std::tie(b,c)=torch::pstrf(a,u,s), ktenpair(p,b,c);
+  //return std::tie(b,c)=torch::cholesky(a,u), ktenpair(p,b,c);
+  return (K)0;
  KCATCH("Pivoted Cholesky decomposition");
 }
 

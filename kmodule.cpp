@@ -959,20 +959,23 @@ V mget(cS s,Module &m,B a,K &v,J i) {
 ZK mtable(const Sequential& q,B a,B b=true); //a:true for all options else non-defaults, b:true for parms & buffers
 ZK mtable(const Sequential& q,B a,B b) {
  J i=0; K k=mkeys(b),v=mvals(b,q->size());
- for(auto&c:q->named_children()) mget(c.key().c_str(),*c.value(),a,v,i++);
+ for(const auto&c:q->named_children()) mget(c.key().c_str(),*c.value(),a,v,i++);
  return xT(xD(k,v));
 }
 
-ZK mchild(const Sequential &q,J i,B a,B b=true); //a:true for all options else non-defaults, b:true for parms & buffers
-ZK mchild(const Sequential &q,J i,B a,B b) {
- auto& c=q->named_children()[i];
- K k=mkeys(b),v=mvals(b,-1);
- mget(c.key().c_str(),*c.value(),a,v,-1);
+ZK mchild(const Sequential &q,J i,B a) {
+ if(i<0 || i>=q->size())
+  AT_ERROR("Invalid module index: ",i);
+ K k=mkeys(true),v=mvals(true,-1);
+ //direct access by index[0] fails to pick up name(?)
+ //const auto& c=q->named_children()[i];
+ //mget(c.key().c_str(),*c.value(),a,v,-1);
+ const auto& c=q->named_children();
+ mget(c.keys()[i].c_str(),*c.values()[i],a,v,-1);
  return xD(k,v);
 }
 
-ZK mchild(const Sequential &q,S s,B a,B b=true);
-ZK mchild(const Sequential &q,S s,B a,B b) {
+ZK mchild(const Sequential &q,S s,B a) {
  if(strchr(s,'.')) {
   Tensor t;
   if(q->named_parameters().contains(s))
@@ -983,8 +986,8 @@ ZK mchild(const Sequential &q,S s,B a,B b) {
    AT_ERROR("No parameter or buffer named: ",s);
   return kget(t);
  } else {
-  auto m=q->named_children()[s];
-  K k=mkeys(b),v=mvals(b,-1);
+  K k=mkeys(true),v=mvals(true,-1);
+  const auto& m=q->named_children()[s];
   mget(s,*m,a,v,-1);
   return xD(k,v);
  }
@@ -1043,7 +1046,7 @@ KAPI module(K x) {
 
 KAPI state(K x) {
  KTRY
-  B a=true; S s=nullptr; J i; Sequential q;
+  B a=env().alloptions; S s=nullptr; J i; Sequential q;
   if(xseq(x,q) || (xbool(x,1,a) && x->n==2 && xseq(x,0,q))) {
    return mtable(q,a);
   } else if(xseq(x,0,q) && (xsym(x,1,s) || xlong(x,1,i)) && (x->n==2 || (x->n==3 && xbool(x,2,a)))) {

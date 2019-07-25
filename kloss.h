@@ -21,7 +21,7 @@ class TORCH_API Loss {
 };
 
 static inline void Reduce(int64_t r) {
- AT_CHECK(r==Reduction::None || r==Reduction::Mean || r==Reduction::Sum,
+ TORCH_CHECK(r==Reduction::None || r==Reduction::Mean || r==Reduction::Sum,
   "Reduction is 0,1,2 for none,mean,sum, unrecognized setting: ",r);
 }
 

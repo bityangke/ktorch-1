@@ -842,6 +842,7 @@ K kexpand(J n,const F       *e) {return kex<F>      (n,e) ? kf(e[0]) : klist(n,e
 
 // -----------------------------------------------------------------------------------------
 // kfree - free allocated object according to tag
+// kstate - retrieve module/loss/optimizer state: options, internal buffers & parameters
 // kto - convert tensor/module device and or data type, e.g. to[tensor;`cuda`float;0b]
 // kdetail - return dictionary of attributes of given object and level of detail
 // kzerograd - return dictionary of attributes of given object and level of detail

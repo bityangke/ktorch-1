@@ -963,6 +963,10 @@ ZK mtable(const Sequential& q,B a,B b) {
  return xT(xD(k,v));
 }
 
+// --------------------------------------------------------------------------------------
+// tchild - extract named parameter/buffer tensor from child module in sequential
+// mchild - extract child module by index/name, return module state or individual tensor
+// --------------------------------------------------------------------------------------
 ZK mchild(const Sequential &q,J i,B a) {
  if(i<0 || i>=q->size())
   AT_ERROR("Invalid module index: ",i);
@@ -973,6 +977,44 @@ ZK mchild(const Sequential &q,J i,B a) {
  const auto& c=q->named_children();
  mget(c.keys()[i].c_str(),*c.values()[i],a,v,-1);
  return xD(k,v);
+}
+
+ZK tchild(S s,const Module& c) {
+ Tensor t;
+ if(c.named_parameters().contains(s))
+  t=c.named_parameters()[s];
+ else if(c.named_buffers().contains(s))
+  t=c.named_buffers()[s];
+ else
+  AT_ERROR("No parameter or buffer named: ",s);
+ return kget(t);
+}
+
+ZK mchild(B a,J i,S s,const Sequential &q) {
+ if(i<0 || i>=q->size())
+  AT_ERROR("Invalid module index: ",i);
+ if(s) {
+  return tchild(s,*q->children()[i]);
+ } else {
+  K k=mkeys(true),v=mvals(true,-1);
+  //direct access by index[0] fails to pick up name(?)
+  //const auto& c=q->named_children()[i];
+  //mget(c.key().c_str(),*c.value(),a,v,-1);
+  const auto& c=q->named_children();
+  mget(c.keys()[i].c_str(),*c.values()[i],a,v,-1);
+  return xD(k,v);
+ }
+}
+
+ZK mchild(B a,S s1,S s2,const Sequential &q) {
+ const auto& m=q->named_children()[s1];
+ if(s2) {
+  return tchild(s2,*m);
+ } else {
+  K k=mkeys(true),v=mvals(true,-1);
+  mget(s1,*m,a,v,-1);
+  return xD(k,v);
+ }
 }
 
 ZK mchild(const Sequential &q,S s,B a) {
@@ -1042,6 +1084,21 @@ KAPI module(K x) {
    return margs(p,q,x), p ? (K)0 : kseq(q);
   }
  KCATCH("Sequential module(s)");
+}
+
+KAPI mstate(K x) {
+ KTRY
+  B a=env().alloptions; S s1=nullptr,s2=nullptr; J i; Sequential q;
+  if(xseq(x,q) || (xbool(x,1,a) && x->n==2 && xseq(x,0,q))) {
+   return mtable(q,a);
+  } else if(xseq(x,0,q)
+    && (xsym(x,1,s1) || xlong(x,1,i)) 
+    && (x->n==2 || (x->n==3 && (xsym(x,2,s2) || xbool(x,2,a))))) {
+   return s1 ? mchild(a,s1,s2,q) : mchild(a,i,s2,q);
+  } else {
+   return KERR("Unexpected arg(s) for module state");
+  }
+ KCATCH("module state");
 }
 
 KAPI state(K x) {

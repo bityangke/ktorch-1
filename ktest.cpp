@@ -231,7 +231,6 @@ KAPI modtest2(K x) {
   auto parms=l->parameters();
  std::cout << "No. of parameters: " << parms.size() << "\n";
  for(auto& x:parms) {
-  //PATCH
   std::cout << x << "\n";
   std::cout << "reference count of parm: " << x.use_count() << "\n";
  }

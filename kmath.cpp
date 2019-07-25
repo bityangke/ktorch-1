@@ -1465,12 +1465,11 @@ KAPI Triangular_solve(K x) {
  KCATCH("trangular solve");
 }
 
-// -------------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------
 // cholesky - cholesky decomposition
-// potri - inverse of positive semidefinite matrix given Cholesky factors
-// pstrf - pivoted Cholesky decomposition of a positive semidefinite matrix
-// cholesky_solve - Solves equations w'positive semidefinite matrix and Cholesky factors
-// -------------------------------------------------------------------------------------
+// cholesky_inverse - inverse of symmetric positive-definite matrix using cholesky factorization
+// cholesky_solve - solves equations w'positive semidefinite matrix and cholesky factors
+// ---------------------------------------------------------------------------------------------
 ZK chol(K x,Ftb f,Gtb g,B b,cS e) {
  KTRY
   Tensor r,t;
@@ -1489,31 +1488,6 @@ ZK chol(K x,Ftb f,Gtb g,B b,cS e) {
 
 KAPI Cholesky(K x)         {return chol(x, torch::cholesky,         torch::cholesky_out,         false, "Cholesky decomposition");}
 KAPI Cholesky_inverse(K x) {return chol(x, torch::cholesky_inverse, torch::cholesky_inverse_out, true,  "Invert positive semi-definite matrix given Cholesky factors");}
-
-KAPI Pstrf(K x) {
- KTRY
- B u=true,p; Scalar s; Tensor a,b,c;
- if(xten(x,a)) {
-  p=true;
- } else if((x->n==2 && (xbool(x,1,u) ||                 xtenpair(x,1,b,c))) ||
-           (x->n==3 &&  xbool(x,1,u) && (xnum(x,2,s) || xtenpair(x,2,b,c))) ||
-           (x->n==4 &&  xbool(x,1,u) &&  xnum(x,2,s) && xtenpair(x,3,b,c))) {
-   if(!(p=xten(x,0,a))) 
-    a=kput(x,0);
- } else {
-  p=false;
-  a=kput(x);
- }
- if(b.defined())
-  //PATCH return torch::pstrf_out(b,c,a,u,s), (K)0;
-  //return torch::cholesky_out(b,c,a,u,s), (K)0;
-  return (K)0;
- else
-  //PATCH return std::tie(b,c)=torch::pstrf(a,u,s), ktenpair(p,b,c);
-  //return std::tie(b,c)=torch::cholesky(a,u), ktenpair(p,b,c);
-  return (K)0;
- KCATCH("Pivoted Cholesky decomposition");
-}
 
 KAPI Cholesky_solve(K x) {
  KTRY
@@ -1685,7 +1659,6 @@ V mathfn(K x) {
  fn(x, "pnorm",              KFN(Pnorm),              1);
  fn(x, "pow",                KFN(Pow),                1);
  fn(x, "prod",               KFN(Prod),               1);
- fn(x, "pstrf",              KFN(Pstrf),              1);
  fn(x, "qr",                 KFN(Qr),                 1);
  fn(x, "Reciprocal",         KFN(Reciprocal),         1);
  fn(x, "remainder",          KFN(Remainder),          1);

@@ -490,13 +490,11 @@ ZK lossopt(B a,Cast c,Loss *l) {
  return x;
 }
  
-K statekeys(B,Class);
-
 K lossdict(B a,B b,Ptr p) {
  //a:true if all options, b:true if full state
  K k,v; Cast c=p->c; auto *l=(Loss*)p->v;
  if(b) {
-  k=statekeys(true,Class::loss); v=ktn(0,k->n);
+  k=statekeys(); v=ktn(0,k->n);
   kK(v)[0]=kc('l');   //class="l" for loss
   kK(v)[2]=ks((S)""); //empty user-defined name
   kK(v)[4]=ktn(0,0);  //empty parms
@@ -504,7 +502,7 @@ K lossdict(B a,B b,Ptr p) {
  } else {
   k=ktn(KS,2),v=ktn(0,2);
   kS(k)[0]=statekey(State::module);
-  kS(k)[0]=statekey(State::options);
+  kS(k)[1]=statekey(State::options);
  }
  kK(v)[b ? 1 : 0]=ks(lmap(c));
  kK(v)[b ? 3 : 1]=lossopt(a,c,l);

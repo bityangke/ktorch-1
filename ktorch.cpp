@@ -146,7 +146,7 @@ TypeMeta maptype(A k) {
 
 // ------------------------------------------------------------------------------------------
 // statekey - map from state attribute enumeration to symbol, e.g. State::parms -> `parms
-// statekeys -
+// statekeys - return dictionary keys for full state: class,module,name,options,parms,buffers
 // statefind - search dictionary keys/table colums for symbol matching given enumeration
 // statesym - given dict/table defining module(s), find symbols for module else null
 // statedict - given enumeration, return k dictionary stored at matching key/col else null
@@ -157,7 +157,7 @@ S statekey(State e) {
  AT_ERROR("Unrecognized module attribute: ",(I)e);
 }
 
-K statekeys(B a,Class c) {
+K statekeys() {
  K x=ktn(KS,env().state.size());
  for(auto &m:env().state)
   kS(x)[(J)std::get<1>(m)]=std::get<0>(m);
@@ -207,29 +207,6 @@ K statedict(State e,K x,J j) {  // e:enum, e.g. State::options, x:dict/table, j:
   return r;
  } else {
   return nullptr;
- }
-}
-
-// keep in kmodule.cpp -- module specific??
-V stateparms(S s,Module &m,K x,B p) { // set named parms/buffers in module m from dict x, p true if parms
- K k=kK(x)[0],v=kK(x)[1]; Tensor V; if(v->t) V=kput(v);
- for(auto &a:p ? m.named_parameters() : m.named_buffers()) {
-  std::cerr << "name: " << a.key() << "\n";
-  J i=kfind(k,a.key());
-  if(i<0) {
-   AT_ERROR("Unable to find ",s,(p ? " parameter" : " buffer"),": `",a.key());
-   break;
-  }
-  Tensor t=v->t ? V[i] : kput(kK(v)[i]);
-  if(a.value().dtype() != t.dtype()) {
-   AT_ERROR("Type mismatch: ",s,(p ? " parameter" : " buffer")," `",a.key()," is ",a.value().dtype()," but k data is ",t.dtype());
-   break;
-  } else if(!a.value().is_same_size(t)) {
-   AT_ERROR("Size mismatch: ",s,(p ? " parameter" : " buffer")," `",a.key()," is ",a.value().sizes()," but k data is ",t.sizes());
-   break;
-  } else {
-   a.value().copy_(t.to(a.value().device()));
-  }
  }
 }
 
@@ -863,14 +840,17 @@ KAPI kfree(K x){
 
 KAPI kstate(K x) {
  KTRY
-  B a=env().alloptions; Ptr p=nullptr;
-  if(!(xptr(x,p) || (xbool(x,1,a) && x->n==2 && xptr(x,0,p))))
-   AT_ERROR("state requires pointer to previously allocated object or pointer & flag for options");
+  B a=env().alloptions; Ptr p;
+  if(!(xptr(x,p) || xptr(x,0,p)))
+   AT_ERROR("state expects a pointer to previously allocated object");
+  if((p->t==Class::loss || p->t==Class::optimizer) &&
+    !(x->n==1 || (x->n==2 && xbool(x,1,a))))
+   AT_ERROR((p->t==Class::loss ? "Loss" : "Optimizer")," state expects ptr or (ptr;options flag)");
   switch(p->t) {
- //case Class::tensor:     return..;
- //case Class::sequential: return mstate(..);
+   case Class::sequential: return mstate(x);
    case Class::loss:       return lossdict(a,true,p);
- //case Class::optimizer:  return..;
+   case Class::optimizer:  return optstate(a,true,p);
+   case Class::tensor:     AT_ERROR("state not defined for tensor");
    default: return KERR("Not a recognized pointer");
   }
  KCATCH("Unable to get object state")
@@ -1149,6 +1129,7 @@ KAPI fns(K x){
  fn(x, "free",        KFN(kfree),       1);
  fn(x, "to",          KFN(kto),         3);
  fn(x, "detail",      KFN(kdetail),     1);
+ fn(x, "state",       KFN(kstate),      1);
  fn(x, "zerograd",    KFN(kzerograd),   1);
  fn(x, "default",     KFN(kdefault),    1);
  fn(x, "setting",     KFN(ksetting),    1);

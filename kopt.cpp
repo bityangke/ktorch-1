@@ -273,24 +273,29 @@ ZK optinit(S s,K x) {
  return kptr(u.release());
 }
 
-ZK optstate(B a,B b,Cast c,V* v) {
- F r; S s; omap(c,s,r); K x,y;
- switch(c) {
-  case Cast::adagrad: {auto m=(Adagrad*)v; x=adagrad(a,r,m); if(b) y=adagrad(m); break;}
-  case Cast::adam:    {auto m=(Adam*)v;    x=adam(a,r,m);    if(b) y=adam(m);    break;}
-  case Cast::lbfgs:   {auto m=(LBFGS*)v;   x=lbfgs(a,r,m);   if(b) y=lbfgs(m);   break;}
-  case Cast::rmsprop: {auto m=(RMSprop*)v; x=rmsprop(a,r,m); if(b) y=rmsprop(m); break;}
-  case Cast::sgd:     {auto m=(SGD*)v;     x=sgd(a,r,m);     if(b) y=sgd(m);     break;}
-  default: AT_ERROR("Unrecognized optimizer; ",(I)c); break;
+K optstate(B a,B b,Ptr p) {
+ F r; S s; omap(p->c,s,r); K k,v,x,y;
+ switch(p->c) {
+  case Cast::adagrad: {auto m=(Adagrad*)p->v; x=adagrad(a,r,m); if(b) y=adagrad(m); break;}
+  case Cast::adam:    {auto m=(Adam*)p->v;    x=adam(a,r,m);    if(b) y=adam(m);    break;}
+  case Cast::lbfgs:   {auto m=(LBFGS*)p->v;   x=lbfgs(a,r,m);   if(b) y=lbfgs(m);   break;}
+  case Cast::rmsprop: {auto m=(RMSprop*)p->v; x=rmsprop(a,r,m); if(b) y=rmsprop(m); break;}
+  case Cast::sgd:     {auto m=(SGD*)p->v;     x=sgd(a,r,m);     if(b) y=sgd(m);     break;}
+  default: AT_ERROR("Unrecognized optimizer; ",(I)p->c); break;
  }
  if(b) {
-  return (K)0;
+  k=statekeys(); v=ktn(0,k->n);
+  kK(v)[0]=kc('o');   //class="o" for optimizer
+  kK(v)[2]=ks((S)""); //no user-defined name
+  kK(v)[4]=ktn(0,0);  //empty parms
+  kK(v)[5]=y;         //retrieved optimizer buffers
  } else {
-  K k=ktn(KS,2),v=ktn(0,2);
+  k=ktn(KS,2),v=ktn(0,2);
   kS(k)[0]=statekey(State::module), kS(k)[1]=statekey(State::options);
-  kK(v)[0]=ks(s), kK(v)[1]=x;
-  return xD(k,v);
  }
+ kK(v)[b ? 1 : 0]=ks(s);
+ kK(v)[b ? 3 : 1]=x;
+ return xD(k,v);
 }
 
 V optfree(Cast c,V *v) {
@@ -310,7 +315,7 @@ KAPI opt(K x) {
   if(xsym(x,s) || xsym(x,0,s)) {
    return optinit(s,x);
   } else if(xoptim(x,p) || (xbool(x,1,a) && xoptim(x,0,p) && x->n==2)) {
-   return optstate(a,false,p->c,p->v);
+   return optstate(a,false,p);
   } else if(xoptim(x,0,p) && xptr(x,1,q)) {
    return ((OptimizerBase*)p->v)->add_parameters(optparms(q)), (K)0;
   } else {

@@ -967,18 +967,6 @@ ZK mtable(const Sequential& q,B a,B b) {
 // tchild - extract named parameter/buffer tensor from child module in sequential
 // mchild - extract child module by index/name, return module state or individual tensor
 // --------------------------------------------------------------------------------------
-ZK mchild(const Sequential &q,J i,B a) {
- if(i<0 || i>=q->size())
-  AT_ERROR("Invalid module index: ",i);
- K k=mkeys(true),v=mvals(true,-1);
- //direct access by index[0] fails to pick up name(?)
- //const auto& c=q->named_children()[i];
- //mget(c.key().c_str(),*c.value(),a,v,-1);
- const auto& c=q->named_children();
- mget(c.keys()[i].c_str(),*c.values()[i],a,v,-1);
- return xD(k,v);
-}
-
 ZK tchild(S s,const Module& c) {
  Tensor t;
  if(c.named_parameters().contains(s))
@@ -1017,33 +1005,14 @@ ZK mchild(B a,S s1,S s2,const Sequential &q) {
  }
 }
 
-ZK mchild(const Sequential &q,S s,B a) {
- if(strchr(s,'.')) {
-  Tensor t;
-  if(q->named_parameters().contains(s))
-   t=q->named_parameters()[s];
-  else if(q->named_buffers().contains(s))
-   t=q->named_buffers()[s];
-  else
-   AT_ERROR("No parameter or buffer named: ",s);
-  return kget(t);
- } else {
-  K k=mkeys(true),v=mvals(true,-1);
-  const auto& m=q->named_children()[s];
-  mget(s,*m,a,v,-1);
-  return xD(k,v);
- }
-}
-
 // ------------------------------------------------------------------------------------------
 //  main api functions defined in k
 // ------------------------------------------------------------------------------------------
 // margs - helper function used to parse module creation args (if not table/dictionary)
 // module - create/append sequential module
-// state - return module type,name,options,parms,buffers for full module or selected subset
+// mstate - class,module,name,options,parms,buffers for module(s) or selected parm/buffer
 // forward - given module pointer and tensor, run forward calculations sequentially
 // train - query or set training flag for a module
-// clone
 // ------------------------------------------------------------------------------------------
 ZV margs(B p,Sequential q,K x) {
  J i=p; S s=nullptr,nm=nullptr;
@@ -1086,32 +1055,17 @@ KAPI module(K x) {
  KCATCH("Sequential module(s)");
 }
 
-KAPI mstate(K x) {
- KTRY
-  B a=env().alloptions; S s1=nullptr,s2=nullptr; J i; Sequential q;
-  if(xseq(x,q) || (xbool(x,1,a) && x->n==2 && xseq(x,0,q))) {
-   return mtable(q,a);
-  } else if(xseq(x,0,q)
-    && (xsym(x,1,s1) || xlong(x,1,i)) 
-    && (x->n==2 || (x->n==3 && (xsym(x,2,s2) || xbool(x,2,a))))) {
-   return s1 ? mchild(a,s1,s2,q) : mchild(a,i,s2,q);
-  } else {
-   return KERR("Unexpected arg(s) for module state");
-  }
- KCATCH("module state");
-}
-
-KAPI state(K x) {
- KTRY
-  B a=env().alloptions; S s=nullptr; J i; Sequential q;
-  if(xseq(x,q) || (xbool(x,1,a) && x->n==2 && xseq(x,0,q))) {
-   return mtable(q,a);
-  } else if(xseq(x,0,q) && (xsym(x,1,s) || xlong(x,1,i)) && (x->n==2 || (x->n==3 && xbool(x,2,a)))) {
-   return s ? mchild(q,s,a) : mchild(q,i,a);
-  } else {
-   return KERR("Unexpected arg(s) for state: expecting sequential module ptr, or (ptr;index) or (ptr;name) or (ptr;name.param)");
-  }
- KCATCH("module state");
+K mstate(K x) {
+ B a=env().alloptions; S s1=nullptr,s2=nullptr; J i; Sequential q;
+ if(xseq(x,q) || (xbool(x,1,a) && x->n==2 && xseq(x,0,q))) {
+  return mtable(q,a);
+ } else if(xseq(x,0,q)
+   && (xsym(x,1,s1) || xlong(x,1,i)) 
+   && (x->n==2 || (x->n==3 && (xsym(x,2,s2) || xbool(x,2,a))))) {
+  return s1 ? mchild(a,s1,s2,q) : mchild(a,i,s2,q);
+ } else {
+  return KERR("Unexpected arg(s) for module state");
+ }
 }
 
 KAPI forward(K x,K y) {
@@ -1144,7 +1098,6 @@ KAPI train(K x) {
 // ----------------------------------
 V modfn(K x) {
  fn(x, "module",     KFN(module),1);        // api functions for modules
- fn(x, "state",      KFN(state),1);
  fn(x, "forward",    KFN(forward),2);
  fn(x, "train",      KFN(train),1);
 

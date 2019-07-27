@@ -177,7 +177,7 @@ A maptype(TypeMeta);
 TypeMeta maptype(A);
 
 S statekey(State);
-//statekeys??
+K statekeys();
 J statefind(State,K);
 S statesym(State e,K x,J j=-1);
 K statedict(State e,K x,J j=-1);
@@ -325,6 +325,7 @@ V tensorfn(K);
 K kseq(const Sequential&,Cast c=Cast::sequential);
 V kseqto(Ptr&,TensorOptions&,B);
 V modfn(K);
+K mstate(K);
 
 // loss functions:
 K lossdict(B,B,Ptr);
@@ -332,6 +333,7 @@ V lossfree(Ptr);
 V lossfn(K);
 
 // optimization functions:
+K optstate(B,B,Ptr);
 V optfree(Cast,V*);
 V optfn(K);
 

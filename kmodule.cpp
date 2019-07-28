@@ -78,22 +78,25 @@ Z Setting mset(S s) {
 // mkeys - initialize keys for dict/table of module state: `module`name`options`parms`buffers
 // mvals - initialize corresponding k values for state dictionary or table
 // ------------------------------------------------------------------------------------------
-ZK mkeys(B b) { // b:true if including parms & buffers
- K x=ktn(KS,b ? 5 : 3);
+ZK mkeys(B b) { // b:true if including class, parms & buffers
+ if(b) return statekeys();
+ K x=ktn(KS,3);
  for(auto &m:env().state) {
        if(std::get<1>(m)==State::module)  kS(x)[0]=std::get<0>(m);
   else if(std::get<1>(m)==State::name)    kS(x)[1]=std::get<0>(m);
-  else if(std::get<1>(m)==State::options) kS(x)[2]=std::get<0>(m);
-  else if(b && std::get<1>(m)==State::parms)   kS(x)[3]=std::get<0>(m);
-  else if(b && std::get<1>(m)==State::buffers) kS(x)[4]=std::get<0>(m);
+  else if(std::get<1>(m)==State::options){kS(x)[2]=std::get<0>(m); break;}
  }
  return x;
 }
 
 ZK mvals(B b,J n) {
- K x=ktn(0,b ? 5 : 3);
- if(n>-1)
-  for(J i=0;i<x->n;++i) kK(x)[i]=ktn(i<2 ? KS : 0,n);
+ K x=ktn(0,b ? 6 : 3);
+ if(n<0) {
+  if(b) kK(x)[0]=kc('m');
+ } else {
+  if(b) kK(x)[0]=kp((S)std::string(n,'m').data());
+  for(J i=b;i<x->n;++i) kK(x)[i]=ktn(i<(2+b) ? KS : 0,n);
+ }
  return x;
 }
  
@@ -933,25 +936,26 @@ V mopt(Module &g,B a,K &v,J i) { //g:generic module, a:true if all options, v:k 
 
  } else { AT_ERROR("Unrecognized module: ",g.name());
  }
- S s=msym(c);
- if(i<0)    kK(v)[0]=ks(s),    kK(v)[2]=x;     //dictionary, assign module & options
- else    kS(kK(v)[0])[i]=s, kK(kK(v)[2])[i]=x; //table, assign module,options in i'th row
+ S s=msym(c);J j=v->n==3 ? 0 : 1;
+ if(i<0)    kK(v)[j]=ks(s),    kK(v)[j+2]=x;     //dictionary, assign module & options
+ else    kS(kK(v)[j])[i]=s, kK(kK(v)[j+2])[i]=x; //table, assign module,options in i'th row
 }
 
 V mget(cS s,Module &m,B a,K &v,J i) {
  //s:name in sequence, m:type-erased module, a:true for all options, v:array for values, i:i'th row of table result
+ B b=v->n==6;
  mopt(m,a,v,i);
  if(i<0) {                               //fill in dictionary values[1 3 4], name,parms,buffers
-  kK(v)[1]=ks(cs(s));
-  if(v->n == 5) {
-   kK(v)[3]=kdict(m.named_parameters());
-   kK(v)[4]=kdict(m.named_buffers());
+  kK(v)[1+b]=ks(cs(s));
+  if(b) {
+   kK(v)[4]=kdict(m.named_parameters());
+   kK(v)[5]=kdict(m.named_buffers());
   }
  } else {
-  kS(kK(v)[1])[i]=cs(s);                //fill in i'th table row
-  if(v->n == 5) {
-   kK(kK(v)[3])[i]=kdict(m.named_parameters());
-   kK(kK(v)[4])[i]=kdict(m.named_buffers());
+  kS(kK(v)[1+b])[i]=cs(s);                //fill in i'th table row
+  if(b) {
+   kK(kK(v)[4])[i]=kdict(m.named_parameters());
+   kK(kK(v)[5])[i]=kdict(m.named_buffers());
   }
  }
 }

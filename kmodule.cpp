@@ -246,11 +246,11 @@ ZV linear(B a,K x,const torch::nn::LinearImpl *m) {
 }
 
 template<typename M,typename O>
-Z M rnn(K x,J k) {
+Z M rnn(S s,K x,J k) {
  auto f=torch::nn::RNNActivation::ReLU;
  B b=true,bi=false,ba=false; Pairs p; J i=-1,h=-1,l=1,n=xargc(x,k,p); F d=0.0;
  if(!((n==0 && p.n) || (xlong(x,k,i) && (n==1 || (n==2 && xlong(x,k+1,h))))))
-  AT_ERROR("Unrecognized arguments for rnn/gru/lstm module");
+  AT_ERROR("Unrecognized arguments for ",s," module");
  B r=std::is_same<M,torch::nn::RNN>::value;
  while(xpair(p))
   switch(mset(p.k)) {
@@ -262,7 +262,7 @@ Z M rnn(K x,J k) {
    case Setting::batchfirst: ba=pbool(p); break;
    case Setting::drop:      d=pdouble(p); break;
    case Setting::fn: if(r) f=rnnfn(psym(p)); else AT_ERROR("activation function only for RNN module"); break;
-   default: AT_ERROR("rnn option: ",p.k," unrecognized, expected one of in,hidden,layers, bias,bi,batchfirst, drop,fn");
+   default: AT_ERROR(s," option: ",p.k," unrecognized, expected one of in,hidden,layers, bias,bi,batchfirst, drop,fn");
   }
  auto o=O(i,h).layers(l).dropout(d).with_bias(b).bidirectional(bi).batch_first(ba);
  if(r) rnnfn(o,f);
@@ -733,21 +733,24 @@ KAPI kprelu(K x) {
 V mparms(S s,Module &m,K x,B p) { // set named parms/buffers in module m from dict x, p true if parms
  K k=kK(x)[0],v=kK(x)[1]; Tensor V; if(v->t) V=kput(v);
  for(auto &a:p ? m.named_parameters() : m.named_buffers()) {
-  std::cerr << "name: " << a.key() << "\n";
   J i=kfind(k,a.key());
   if(i<0) {
    AT_ERROR("Unable to find ",s,(p ? " parameter" : " buffer"),": `",a.key());
    break;
   }
   Tensor t=v->t ? V[i] : kput(kK(v)[i]);
-  if(a.value().dtype() != t.dtype()) {
-   AT_ERROR("Type mismatch: ",s,(p ? " parameter" : " buffer")," `",a.key()," is ",a.value().dtype()," but k data is ",t.dtype());
-   break;
-  } else if(!a.value().is_same_size(t)) {
-   AT_ERROR("Size mismatch: ",s,(p ? " parameter" : " buffer")," `",a.key()," is ",a.value().sizes()," but k data is ",t.sizes());
-   break;
+  if(a.value().defined()) {
+   torch::NoGradGuard g;
+   if(a.value().dtype() != t.dtype())
+    AT_ERROR("Type mismatch: ",s,(p ? " parameter " : " buffer "),a.key()," is ",a.value().dtype(),", input is ",t.dtype());
+   if(!a.value().is_same_size(t))
+    AT_ERROR("Size mismatch: ",s,(p ? " parameter " : " buffer "),a.key()," is ",a.value().sizes(),", input is ",t.sizes());
+   if (a.value().device() != t.device())
+    a.value().set_data(t);
+   else
+    a.value().set_(t);
   } else {
-   a.value().copy_(t.to(a.value().device()));
+   a.value()=std::move(t);
   }
  }
 }
@@ -805,9 +808,9 @@ V mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) {
   case Cast::replicate2d:  PUSH(q,n,(rpad<4,ReplicationPad2d>(x,i,s))); break;
   case Cast::replicate3d:  PUSH(q,n,(rpad<6,ReplicationPad3d>(x,i,s))); break;
 
-  case Cast::rnn:          PUSH(q,n,(rnn<torch::nn::RNN, torch::nn::RNNOptions> (x,i))); break;
-  case Cast::gru:          PUSH(q,n,(rnn<torch::nn::GRU, torch::nn::GRUOptions> (x,i))); break;
-  case Cast::lstm:         PUSH(q,n,(rnn<torch::nn::LSTM,torch::nn::LSTMOptions>(x,i))); break;
+  case Cast::rnn:          PUSH(q,n,(rnn<torch::nn::RNN, torch::nn::RNNOptions> (s,x,i))); break;
+  case Cast::gru:          PUSH(q,n,(rnn<torch::nn::GRU, torch::nn::GRUOptions> (s,x,i))); break;
+  case Cast::lstm:         PUSH(q,n,(rnn<torch::nn::LSTM,torch::nn::LSTMOptions>(s,x,i))); break;
 
   case Cast::logsigmoid:   noarg(s,x,i); PUSH(q,n,LogSigmoid()); break;
   case Cast::sigmoid:      noarg(s,x,i); PUSH(q,n,Sigmoid()); break;

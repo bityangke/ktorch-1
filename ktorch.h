@@ -300,6 +300,7 @@ K klist(J,const int64_t*);
 K klist(J,const F*);
 K kvec(const std::vector<int64_t>&);
 K kvec(const std::vector<Tensor>&);
+K kvec(const std::deque<Tensor>&);
 K kexpand(J,const int64_t*);
 K kexpand(J,const F*);
 #define KEX(x) kexpand(x.size(),(*x).data())  // k list from ExpandingArray

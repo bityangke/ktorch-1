@@ -780,7 +780,7 @@ V pten(const Pairs &p,Tensor &t) {
 // kdict - tensor dictionary to k dictionary of names -> tensor values
 // kfind - given list of symbols, find index of matching string, return -1 if not found
 // klist - return k value from count and long/double pointer
-// kvec - return k value(s) from std::vector of longs or tensors
+// kvec - return k value(s) from std::vector of longs or tensors, std::deque of tensors
 // kex - true if given list is one unique value
 // kexpand - given element count & data ptr from expanding array return scalar or list
 // -----------------------------------------------------------------------------------------
@@ -805,6 +805,12 @@ K klist(J n,const F       *f) {K x=ktn(KF,n); memcpy(kG(x),f,n*sizeof(F));      
 K kvec(const std::vector<int64_t>& v) {return klist(v.size(),v.data());}
 
 K kvec(const std::vector<torch::Tensor>& v) {
+ K x=ktn(0,v.size());
+ for(size_t i=0; i<v.size(); ++i) kK(x)[i]=kget(v[i]);
+ return x;
+}
+
+K kvec(const std::deque<torch::Tensor>& v) {
  K x=ktn(0,v.size());
  for(size_t i=0; i<v.size(); ++i) kK(x)[i]=kget(v[i]);
  return x;

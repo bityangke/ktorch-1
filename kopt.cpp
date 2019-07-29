@@ -1,6 +1,7 @@
 #include "ktorch.h"
 
 #define OPTBUFFER(x,o,k) dictadd(x, #k, kvec(o->k))
+#define OPTTENSOR(x,o,k) dictadd(x, #k, kget(o->k))
 #define OPTSET(x,k,v) dictadd(x, oset(Setting::k), v)
 
 using OptimizerBase  = torch::optim::detail::OptimizerBase;
@@ -156,7 +157,13 @@ ZK lbfgs(B a,F r,LBFGS* v) { //return all or non-default options as k dictionary
 
 ZK lbfgs(LBFGS* v) {  //return internal buffer state as k dictionary
  K x=xD(ktn(KS,0),ktn(0,0));
- //OPTBUFFER(x,v,momentum_buffers);
+ OPTTENSOR(x,v,d);
+ OPTTENSOR(x,v,t);
+ OPTTENSOR(x,v,H_diag);
+ OPTTENSOR(x,v,prev_flat_grad);
+ OPTTENSOR(x,v,prev_loss);
+ OPTBUFFER(x,v,old_dirs);
+ OPTBUFFER(x,v,old_stps);
  return x;
 }
 

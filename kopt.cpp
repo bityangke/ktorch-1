@@ -45,6 +45,8 @@ ZS oset(Setting e) {
 
 // ----------------------------------------------------------------------------------------
 // adagrad - parse args (lr;lrdecay;wtdecay) or (..;name/val pairs/dict)
+//         - if given options,buffers, allocate new optimizer and return ptr
+//         - if given previously allocated ptr, return dictionary of options & buffers
 // ----------------------------------------------------------------------------------------
 ZV adagrad(K x,J i,AdagradOptions& o) {
  Pairs p; J n=xargc(x,i,p); F f;
@@ -59,6 +61,14 @@ ZV adagrad(K x,J i,AdagradOptions& o) {
    case Setting::decay:   f=pdouble(p); if(f==f) o.weight_decay(f); break;
    default: AT_ERROR("Unrecognized option: ",p.k," for Adagrad optimization"); break;
   }
+}
+
+Z V* adagrad(const std::vector<Tensor>& w,const AdagradOptions& a,K y) {
+ auto u=torch::make_unique<Adagrad>(w,a);
+ if(y) {
+  std::cerr << "buffers defined\n";
+ }
+ return u.release();
 }
 
 ZK adagrad(B a,F r,Adagrad* v) { //return all or non-default options as k dictionary
@@ -264,17 +274,20 @@ Z std::vector<Tensor> optparms(Ptr p) {
  }
 }
 
-ZK optinit(S s,K x) {
- Cast c; F r; omap(s,c,r); Ptr p=nullptr;
- if(!(x->t==-KS || xempty(x,1) || xptr(x,1,p)))
-  AT_ERROR("Optimizer ",s," expects args of name or (name; tensor/module/empty; option(s)..)");
+ZK optinit(S s,Ptr p,K x,K y=nullptr);  //p:ptr w'parms,x:options,y:buffers
+ZK optinit(S s,Ptr p,K x,K y) {
+ J i=xdict(x) ? -1 : 2; Cast c; F r; omap(s,c,r);
+ if(!(x->t==-KS || xdict(x) || xempty(x,1) || xptr(x,1,p)))
+  AT_ERROR("Optimizer ",s," expects args of optimizer name or\n"
+           "(name; module(s)/tensor/empty; option(s)..)\n"
+           "(saved state; module(s))");
  auto w=optparms(p); auto u=torch::make_unique<Obj>(); u->t=Class::optimizer; u->c=c;
  switch(c) {
-  case Cast::adagrad: {auto a=AdagradOptions(r); adagrad(x,2,a); u->v=new Adagrad(w,a); break;}
-  case Cast::adam:    {auto a=AdamOptions(r);    adam(x,2,a);    u->v=new Adam(w,a);    break;}
-  case Cast::lbfgs:   {auto a=LBFGSOptions(r);   lbfgs(x,2,a);   u->v=new LBFGS(w,a);   break;}
-  case Cast::rmsprop: {auto a=RMSpropOptions(r); rmsprop(x,2,a); u->v=new RMSprop(w,a); break;}
-  case Cast::sgd:     {auto a=SGDOptions(r);     sgd(x,2,a);     u->v=new SGD(w,a);     break;}
+  case Cast::adagrad: {auto a=AdagradOptions(r); adagrad(x,i,a); u->v=adagrad(w,a,y);   break;}
+  case Cast::adam:    {auto a=AdamOptions(r);    adam(x,i,a);    u->v=new Adam(w,a);    break;}
+  case Cast::lbfgs:   {auto a=LBFGSOptions(r);   lbfgs(x,i,a);   u->v=new LBFGS(w,a);   break;}
+  case Cast::rmsprop: {auto a=RMSpropOptions(r); rmsprop(x,i,a); u->v=new RMSprop(w,a); break;}
+  case Cast::sgd:     {auto a=SGDOptions(r);     sgd(x,i,a);     u->v=new SGD(w,a);     break;}
   default: AT_ERROR("Unrecognized optimizer: ",s); break;
  }
  return kptr(u.release());
@@ -318,21 +331,64 @@ V optfree(Cast c,V *v) {
 
 KAPI opt(K x) {
  KTRY
-  B a=env().alloptions; S s; Ptr p,q;
-  if(xsym(x,s) || xsym(x,0,s)) {
-   return optinit(s,x);
+  B a=env().alloptions; S s; Ptr p=nullptr,q=nullptr;
+  if(xsym(x,s) || (xsym(x,0,s) && (xptr(x,1,p) || xempty(x,1)))) {
+   return optinit(s,p,x);
+  } else if(xdict(x)) {
+   return optinit(statesym(State::module,x),p,statedict(State::options,x));
+  } else if(xdict(x,0) && xptr(x,1,p) && x->n==2) { // ALLOW empty list or null for pointer??
+   K d=kK(x)[0];
+   return optinit(statesym(State::module,d),p,statedict(State::options,d),statedict(State::buffers,d));
   } else if(xoptim(x,p) || (xbool(x,1,a) && xoptim(x,0,p) && x->n==2)) {
    return optstate(a,false,p);
-  } else if(xoptim(x,0,p) && xptr(x,1,q)) {
+  } else if(xoptim(x,0,p) && xptr(x,1,q) && x->n==2) {
    return ((OptimizerBase*)p->v)->add_parameters(optparms(q)), (K)0;
   } else {
-   return(K)0;
+   AT_ERROR("Unrecognized optimizer arg(s)");
   }
  KCATCH("Optimizer error");
 }
 
+KAPI step(K x) {
+ Ptr p;
+ if(xoptim(x,p) && p->c != Cast::lbfgs) {
+  ((Optimizer*)p->v)->step();
+ }
+ return (K)0;
+}
+
 V optfn(K x) {
  fn(x, "opt",  KFN(opt),1);
+ fn(x, "step", KFN(step),1);
+}
+
+KAPI vec(K a) {
+ auto m=torch::nn::Linear(5,2); m->to(torch::kCUDA);
+ auto* o=new torch::optim::Adam(m->parameters(),torch::optim::AdamOptions(.001));
+ if(o->exp_average_buffers.size()) {
+  std::cerr << o->exp_average_buffers[0] << "\n";
+  std::cerr << o->exp_average_buffers[0].device() << "\n";
+ } else {
+  std::cerr << "exp_average_buffers is empty\n";
+ }
+ auto x=torch::ones({10,5},torch::kCUDA);
+ auto y=m->forward(x).sum();
+ y.backward();
+ o->step();
+ y=m->forward(x).sum();
+ y.backward();
+ o->step();
+ y=m->forward(x).sum();
+ y.backward();
+ o->step();
+ K r=xD(ktn(KS,0),ktn(0,0));
+ std::cerr << o->exp_average_buffers[0] << "\n";
+ std::cerr << o->exp_average_buffers[0].device() << "\n";
+ OPTBUFFER(r,o,step_buffers);
+ OPTBUFFER(r,o,exp_average_buffers);
+ OPTBUFFER(r,o,exp_average_sq_buffers);
+ OPTBUFFER(r,o,max_exp_average_sq_buffers);
+ return r;
 }
 
 /*
@@ -355,22 +411,4 @@ gradtol   tolerance_grad   TORCH_ARG(float, tolerance_grad) = 1e-5;
 eval      max_eval         TORCH_ARG(int64_t, max_eval) = 25;        
 iter      max_iter         TORCH_ARG(int64_t, max_iter) = 20;        
 history   history_size     TORCH_ARG(size_t, history_size) = 100;   
-
-KAPI vec(K a) {
- auto m=torch::nn::Linear(5,2); m->to(torch::kCUDA);
- auto o=torch::optim::Adam(m->parameters(),torch::optim::AdamOptions(.001));
- auto x=torch::ones({10,5},torch::kCUDA);
- auto y=m->forward(x).sum();
- y.backward();
- o.step();
- y=m->forward(x).sum();
- y.backward();
- o.step();
- K r=xD(ktn(KS,0),ktn(0,0));
- OPTBUFFER(r,o,step_buffers);
- OPTBUFFER(r,o,exp_average_buffers);
- OPTBUFFER(r,o,exp_average_sq_buffers);
- OPTBUFFER(r,o,max_exp_average_sq_buffers);
- return r;
-}
 */

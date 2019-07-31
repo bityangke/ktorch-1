@@ -735,7 +735,7 @@ V mparms(S s,Module &m,K x,B p) { // set named parms/buffers in module m from di
  for(auto &a:p ? m.named_parameters() : m.named_buffers()) {
   J i=kfind(k,a.key());
   if(i<0) {
-   AT_ERROR("Unable to find ",s,(p ? " parameter" : " buffer"),": `",a.key());
+   AT_ERROR("Unable to find ",s,(p ? " parameter" : " buffer"),": ",a.key());
    break;
   }
   Tensor t=v->t ? V[i] : kput(kK(v)[i]);

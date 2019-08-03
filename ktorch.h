@@ -66,6 +66,7 @@ using TensorOptions=torch::TensorOptions;
 using Module=torch::nn::Module;
 using Sequential=torch::nn::Sequential;
 using Optimizer=torch::optim::Optimizer;
+using OptimizerBase=torch::optim::detail::OptimizerBase;
 using TensorDict = torch::OrderedDict<std::string, torch::Tensor>;
 
 typedef struct {

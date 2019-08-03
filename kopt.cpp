@@ -4,7 +4,6 @@
 #define OPTTENSOR(x,o,k) dictadd(x, #k, kget(o->k))
 #define OPTSET(x,k,v) dictadd(x, oset(Setting::k), v)
 
-using OptimizerBase  = torch::optim::detail::OptimizerBase;
 using Adagrad        = torch::optim::Adagrad;
 using AdagradOptions = torch::optim::AdagradOptions;
 using Adam           = torch::optim::Adam;
@@ -349,17 +348,47 @@ KAPI opt(K x) {
  KCATCH("Optimizer error");
 }
 
-KAPI step(K x) {
+/*
+Tensor& buffer(std::vector<Tensor>& p,std::vector<Tensor>& v,size_t index) {
+  if (v.size() <= index) {
+    v.reserve(index);
+    for (auto i = v.size(); i <= index; ++i) {
+      v.push_back(torch::zeros_like(p.at(i)));
+    }
+  }
+  // Copy the buffer to the device and dtype of the parameter.
+  const auto& t=o->p.at(index);
+  const auto& b=v.at(index);
+  if (b.device() != t.device() || b.dtype() != p.dtype()) {
+    v[index] = b.to(t.device(), t.scalar_type());
+  }
+  return v[index];
+}
+*/
+
+KAPI kstep(K x) {
  Ptr p;
+ std::cerr << "step call\n";
  if(xoptim(x,p) && p->c != Cast::lbfgs) {
+  std::cerr << "Optimizer step, cast " << (I)p->c << "\n";
+  if(p->c == Cast::adagrad)
+   std::cerr << "Adagrad\n";
+  else if(p->c == Cast::rmsprop)
+   std::cerr << "RMSprop\n";
   ((Optimizer*)p->v)->step();
+  auto *o=(RMSprop*)p->v;
+  std::cerr << "size: " << o->size() << ", parameter count: " << o->parameters().size() << "\n";
+  size_t n=0;
+  for(size_t i=0; i<o->size(); ++i) 
+   if(o->parameters().at(i).grad().defined()) n=i+1;
+  std::cerr << "count of buffers up until last gradient required: " << n << "\n";
  }
  return (K)0;
 }
 
 V optfn(K x) {
  fn(x, "opt",  KFN(opt),1);
- fn(x, "step", KFN(step),1);
+ fn(x, "step", KFN(kstep),1);
 }
 
 KAPI vec(K a) {

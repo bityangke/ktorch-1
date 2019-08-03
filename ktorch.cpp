@@ -908,7 +908,7 @@ KAPI kzerograd(K x) {
   switch(xptr(x,p) ? p->t : Class::undefined) {
    case Class::tensor: {auto *t=(Tensor*)p->v; if(t->grad().defined()) t->grad().detach().zero_(); break;}
    case Class::sequential:(*(Sequential*)p->v)->zero_grad(); break;
-   case Class::optimizer:  ((Optimizer*) p->v)->zero_grad(); break;
+   case Class::optimizer:  ((OptimizerBase*)p->v)->zero_grad(); break;
    default: AT_ERROR("Expecting pointer to tensor, module or optimizer");
   }
   return (K)0;

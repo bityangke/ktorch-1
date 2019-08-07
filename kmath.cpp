@@ -1430,7 +1430,7 @@ KAPI Svd(K x) {
 }
 
 // --------------------------------------------------------------------------------------
-// gels - solution to least squares/norm problems for Ax=B, returns x & QR factorization
+// lstsq - solution to least squares/norm problems for Ax=B, returns x & QR factorization
 // solve - solution to least squares for Ax=B, returns x & LU factorization (was: gesv)
 // triangular_solve - solves Ax=b w'triangular matrix A and multiple right-hand sides b
 // --------------------------------------------------------------------------------------
@@ -1446,7 +1446,7 @@ ZK gls(K x,Ftuple2 f,Gtuple2 g,cS e) {
  KCATCH(e);
 }
 
-KAPI Gels(K x) {return gls(x, torch::gels, torch::gels_out, "gels");}
+KAPI Lstsq(K x) {return gls(x, torch::lstsq, torch::lstsq_out, "gels");}
 KAPI Solve(K x) {return gls(x, torch::solve, torch::solve_out, "solve(gesv)");}
 
 KAPI Triangular_solve(K x) {
@@ -1607,7 +1607,6 @@ V mathfn(K x) {
  fn(x, "fnorm",              KFN(Fnorm),              1);
  fn(x, "frac",               KFN(Frac),               1);
  fn(x, "ge",                 KFN(Ge),                 1);
- fn(x, "gels",               KFN(Gels),               1);
  fn(x, "geqrf",              KFN(Geqrf),              1);
  fn(x, "ger",                KFN(Ger),                1);
  fn(x, "gt",                 KFN(GT),                 1);
@@ -1629,6 +1628,7 @@ V mathfn(K x) {
  fn(x, "log2",               KFN(Log2),               1);
  fn(x, "logdet",             KFN(Logdet),             1);
  fn(x, "logsumexp",          KFN(Logsumexp),          1);
+ fn(x, "lstsq",              KFN(Lstsq),              1);
  fn(x, "lt",                 KFN(Lt),                 1);
  fn(x, "lu",                 KFN(Lu),                 1);
  fn(x, "lu_info",            KFN(Lu_info),            1);

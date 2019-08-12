@@ -18,6 +18,9 @@ using SGDOptions     = torch::optim::SGDOptions;
 // --------------------------------------------------------------------------------------
 // omap - map to/from optimizer symbol/enumeration and default learning rate
 // oset - optimizer settings, map sym <-> enum
+// osize - size of buffers required (not counting trailing parameters without gradients)
+// obuf - find buffer (vector of longs/tensors) from dictionary given name
+// bufset - set optimization buffers(vector of longs or tensors) from k dictionary
 // --------------------------------------------------------------------------------------
 ZV omap(S s,Cast &c,double &r) {
  for(auto& m:env().opt)
@@ -42,6 +45,48 @@ ZS oset(Setting e) {
  AT_ERROR("Unrecognized optimizer setting: ",(I)e);
 }
 
+Z size_t osize(const std::vector<Tensor>& p) {
+ size_t i,n=0;
+ for(i=0; i<p.size(); ++i) 
+  if(p.at(i).grad().defined()) n=i+1;
+ return n;
+}
+
+ZK obuf(K x,cS s) {
+ auto i=xdict(x) ? kfind(kK(x)[0],s) : -1;
+ return (i<0 || kK(x)[1]->t) ? nullptr : kK(kK(x)[1])[i];
+}
+
+ZV bufset(size_t n,cS s,const std::vector<Tensor>& p,std::vector<int64_t>& v,const K x) {
+ K y=obuf(x,s);
+ if(!y || !y->n) return;
+ if(y->t != KJ) AT_ERROR("type error: ",s,", expecting long list, input is ",kname(y->t));
+ if(n != y->n) AT_ERROR("length error: ",s,", expecting ",n," longs, input has ",y->n);
+ v.resize(n);
+ for(size_t i=0; i<n; ++i) v.emplace_back(kJ(y)[i]);
+}
+
+ZV bufset(size_t n,cS s,const std::vector<Tensor>& p,std::vector<Tensor>& v,const K x) {
+ K y=obuf(x,s);
+ if(!y || !y->n) return;
+ if(y->t) AT_ERROR("type error: ",s,", expecting general list, input is ",kname(y->t));
+ if(n != y->n) AT_ERROR("length error: ",s,", expecting ",n," arrays, input has ",y->n);
+ v.resize(n);
+ for(size_t i=0; i<n; ++i) {
+  auto a=kput(kK(y)[i]);
+  auto b=torch::zeros_like(p.at(i));
+  if(a.dtype() != b.dtype())
+   AT_ERROR("Type mismatch: ",s,"[",i,"] is ",b.dtype(),", input is ",a.dtype());
+  if(!b.is_same_size(a))
+   AT_ERROR("Size mismatch: ",s,"[",i,"] is ",b.sizes(),", input is ",a.sizes());
+  if(a.device() != b.device())
+   b.set_data(a);
+  else
+   b.set_(a);
+  v[i]=std::move(b);
+ }
+}
+
 // ----------------------------------------------------------------------------------------
 // adagrad - parse args (lr;lrdecay;wtdecay) or (..;name/val pairs/dict)
 //         - if given options,buffers, allocate new optimizer and return ptr
@@ -63,11 +108,12 @@ ZV adagrad(K x,J i,AdagradOptions& o) {
 }
 
 Z V* adagrad(const std::vector<Tensor>& w,const AdagradOptions& a,K y) {
- auto u=torch::make_unique<Adagrad>(w,a);
- if(y) {
-  std::cerr << "buffers defined\n";
+ auto o=torch::make_unique<Adagrad>(w,a); size_t n;
+ if(y && (n=osize(o->parameters()))) {
+  bufset(n, "step_buffers", o->parameters(), o->step_buffers, y);
+  bufset(n, "sum_buffers",  o->parameters(), o->sum_buffers,  y);
  }
- return u.release();
+ return o.release();
 }
 
 ZK adagrad(B a,F r,Adagrad* v) { //return all or non-default options as k dictionary
@@ -107,6 +153,17 @@ ZV adam(K x,J i,AdamOptions& o) {
    case Setting::amsgrad: o.amsgrad(pbool(p)); break;
    default: AT_ERROR("Unrecognized option: ",p.k," for Adagrad optimization"); break;
   }
+}
+
+Z V* adam(const std::vector<Tensor>& w,const AdamOptions& a,K y) {
+ auto o=torch::make_unique<Adam>(w,a); size_t n;
+ if(y && (n=osize(o->parameters()))) {
+  bufset(n, "step_buffers",                o->parameters(), o->step_buffers,               y);
+  bufset(n, "exp_average_buffers",         o->parameters(), o->exp_average_buffers,        y);
+  bufset(n, "exp_average_sq_buffers",      o->parameters(), o->exp_average_sq_buffers,     y);
+  bufset(n, "max_exp_average_sq_buffers",  o->parameters(), o->max_exp_average_sq_buffers, y);
+ }
+ return o.release();
 }
 
 ZK adam(B a,F r,Adam* v) { //return all or non-default options as k dictionary
@@ -200,6 +257,16 @@ ZV rmsprop(K x,J i,RMSpropOptions& o) {
   }
 }
 
+Z V* rmsprop(const std::vector<Tensor>& w,const RMSpropOptions& a,K y) {
+ auto o=torch::make_unique<RMSprop>(w,a); size_t n;
+ if(y && (n=osize(o->parameters()))) {
+  bufset(n, "square_average_buffers", o->parameters(), o->square_average_buffers, y);
+  bufset(n, "momentum_buffers",       o->parameters(), o->momentum_buffers,       y);
+  bufset(n, "grad_average_buffers",   o->parameters(), o->grad_average_buffers,   y);
+ }
+ return o.release();
+}
+
 ZK rmsprop(B a,F r,RMSprop* v) { //return all or non-default options as k dictionary
  K x=xD(ktn(KS,0),ktn(0,0)); RMSpropOptions d(r),o=v->options;
  if(a || d.learning_rate() != o.learning_rate()) OPTSET(x, lr,       kf(o.learning_rate()));
@@ -239,6 +306,13 @@ ZV sgd(K x,J i,SGDOptions& o) {
    case Setting::nesterov:  o.nesterov(pbool(p)); break;
    default: AT_ERROR("Unrecognized option: ",p.k," for SGD optimization"); break;
   }
+}
+
+Z V* sgd(const std::vector<Tensor>& w,const SGDOptions& a,K y) {
+ auto o=torch::make_unique<SGD>(w,a); size_t n;
+ if(y && (n=osize(o->parameters())))
+  bufset(n, "momentum_buffers", o->parameters(), o->momentum_buffers, y);
+ return o.release();
 }
 
 ZK sgd(B a,F r,SGD* v) { //return all or non-default options as k dictionary
@@ -282,11 +356,11 @@ ZK optinit(S s,Ptr p,K x,K y) {
            "(saved state; module(s))");
  auto w=optparms(p); auto u=torch::make_unique<Obj>(); u->t=Class::optimizer; u->c=c;
  switch(c) {
-  case Cast::adagrad: {auto a=AdagradOptions(r); adagrad(x,i,a); u->v=adagrad(w,a,y);   break;}
-  case Cast::adam:    {auto a=AdamOptions(r);    adam(x,i,a);    u->v=new Adam(w,a);    break;}
-  case Cast::lbfgs:   {auto a=LBFGSOptions(r);   lbfgs(x,i,a);   u->v=new LBFGS(w,a);   break;}
-  case Cast::rmsprop: {auto a=RMSpropOptions(r); rmsprop(x,i,a); u->v=new RMSprop(w,a); break;}
-  case Cast::sgd:     {auto a=SGDOptions(r);     sgd(x,i,a);     u->v=new SGD(w,a);     break;}
+  case Cast::adagrad: {auto a=AdagradOptions(r); adagrad(x,i,a); u->v=adagrad(w,a,y); break;}
+  case Cast::adam:    {auto a=AdamOptions(r);    adam(x,i,a);    u->v=adam(w,a,y);    break;}
+  case Cast::lbfgs:   {auto a=LBFGSOptions(r);   lbfgs(x,i,a);   u->v=new LBFGS(w,a); break;}
+  case Cast::rmsprop: {auto a=RMSpropOptions(r); rmsprop(x,i,a); u->v=rmsprop(w,a,y); break;}
+  case Cast::sgd:     {auto a=SGDOptions(r);     sgd(x,i,a);     u->v=sgd(w,a,y);     break;}
   default: AT_ERROR("Unrecognized optimizer: ",s); break;
  }
  return kptr(u.release());
@@ -378,10 +452,7 @@ KAPI kstep(K x) {
   ((Optimizer*)p->v)->step();
   auto *o=(RMSprop*)p->v;
   std::cerr << "size: " << o->size() << ", parameter count: " << o->parameters().size() << "\n";
-  size_t n=0;
-  for(size_t i=0; i<o->size(); ++i) 
-   if(o->parameters().at(i).grad().defined()) n=i+1;
-  std::cerr << "count of buffers up until last gradient required: " << n << "\n";
+  std::cerr << "count of buffers up until last gradient required: " << osize(o->parameters()) << "\n";
  }
  return (K)0;
 }
@@ -391,7 +462,31 @@ V optfn(K x) {
  fn(x, "step", KFN(kstep),1);
 }
 
-KAPI vec(K a) {
+KAPI vec(K a,K b) {
+KTRY
+ Ptr p; Sequential m;
+ xoptim(a,p); xseq(b,m);
+ auto* o=(Adam*)p->v;
+ auto x=torch::ones({10,5},torch::kCPU);
+ //auto x=torch::ones({10,5},torch::kCUDA);
+ auto y=m->forward(x).sum();
+ std::cerr << m << "\n";
+ std::cerr << y << "\n";
+ y.backward();
+ o->step();
+ y=m->forward(x).sum();
+ std::cerr << y << "\n";
+ y.backward();
+ o->step();
+ y=m->forward(x).sum();
+ std::cerr << y << "\n";
+ y.backward();
+ o->step();
+ return (K)0;
+KCATCH("trouble");
+}
+ 
+KAPI vec1(K a) {
  auto m=torch::nn::Linear(5,2); m->to(torch::kCUDA);
  auto* o=new torch::optim::Adam(m->parameters(),torch::optim::AdamOptions(.001));
  if(o->exp_average_buffers.size()) {
@@ -402,12 +497,15 @@ KAPI vec(K a) {
  }
  auto x=torch::ones({10,5},torch::kCUDA);
  auto y=m->forward(x).sum();
+ std::cerr << y << "\n";
  y.backward();
  o->step();
  y=m->forward(x).sum();
+ std::cerr << y << "\n";
  y.backward();
  o->step();
  y=m->forward(x).sum();
+ std::cerr << y << "\n";
  y.backward();
  o->step();
  K r=xD(ktn(KS,0),ktn(0,0));
@@ -418,6 +516,10 @@ KAPI vec(K a) {
  OPTBUFFER(r,o,exp_average_sq_buffers);
  OPTBUFFER(r,o,max_exp_average_sq_buffers);
  return r;
+}
+
+KAPI buf(K x,K y) {
+  return obuf(x,y->s);
 }
 
 /*

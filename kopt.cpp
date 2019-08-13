@@ -19,8 +19,6 @@ using SGDOptions     = torch::optim::SGDOptions;
 // omap - map to/from optimizer symbol/enumeration and default learning rate
 // oset - optimizer settings, map sym <-> enum
 // osize - size of buffers required (not counting trailing parameters without gradients)
-// obuf - find buffer (vector of longs/tensors) from dictionary given name
-// bufset - set optimization buffers(vector of longs or tensors) from k dictionary
 // --------------------------------------------------------------------------------------
 ZV omap(S s,Cast &c,double &r) {
  for(auto& m:env().opt)
@@ -52,13 +50,22 @@ Z size_t osize(const std::vector<Tensor>& p) {
  return n;
 }
 
-ZK obuf(K x,cS s) {
+// --------------------------------------------------------------------------------------
+// bget - find buffer (vector of longs/tensors) from dictionary given name
+// bset - set optimization buffers from k dictionary
+//      - vector of longs (e.g. step_buffers, one per parameter)
+//      - vector of tensors
+//      - deque of tensors (LBFGS)
+//      - single tensor (LBFGS)
+// --------------------------------------------------------------------------------------
+ZK bget(K x,cS s) {
  auto i=xdict(x) ? kfind(kK(x)[0],s) : -1;
  return (i<0 || kK(x)[1]->t) ? nullptr : kK(kK(x)[1])[i];
 }
 
-ZV bufset(size_t n,cS s,const std::vector<Tensor>& p,std::vector<int64_t>& v,const K x) {
- K y=obuf(x,s);
+ZV bset(size_t n,cS s,const std::vector<Tensor>& p,std::vector<int64_t>& v,const K x) {
+ // restore vector of longs (parameter vector not referenced, included for uniform call)
+ K y=bget(x,s);
  if(!y || !y->n) return;
  if(y->t != KJ) AT_ERROR("type error: ",s,", expecting long list, input is ",kname(y->t));
  if(n != y->n) AT_ERROR("length error: ",s,", expecting ",n," longs, input has ",y->n);
@@ -66,8 +73,8 @@ ZV bufset(size_t n,cS s,const std::vector<Tensor>& p,std::vector<int64_t>& v,con
  for(size_t i=0; i<n; ++i) v.emplace_back(kJ(y)[i]);
 }
 
-ZV bufset(size_t n,cS s,const std::vector<Tensor>& p,std::vector<Tensor>& v,const K x) {
- K y=obuf(x,s);
+ZV bset(size_t n,cS s,const std::vector<Tensor>& p,std::vector<Tensor>& v,const K x) {
+ K y=bget(x,s);
  if(!y || !y->n) return;
  if(y->t) AT_ERROR("type error: ",s,", expecting general list, input is ",kname(y->t));
  if(n != y->n) AT_ERROR("length error: ",s,", expecting ",n," arrays, input has ",y->n);
@@ -85,6 +92,23 @@ ZV bufset(size_t n,cS s,const std::vector<Tensor>& p,std::vector<Tensor>& v,cons
    b.set_(a);
   v[i]=std::move(b);
  }
+}
+
+ZV bset(size_t n,cS s,const std::vector<Tensor>& p,std::deque<Tensor>& v,const K x) {
+ // used w'LBFGS, not sure if parameter count/type/device relevant
+ K y=bget(x,s);
+ if(!y || !y->n) return;
+ if(y->t) AT_ERROR("type error: ",s,", expecting general list, input is ",kname(y->t));
+ v.resize(n);
+ for(size_t i=0; i<n; ++i)
+  v[i]=kput(kK(y)[i]);
+}
+
+ZV bset(size_t n,cS s,const std::vector<Tensor>& p,Tensor& t,const K x) {
+ // used w'LBFGS, not sure if parameter count/type/device relevant
+ K y=bget(x,s);
+ if(!y || !y->n) return;
+ t=kput(y);
 }
 
 // ----------------------------------------------------------------------------------------
@@ -108,10 +132,11 @@ ZV adagrad(K x,J i,AdagradOptions& o) {
 }
 
 Z V* adagrad(const std::vector<Tensor>& w,const AdagradOptions& a,K y) {
- auto o=torch::make_unique<Adagrad>(w,a); size_t n;
- if(y && (n=osize(o->parameters()))) {
-  bufset(n, "step_buffers", o->parameters(), o->step_buffers, y);
-  bufset(n, "sum_buffers",  o->parameters(), o->sum_buffers,  y);
+ auto o=torch::make_unique<Adagrad>(w,a);
+ auto n=osize(o->parameters());
+ if(y && n) {
+  bset(n, "step_buffers", o->parameters(), o->step_buffers, y);
+  bset(n, "sum_buffers",  o->parameters(), o->sum_buffers,  y);
  }
  return o.release();
 }
@@ -156,12 +181,13 @@ ZV adam(K x,J i,AdamOptions& o) {
 }
 
 Z V* adam(const std::vector<Tensor>& w,const AdamOptions& a,K y) {
- auto o=torch::make_unique<Adam>(w,a); size_t n;
- if(y && (n=osize(o->parameters()))) {
-  bufset(n, "step_buffers",                o->parameters(), o->step_buffers,               y);
-  bufset(n, "exp_average_buffers",         o->parameters(), o->exp_average_buffers,        y);
-  bufset(n, "exp_average_sq_buffers",      o->parameters(), o->exp_average_sq_buffers,     y);
-  bufset(n, "max_exp_average_sq_buffers",  o->parameters(), o->max_exp_average_sq_buffers, y);
+ auto o=torch::make_unique<Adam>(w,a);
+ auto n=osize(o->parameters());
+ if(y && n) {
+  bset(n, "step_buffers",                o->parameters(), o->step_buffers,               y);
+  bset(n, "exp_average_buffers",         o->parameters(), o->exp_average_buffers,        y);
+  bset(n, "exp_average_sq_buffers",      o->parameters(), o->exp_average_sq_buffers,     y);
+  bset(n, "max_exp_average_sq_buffers",  o->parameters(), o->max_exp_average_sq_buffers, y);
  }
  return o.release();
 }
@@ -208,6 +234,20 @@ ZV lbfgs(K x,J i,LBFGSOptions& o) {
    case Setting::history:   j=plong(p);   if(j!=nj) o.history_size(j); break;
    default: AT_ERROR("Unrecognized option: ",p.k," for LBFGS optimization"); break;
   }
+}
+
+Z V* lbfgs(const std::vector<Tensor>& w,const LBFGSOptions& a,K y) {
+ auto o=torch::make_unique<LBFGS>(w,a); auto n=osize(o->parameters());
+ if(y) {
+  bset(n, "d",              o->parameters(), o->d, y);
+  bset(n, "t",              o->parameters(), o->t, y);
+  bset(n, "H_diag",         o->parameters(), o->H_diag, y);
+  bset(n, "prev_flat_grad", o->parameters(), o->prev_flat_grad, y);
+  bset(n, "prev_loss",      o->parameters(), o->prev_loss, y);
+  bset(n, "old_dirs",       o->parameters(), o->old_dirs, y);
+  bset(n, "old_stps",       o->parameters(), o->old_stps, y);
+ }
+ return o.release();
 }
 
 ZK lbfgs(B a,F r,LBFGS* v) { //return all or non-default options as k dictionary
@@ -258,11 +298,12 @@ ZV rmsprop(K x,J i,RMSpropOptions& o) {
 }
 
 Z V* rmsprop(const std::vector<Tensor>& w,const RMSpropOptions& a,K y) {
- auto o=torch::make_unique<RMSprop>(w,a); size_t n;
- if(y && (n=osize(o->parameters()))) {
-  bufset(n, "square_average_buffers", o->parameters(), o->square_average_buffers, y);
-  bufset(n, "momentum_buffers",       o->parameters(), o->momentum_buffers,       y);
-  bufset(n, "grad_average_buffers",   o->parameters(), o->grad_average_buffers,   y);
+ auto o=torch::make_unique<RMSprop>(w,a);
+ auto n=osize(o->parameters());
+ if(y && n) {
+  bset(n, "square_average_buffers", o->parameters(), o->square_average_buffers, y);
+  bset(n, "momentum_buffers",       o->parameters(), o->momentum_buffers,       y);
+  bset(n, "grad_average_buffers",   o->parameters(), o->grad_average_buffers,   y);
  }
  return o.release();
 }
@@ -309,9 +350,10 @@ ZV sgd(K x,J i,SGDOptions& o) {
 }
 
 Z V* sgd(const std::vector<Tensor>& w,const SGDOptions& a,K y) {
- auto o=torch::make_unique<SGD>(w,a); size_t n;
- if(y && (n=osize(o->parameters())))
-  bufset(n, "momentum_buffers", o->parameters(), o->momentum_buffers, y);
+ auto o=torch::make_unique<SGD>(w,a);
+ auto n=osize(o->parameters());
+ if(y && n)
+  bset(n, "momentum_buffers", o->parameters(), o->momentum_buffers, y);
  return o.release();
 }
 
@@ -358,7 +400,7 @@ ZK optinit(S s,Ptr p,K x,K y) {
  switch(c) {
   case Cast::adagrad: {auto a=AdagradOptions(r); adagrad(x,i,a); u->v=adagrad(w,a,y); break;}
   case Cast::adam:    {auto a=AdamOptions(r);    adam(x,i,a);    u->v=adam(w,a,y);    break;}
-  case Cast::lbfgs:   {auto a=LBFGSOptions(r);   lbfgs(x,i,a);   u->v=new LBFGS(w,a); break;}
+  case Cast::lbfgs:   {auto a=LBFGSOptions(r);   lbfgs(x,i,a);   u->v=lbfgs(w,a,y);   break;}
   case Cast::rmsprop: {auto a=RMSpropOptions(r); rmsprop(x,i,a); u->v=rmsprop(w,a,y); break;}
   case Cast::sgd:     {auto a=SGDOptions(r);     sgd(x,i,a);     u->v=sgd(w,a,y);     break;}
   default: AT_ERROR("Unrecognized optimizer: ",s); break;
@@ -517,29 +559,3 @@ KAPI vec1(K a) {
  OPTBUFFER(r,o,max_exp_average_sq_buffers);
  return r;
 }
-
-KAPI buf(K x,K y) {
-  return obuf(x,y->s);
-}
-
-/*
-s         a                k                                         
----------------------------------------------------------------------
-amsgrad   amsgrad          TORCH_ARG(bool, amsgrad) = false;         
-centered  centered         TORCH_ARG(bool, centered) = false;        
-nesterov  nesterov         TORCH_ARG(bool, nesterov) = false;        
-alpha     alpha            TORCH_ARG(double, alpha) = 0.99;          
-beta1     beta1            TORCH_ARG(double, beta1) = 0.9;           
-beta2     beta2            TORCH_ARG(double, beta2) = 0.999;         
-dampening dampening        TORCH_ARG(double, dampening) = 0;         
-eps       eps              TORCH_ARG(double, eps) = 1e-8;            
-lr        learning_rate    TORCH_ARG(double, learning_rate);         
-lrdecay   lr_decay         TORCH_ARG(double, lr_decay) = 0;          
-momentum  momentum         TORCH_ARG(double, momentum) = 0;          
-decay     weight_decay     TORCH_ARG(double, weight_decay) = 0;      
-changetol tolerance_change TORCH_ARG(float, tolerance_change) = 1e-9;
-gradtol   tolerance_grad   TORCH_ARG(float, tolerance_grad) = 1e-5;  
-eval      max_eval         TORCH_ARG(int64_t, max_eval) = 25;        
-iter      max_iter         TORCH_ARG(int64_t, max_iter) = 20;        
-history   history_size     TORCH_ARG(size_t, history_size) = 100;   
-*/

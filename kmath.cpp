@@ -533,7 +533,7 @@ ZK compare2(K x,Ftt f,Fts fn,Gtt g,Gts gn,cS e) {
    if(r.defined())
     return (b.defined() ? g(r,a,b) : gn(r,a,n)), (K)0;
    else
-    return r=b.defined() ? f(a,b) : fn(a,n), (p ? kten(r) : kbool(kget(r)));
+    return r=b.defined() ? f(a,b) : fn(a,n), (p ? kten(r) : kget(r));
   } else {
    AT_ERROR(e,": expects args of(input1;input2;optional output tensor), input1 is array or tensor, input2 may also be a number");
    return KERR(e);
@@ -587,11 +587,11 @@ ZK special(K x, I m, cS e) {
  KTRY
   Tensor r,t; B b=xten(x,t); if(!b) t=kput(x);
   switch(m) {
-   case 1:  r = t.is_floating_point() ? ((t==t) == (t.abs()!=wf)) : torch::ones_like(t,torch::dtype(torch::kByte)); break;
-   case 2:  r = t.is_floating_point() ? t.abs()==wf               : torch::ones_like(t,torch::dtype(torch::kByte)); break;
-   default: r = t != t; break;
+   case 1:  r = t.is_floating_point() ? ((t==t) == (t.abs()!=wf)) : torch::ones_like(t,torch::dtype(torch::kBool)); break;
+   case 2:  r = t.is_floating_point() ? t.abs()==wf               : torch::ones_like(t,torch::dtype(torch::kBool)); break;
+   case 3:  r = t != t; break;
   }
-  return b ? kten(r) : kbool(kget(r));
+  return b ? kten(r) : kget(r);
  KCATCH(e);
 }
 

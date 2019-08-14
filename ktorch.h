@@ -95,58 +95,60 @@ enum class Class:char {
 
 enum class Cast:char {
  undefined=0, 
- tensor,          sequential,                   //basic structures
+ tensor,      sequential,                   //basic structures
 
- adaptavg1d,      adaptavg2d,  adaptavg3d,      //modules
- adaptmax1d,      adaptmax2d,  adaptmax3d,
- adropout,        avgpool1d,   avgpool2d,
- avgpool3d,       batchnorm,   celu,
- conv1d,          conv2d,      conv3d,
- dropout,         elu,         embed,
- fadropout,       fdropout,
- fmaxpool2d,      fmaxpool3d,
- glu,             gru,         hardshrink,
- hardtanh,        leakyrelu,   linear,
- logsigmoid,      logsoftmax,  lppool1d,
- lppool2d,        lstm,        maxpool1d,
- maxpool2d,       maxpool3d,   pad,
- prelu,           reflect1d,   reflect2d,
- relu,            relu6,       replicate1d,
- replicate2d,     replicate3d, rnn,
- rrelu,           selu,        sigmoid,    
- softmax,         softmin,     softplus,
- softshrink,      softsign,    tanh,
- tanhshrink,      threshold,
+ adaptavg1d,  adaptavg2d,  adaptavg3d,      //modules
+ adaptmax1d,  adaptmax2d,  adaptmax3d,
+ adropout,    avgpool1d,   avgpool2d,
+ avgpool3d,   batchnorm,   celu,
+ conv1d,      conv2d,      conv3d,
+ dropout,     elu,         embed,
+ fadropout,   fdropout,
+ fmaxpool2d,  fmaxpool3d,
 
- bce,             bcelogits,   bcelogitw,      //loss fns
- ce,              cosineloss,  ctc,
- hinge,           kl,          l1,
- margin,          mse,         multilabel,
- multimargin,     multisoft,   nll,
- poissonloss,     smoothl1,    softmargin,
+ gelu,        glu,         gru,
+ hardshrink,  hardtanh,    leakyrelu,
+ linear,      logsigmoid,  logsoftmax,
+ lppool1d,    lppool2d,    lstm,
+ maxpool1d,   maxpool2d,   maxpool3d,
+ pad,         prelu,       reflect1d,
+ reflect2d,   relu,        relu6,
+ replicate1d, replicate2d, replicate3d,
+ rnn,         rrelu,       selu,
+ sigmoid,     softmax,     softmin,
+ softplus,    softshrink,  softsign,
+ tanh,        tanhshrink,  threshold,
+
+ bce,         bcelogits,   bcelogitw,      //loss fns
+ ce,          cosineloss,  ctc,
+ hinge,       kl,          l1,
+ margin,      mse,         multilabel,
+ multimargin, multisoft,   nll,
+ poissonloss, smoothl1,    softmargin,
  triplet,    
 
- adagrad,         adam,        lbfgs,          //optimizers
- rmsprop,         sgd
+ adagrad,     adam,        lbfgs,          //optimizers
+ rmsprop,     sgd
 };
 
-enum class Tensormode:char {                   // tensor creation modes
- undefined, empty, full, eye, ones, zeros, 
- rand, randn, randint, randperm,
- range, arange, linspace, logspace
+enum class Tensormode:char {   // tensor creation modes
+ undefined,
+ arange,   empty,    eye,      full,     linspace, logspace, ones,
+ rand,     randint,  randn,    randperm, range,    zeros
 };
 
 enum class Setting:char {
  undefined,
- affine,    alpha,     amsgrad, batchfirst, beta,      beta1, beta2,
- bi,        bias,      ceiling, centered,   changetol, cols,  countpad,
- dampening, decay,     dilate,  dim,        drop,      eps,   eval,
- fn,        gradtol,   groups,  hidden,     history,   in,    indices,
- init,      inplace,   iter,    lambda,     layers,    lower, lr,
- lrdecay,   max,       min,     momentum,   nesterov,  out,   outpad,
- outsize,   pad,       power,   ratio,      rows,      slope, size,
- stride,    threshold, track,   train,      transpose, type,  upper,
- value, reduce, log, ignore, margin, full, blank, swap, p, weight, zeroinf
+ affine,     alpha,      amsgrad,    batchfirst, beta,       beta1,      beta2,
+ bi,         bias,       blank,      ceiling,    centered,   changetol,  cols,
+ countpad,   dampening,  decay,      dilate,     dim,        drop,       eps,
+ eval,       fn,         full,       gradtol,    groups,     hidden,     history,
+ ignore,     in,         indices,    init,       inplace,    iter,       lambda,
+ layers,     log,        lower,      lr,         lrdecay,    margin,     max,
+ min,        momentum,   nesterov,   out,        outpad,     outsize,    p,
+ pad,        power,      ratio,      reduce,     rows,       size,       slope,
+ stride,     swap,       threshold,  track,      train,      transpose,  type,
+ upper,      value,      weight,     zeroinf
 };
 
 enum class State:char {
@@ -409,7 +411,7 @@ typedef struct {
   std::make_tuple(cs("tanh"),torch::nn::RNNActivation::Tanh)
  }};
 
- std::array<std::tuple<S,Cast>,58> module = {{  // module sym -> enum
+ std::array<std::tuple<S,Cast>,59> module = {{  // module sym -> enum
   std::make_tuple(cs("adaptavg1d"),      Cast::adaptavg1d),
   std::make_tuple(cs("adaptavg2d"),      Cast::adaptavg2d),
   std::make_tuple(cs("adaptavg3d"),      Cast::adaptavg3d),
@@ -432,6 +434,7 @@ typedef struct {
   std::make_tuple(cs("fadrop"),          Cast::fadropout),
   std::make_tuple(cs("fmaxpool2d"),      Cast::fmaxpool2d),
   std::make_tuple(cs("fmaxpool3d"),      Cast::fmaxpool3d),
+  std::make_tuple(cs("gelu"),            Cast::gelu),
   std::make_tuple(cs("glu"),             Cast::glu),
   std::make_tuple(cs("gru"),             Cast::gru),
   std::make_tuple(cs("hardshrink"),      Cast::hardshrink),

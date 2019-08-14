@@ -550,6 +550,7 @@ Z Tensor relu6(     const Tensor &t) {return torch::hardtanh(t,0.0,6.0);}
 Z Tensor softsign(  const Tensor &t) {return t/(t.abs()+1);}
 Z Tensor tanhshrink(const Tensor &t) {return t-t.tanh();}
 
+KAPI kgelu(K x)       {return noarg("gelu",       torch::gelu,        x);}
 KAPI krelu(K x)       {return noarg("relu",       torch::relu,        x);}
 KAPI krelu6(K x)      {return noarg("relu6",      relu6,              x);}
 KAPI kselu(K x)       {return noarg("selu",       torch::selu,        x);}
@@ -817,6 +818,7 @@ V mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) {
   case Cast::softsign:     noarg(s,x,i); PUSH(q,n,SoftSign()); break;
   case Cast::tanh:         noarg(s,x,i); PUSH(q,n,Tanh()); break;
   case Cast::tanhshrink:   noarg(s,x,i); PUSH(q,n,Tanhshrink()); break;
+  case Cast::gelu:         noarg(s,x,i); PUSH(q,n,GELU()); break;
   case Cast::relu:         noarg(s,x,i); PUSH(q,n,ReLU()); break;
   case Cast::selu:         noarg(s,x,i); PUSH(q,n,SELU()); break;
   case Cast::relu6:        noarg(s,x,i); PUSH(q,n,ReLU6()); break;
@@ -1117,6 +1119,7 @@ V modfn(K x) {
  fn(x, "logsigmoid", KFN(klogsigmoid),1);
  fn(x, "logsoftmax", KFN(klogsoftmax),1);
  fn(x, "prelu",      KFN(kprelu),1);
+ fn(x, "gelu",       KFN(kgelu),1);
  fn(x, "relu",       KFN(krelu),1);
  fn(x, "relu6",      KFN(krelu6),1);
  fn(x, "rrelu",      KFN(krrelu),1);
@@ -1179,6 +1182,7 @@ KAPI anytest(K x) {
   Pad(std::vector<int64_t>{1,1}),
   torch::nn::RNN(4,5),
   RReLU(.125,.333),
+  GELU(),
   ReLU(),
   ReLU6(),
   ReflectionPad1d(2),

@@ -456,7 +456,7 @@ TORCH_MODULE(ReplicationPad2d);
 TORCH_MODULE(ReplicationPad3d);
 
 // ------------------------------------------------------------------------------
-// fns without args: logsigmoid,tanhshrink,softsign,tanh,sigmoid
+// fns without args: logsigmoid,tanhshrink,softsign,tanh,sigmoid,gelu
 // also fns w'inplace as only arg: relu,relu6,selu
 // (inplace=true doesn't seem to work with Sequential->forward() )
 // ------------------------------------------------------------------------------
@@ -499,6 +499,14 @@ class TORCH_API SigmoidImpl : public torch::nn::Cloneable<SigmoidImpl> {
   torch::Tensor forward(const torch::Tensor& input) {return input.sigmoid();}
 };
 TORCH_MODULE(Sigmoid);
+
+class TORCH_API GELUImpl : public torch::nn::Cloneable<GELUImpl> {
+ public:
+  GELUImpl() = default;
+  void reset() override {}
+  torch::Tensor forward(const torch::Tensor& t) {return torch::gelu(t);}
+};
+TORCH_MODULE(GELU);
 
 class TORCH_API ReLUImpl : public torch::nn::Cloneable<ReLUImpl> {
  public:

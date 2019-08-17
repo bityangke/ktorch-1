@@ -1,7 +1,6 @@
 #include "ktorch.h"
 
-#define OPTBUFFER(x,o,k) dictadd(x, #k, kvec(o->k))
-#define OPTTENSOR(x,o,k) dictadd(x, #k, kget(o->k))
+#define OPTBUFFER(x,o,k) dictadd(x, #k, kget(o->k))
 #define OPTSET(x,k,v) dictadd(x, oset(Setting::k), v)
 
 using Adagrad        = torch::optim::Adagrad;
@@ -263,11 +262,11 @@ ZK lbfgs(B a,F r,LBFGS* v) { //return all or non-default options as k dictionary
 
 ZK lbfgs(LBFGS* v) {  //return internal buffer state as k dictionary
  K x=xD(ktn(KS,0),ktn(0,0));
- OPTTENSOR(x,v,d);
- OPTTENSOR(x,v,t);
- OPTTENSOR(x,v,H_diag);
- OPTTENSOR(x,v,prev_flat_grad);
- OPTTENSOR(x,v,prev_loss);
+ OPTBUFFER(x,v,d);
+ OPTBUFFER(x,v,t);
+ OPTBUFFER(x,v,H_diag);
+ OPTBUFFER(x,v,prev_flat_grad);
+ OPTBUFFER(x,v,prev_loss);
  OPTBUFFER(x,v,old_dirs);
  OPTBUFFER(x,v,old_stps);
  return x;
@@ -464,39 +463,24 @@ KAPI opt(K x) {
  KCATCH("Optimizer error");
 }
 
-/*
-Tensor& buffer(std::vector<Tensor>& p,std::vector<Tensor>& v,size_t index) {
-  if (v.size() <= index) {
-    v.reserve(index);
-    for (auto i = v.size(); i <= index; ++i) {
-      v.push_back(torch::zeros_like(p.at(i)));
-    }
-  }
-  // Copy the buffer to the device and dtype of the parameter.
-  const auto& t=o->p.at(index);
-  const auto& b=v.at(index);
-  if (b.device() != t.device() || b.dtype() != p.dtype()) {
-    v[index] = b.to(t.device(), t.scalar_type());
-  }
-  return v[index];
-}
-*/
-
 KAPI kstep(K x) {
- Ptr p;
- std::cerr << "step call\n";
- if(xoptim(x,p) && p->c != Cast::lbfgs) {
-  std::cerr << "Optimizer step, cast " << (I)p->c << "\n";
-  if(p->c == Cast::adagrad)
-   std::cerr << "Adagrad\n";
-  else if(p->c == Cast::rmsprop)
-   std::cerr << "RMSprop\n";
+ Ptr l,p; Sequential q;
+ if(xoptim(x,p)) {
+  if(p->c == Cast::lbfgs)
+   AT_ERROR("LBFGS optimizer requires model, loss & inputs");
   ((Optimizer*)p->v)->step();
-  auto *o=(RMSprop*)p->v;
-  std::cerr << "size: " << o->size() << ", parameter count: " << o->parameters().size() << "\n";
-  std::cerr << "count of buffers up until last gradient required: " << osize(o->parameters()) << "\n";
+ } else if(xoptim(x,0,p) && xseq(x,1,q) && xloss(x,2,l)) {
  }
  return (K)0;
+}
+
+KAPI permute(K x) {
+ Tensor i,t;
+ if(xten(x,t)) {
+  i=torch::randperm(t.size(0),torch::kLong);
+  t=t.index_select(0,i);
+ }
+ return(K)0;
 }
 
 V optfn(K x) {

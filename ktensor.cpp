@@ -4,12 +4,6 @@
 // -------------------------------------------------------------------------
 // kten - given tensor, return ptr to struct w'attrs, void ptr to tensor
 // kswitch - switch tensor pointer kept in k object
-// ktento - change tensor device/type, free prev tensor & replace void ptr
-// ktenpair - given a pair of tensors return pair of pointers or array
-// kten3 - given a triplet of tensors return triplet of pointers or array
-// kgetscalar - return k scalar given a scalar tensor
-// kgets - process tensor at depth, creating k array
-// kget - top level function, take tensor reference, return k scalar/array
 // -------------------------------------------------------------------------
 K kten(const Tensor &t) {
  auto o=torch::make_unique<Obj>();
@@ -27,24 +21,13 @@ V kswitch(Ptr &p,const Tensor &t) {
  p->v=u.release();
 }
 
-V ktento(Ptr &p,TensorOptions &o,B b) {
- Tensor r,t=*(Tensor*)p->v;
- if(o.has_device() && o.has_dtype()) r=t.to(o.device(),o.dtype(),b);
- else if(o.has_device())             r=t.to(o.device(),b);
- else                                r=t.to(o.dtype(),b);
- if(!t.is_same(r)) kswitch(p,r);
-}
-
-K ktenpair(B p,Tensor& a,Tensor& b) {  // p:true if returning tensor pointers
- if(p) return knk(2,kten(a),kten(b));
- else  return knk(2,kget(a),kget(b));
-}
-
-K kten3(B p,Tensor& a,Tensor& b,Tensor& c) {  // p:true if returning tensor pointers
- if(p) return knk(3,kten(a),kten(b),kten(c));
- else  return knk(3,kget(a),kget(b),kget(c));
-}
-
+// -------------------------------------------------------------------------
+// kgetscalar - return k scalar given a scalar tensor
+// kgets - process tensor at depth, creating k array
+// kget - take tensor reference, return k scalar/array
+//      - take reference to vector of longs, return k list
+//      - take reference to vector of tensors, return k lists
+// -------------------------------------------------------------------------
 K kgetscalar(const Tensor &t){
  // if CUDA tensor, move to CPU, convert to scalar
  auto s=t.item();
@@ -90,6 +73,43 @@ K kget(const Tensor &t) {
  J b=s[j]*c.element_size();                   // bytes to copy at lowest depth
  S p=(S)c.data_ptr();                         // contiguous data pointer
  return kgets(0,j,maptype(t.dtype()),b,s,p);
+}
+
+K kget(const std::vector<int64_t>& v) {return klist(v.size(),v.data());}
+
+K kget(const std::vector<torch::Tensor>& v) {
+ K x=ktn(0,v.size());
+ for(size_t i=0; i<v.size(); ++i) kK(x)[i]=kget(v[i]);
+ return x;
+}
+
+K kget(const std::deque<torch::Tensor>& v) {
+ K x=ktn(0,v.size());
+ for(size_t i=0; i<v.size(); ++i) kK(x)[i]=kget(v[i]);
+ return x;
+}
+
+// -------------------------------------------------------------------------
+// ktento - change tensor device/type, free prev tensor & replace void ptr
+// ktenpair - given a pair of tensors return pair of pointers or array
+// kten3 - given a triplet of tensors return triplet of pointers or array
+// -------------------------------------------------------------------------
+V ktento(Ptr &p,TensorOptions &o,B b) {
+ Tensor r,t=*(Tensor*)p->v;
+ if(o.has_device() && o.has_dtype()) r=t.to(o.device(),o.dtype(),b);
+ else if(o.has_device())             r=t.to(o.device(),b);
+ else                                r=t.to(o.dtype(),b);
+ if(!t.is_same(r)) kswitch(p,r);
+}
+
+K ktenpair(B p,Tensor& a,Tensor& b) {  // p:true if returning tensor pointers
+ if(p) return knk(2,kten(a),kten(b));
+ else  return knk(2,kget(a),kget(b));
+}
+
+K kten3(B p,Tensor& a,Tensor& b,Tensor& c) {  // p:true if returning tensor pointers
+ if(p) return knk(3,kten(a),kten(b),kten(c));
+ else  return knk(3,kget(a),kget(b),kget(c));
 }
 
 // ---------------------------------------------------------------------------------------

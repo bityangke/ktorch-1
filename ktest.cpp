@@ -300,6 +300,30 @@ KAPI kindex(K x) {
  KCATCH("index");
 }
 
+KAPI shuffle2(K x,K y) {
+ Tensor a,b;
+ if(xten(x,a) && xten(y,b)) {
+  std::vector<Tensor> v{a,b};
+ }
+ return (K)0;
+}
+
+KAPI vector(K x) {
+ auto v=torch::make_unique<std::vector<Tensor>>();
+ if(x->t) {
+  v->emplace_back(kput(x));
+ } else {
+  for(J i=0;i<x->n;++i) {
+   Tensor t;
+   v->emplace_back(xten(x,i,t) ? t : kput(kK(x)[i]));
+   if(t.defined())
+    std::cerr << "ref. count: " << t.use_count() << "\n";
+    std::cerr << "weak count: " << t.weak_use_count() << "\n";
+  }
+ }
+ return (K)0;
+}
+
 KAPI narrow(K x) {
  KTRY
   J d,i,n,*s; Tensor t;

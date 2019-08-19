@@ -217,52 +217,27 @@ KAPI modget(K x) {
  }
 }
 
-KAPI modtest1(K x) {
- torch::nn::Linear l(1000,700);
- auto p=torch::make_unique<torch::nn::Linear>(l);
- return kptr(p.release());
-}
-
-KAPI modtest2(K x) {
- Ptr p;
- if (xptr(x,p)) {
-  //auto l=(torch::nn::LinearImpl*)p;
-  auto l=*(torch::nn::Linear*)p;
-  auto parms=l->parameters();
- std::cout << "No. of parameters: " << parms.size() << "\n";
- for(auto& x:parms) {
-  std::cout << x << "\n";
-  std::cout << "reference count of parm: " << x.use_count() << "\n";
- }
- std::cout << "reference count of tensor: " << l->weight.use_count() << "\n";
-  return kten(l->weight);
- } else {
-  return (K)0;
+V shuffle(std::vector<Tensor>& v) {
+ size_t i=0; Tensor p;
+ for(auto& t:v) {
+  if(!p.defined())
+   p=torch::randperm(t.size(0),torch::dtype(torch::kLong).device(t.device()));
+  else if(t.size(0) != p.size(0))
+   AT_ERROR("Size mismatch: tensor[", i, "] length ",t.size(0), ", but permutation is ", p.size(0));
+  else if (t.device() != p.device())
+    AT_ERROR("Device mismatch: tensor[", i, "] is on ", t.device(), ", but permutation indices are on ", p.device());
+  t=t.index_select(0,p); ++i;
  }
 }
 
-KAPI modfree(K x) {
- Ptr p;
- if(xptr(x,p)) {
-  auto l=(torch::nn::Linear*)p;
-  delete l;
-  //delete p;
- }
- return(K)0;
-}
-
-KAPI shuffle(K x) {
- Tensor a,b,i; J d=0;
+KAPI kshuffle(K x) {
  KTRY
-  if(xten(x,0,a) && xten(x,1,b)) {
-   auto j=torch::randperm(a.size(d),torch::dtype(torch::kLong).device(a.device()).requires_grad(false));
-   a.copy_(a.index_select(d,j));
-   b.copy_(b.index_select(d,j));
-   return (K)0;
-  } else {
-   return KERR("Unexpected arg(s) for shuffle, expects (tensor;tensor)");
-  }
- KCATCH("Shuffle error");
+  if(auto* v=xvec(x))
+   shuffle(*v);
+  else
+   AT_ERROR("shuffle expects vector of tensors, input is ",kname(x->t));
+  return (K)0;
+ KCATCH("shuffle");
 }
 
 KAPI learn(K x) {
@@ -298,30 +273,6 @@ KAPI kindex(K x) {
   }
   return KERR("Unrecognized arg(s), expected (tensor;dim;indices;optional output tensor)");
  KCATCH("index");
-}
-
-KAPI shuffle2(K x,K y) {
- Tensor a,b;
- if(xten(x,a) && xten(y,b)) {
-  std::vector<Tensor> v{a,b};
- }
- return (K)0;
-}
-
-KAPI vector(K x) {
- auto v=torch::make_unique<std::vector<Tensor>>();
- if(x->t) {
-  v->emplace_back(kput(x));
- } else {
-  for(J i=0;i<x->n;++i) {
-   Tensor t;
-   v->emplace_back(xten(x,i,t) ? t : kput(kK(x)[i]));
-   if(t.defined())
-    std::cerr << "ref. count: " << t.use_count() << "\n";
-    std::cerr << "weak count: " << t.weak_use_count() << "\n";
-  }
- }
- return (K)0;
 }
 
 KAPI narrow(K x) {

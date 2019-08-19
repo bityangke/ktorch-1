@@ -4,6 +4,7 @@
 // -------------------------------------------------------------------------
 // kten - given tensor, return ptr to struct w'attrs, void ptr to tensor
 // kswitch - switch tensor pointer kept in k object
+// kvec - given ptr to vector of tensors, return ptr to struct w'attrs
 // -------------------------------------------------------------------------
 K kten(const Tensor &t) {
  auto o=torch::make_unique<Obj>();
@@ -19,6 +20,14 @@ V kswitch(Ptr &p,const Tensor &t) {
  auto u=torch::make_unique<Tensor>(t);
  delete (Tensor*)p->v;
  p->v=u.release();
+}
+
+K kvec(std::unique_ptr<std::vector<Tensor>> v) {
+ auto o=torch::make_unique<Obj>();
+ o->t=Class::vector;
+ o->c=Cast::tensor;
+ o->v=v.release();
+ return kptr(o.release());
 }
 
 // -------------------------------------------------------------------------
@@ -414,6 +423,41 @@ K tensordetail(Ptr p,I y) {
 }
 
 // ------------------------------------------------------------------------------------------
+// tensor vector fns: 
+// ------------------------------------------------------------------------------------------
+K vecinit(K x) {
+ auto v=torch::make_unique<std::vector<Tensor>>();
+ if(x->t) {
+  v->emplace_back(kput(x));
+ } else {
+  for(J i=0;i<x->n;++i) {
+   Tensor t;
+   v->emplace_back(xten(x,i,t) ? std::move(t) : kput(kK(x)[i]));
+  }
+ }
+ return kvec(std::move(v));
+}
+
+KAPI vector(K x) {
+ KTRY
+  J i; Tensor t;
+  if(auto* v=xvec(x)) {
+   return kget(*v);
+  } else if(auto* v=xvec(x,0)) {
+   if(xlong(x,1,i)) {
+    if(x->n==2)
+     return kget(v->at(i));
+    else if(x->n==3)
+     return (v->at(i)=xten(x,2,t) ? std::move(t) : kput(x,2)), (K)0;
+    }
+    AT_ERROR("Vector given with unrecognized arg(s)");
+  } else {
+   return vecinit(x);
+  }
+ KCATCH("vector");
+}
+
+// ------------------------------------------------------------------------------------------
 // tensor utiity fns: 
 // ------------------------------------------------------------------------------------------
 // tensorcopy - tgt <- src values, must have same type & device, tgt resized if src larger
@@ -461,4 +505,5 @@ V tensorfn(K x) {
  fn(x, "tensor",    KFN(tensor),1);
  fn(x, "backward",  KFN(backward),1);
  fn(x, "grad",      KFN(grad),1);
+ fn(x, "vector",    KFN(vector),1);
 }

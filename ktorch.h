@@ -90,7 +90,8 @@ enum class Class:char {
  tensor,
  sequential,
  loss,
- optimizer
+ optimizer,
+ vector
 };
 
 enum class Cast:char {
@@ -233,6 +234,8 @@ B xloss(K,Ptr&);
 B xloss(K,J,Ptr&);
 B xoptim(K,Ptr&);
 B xoptim(K,J,Ptr&);
+std::vector<Tensor>* xvec(K);
+std::vector<Tensor>* xvec(K,J);
 
 B xnum(K,F&);
 B xnum(K,J,F&);
@@ -317,6 +320,7 @@ K kget(const std::deque<Tensor>&);
 Tensor kput(K);
 Tensor kput(K,J);
 K kten(const Tensor&);
+K kvec(std::unique_ptr<std::vector<Tensor>>);
 V kswitch(Ptr&,const Tensor&);
 V ktento(Ptr&,TensorOptions&,B);
 K ktenpair(B,Tensor&,Tensor&);

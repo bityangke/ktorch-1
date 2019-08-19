@@ -360,6 +360,7 @@ B xtenarg(K x,Tensor& a,Tensor &b,Tensor &c) {return xtenarg(x,0,a,b,c);}
 // xseq - check arg(s) for allocated sequential modules
 // xloss - check arg(s) for allocated loss module
 // xoptim - check arg(s) for allocated optimizer pointer
+// xvec - check arg(s) for allocated vector of tensors
 // ------------------------------------------------------------------------------------------------------
 B xseq(K x,Sequential &s) {
  Ptr p;
@@ -373,6 +374,13 @@ B xloss(K x,J i,Ptr &p) {return xind(x,i) && xloss(kK(x)[i],p);}
 
 B xoptim(K x,Ptr &p) {return xptr(x,p) && p->t==Class::optimizer;}
 B xoptim(K x,J i,Ptr &p) {return xind(x,i) && xoptim(kK(x)[i],p);}
+
+std::vector<Tensor>* xvec(K x) {
+ Ptr p;
+ return (xptr(x,p) && Class::vector==p->t && Cast::tensor==p->c) ? (std::vector<Tensor>*)p->v : nullptr;
+}
+
+std::vector<Tensor>* xvec(K x,J i) {return xind(x,i) ? xvec(kK(x)[i]) : nullptr;}
 
 // ------------------------------------------------------------------------------------------------------
 // xnum - check for double or long int k scalar, set double & return true, else false

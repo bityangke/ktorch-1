@@ -425,6 +425,9 @@ K tensordetail(Ptr p,I y) {
 // ------------------------------------------------------------------------------------------
 // tensor vector fns: 
 // ------------------------------------------------------------------------------------------
+// vecinit -
+// vector -
+// ------------------------------------------------------------------------------------------
 K vecinit(K x) {
  auto v=torch::make_unique<std::vector<Tensor>>();
  if(x->t) {
@@ -449,12 +452,41 @@ KAPI vector(K x) {
      return kget(v->at(i));
     else if(x->n==3)
      return (v->at(i)=xten(x,2,t) ? std::move(t) : kput(x,2)), (K)0;
-    }
-    AT_ERROR("Vector given with unrecognized arg(s)");
+   }
+   //} else if(auto *w=xvec(x,1) && x->n==2)
+   // v.insert(v.end(), w.begin(), w.end()), (K)0;
+   AT_ERROR("Vector given with unrecognized arg(s)");
   } else {
    return vecinit(x);
   }
  KCATCH("vector");
+}
+
+// ------------------------------------------------------------------------------------------
+// vecshuffle -
+// shuffle -
+// ------------------------------------------------------------------------------------------
+ZV vecshuffle(std::vector<Tensor>& v) {
+ size_t i=0; Tensor p;
+ for(auto& t:v) {
+  if(!p.defined())
+   p=torch::randperm(t.size(0),torch::dtype(torch::kLong).device(t.device()));
+  else if(t.size(0) != p.size(0))
+   AT_ERROR("Size mismatch: tensor[", i, "] length ",t.size(0), ", but permutation is ", p.size(0));
+  else if (t.device() != p.device())
+    AT_ERROR("Device mismatch: tensor[", i, "] is on ", t.device(), ", but permutation indices are on ", p.device());
+  t=t.index_select(0,p); ++i;
+ }
+}
+
+KAPI shuffle(K x) {
+ KTRY
+  if(auto* v=xvec(x))
+   vecshuffle(*v);
+  else
+   AT_ERROR("shuffle expects vector of tensors, input is ",kname(x->t));
+  return (K)0;
+ KCATCH("shuffle");
 }
 
 // ------------------------------------------------------------------------------------------
@@ -506,4 +538,5 @@ V tensorfn(K x) {
  fn(x, "backward",  KFN(backward),1);
  fn(x, "grad",      KFN(grad),1);
  fn(x, "vector",    KFN(vector),1);
+ fn(x, "shuffle",   KFN(shuffle),1);
 }

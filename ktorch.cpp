@@ -831,6 +831,7 @@ KAPI kfree(K x){
    case Class::sequential: delete (Sequential*)p->v; break;
    case Class::loss:       lossfree(p); break;
    case Class::optimizer:  optfree(p->c,p->v); break;
+   case Class::vector:     delete (std::vector<Tensor>*)p->v; break;
    default: return KERR("Not a recognized pointer");
   }
   return delete p,(K)0;

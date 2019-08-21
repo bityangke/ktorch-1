@@ -275,14 +275,30 @@ KAPI kindex(K x) {
  KCATCH("index");
 }
 
+V setsize(Tensor& t,int64_t d,int64_t n) {auto s=(int64_t*)t.sizes().data(); s[d]=n; }
+
+V narrow_(Tensor& t,int64_t d,int64_t i,int64_t n) {
+ setsize(t,d,n);
+ t.set_(t.storage(),i*t.stride(d),t.sizes(),t.strides());
+}
+
+V resize(Tensor& t,int64_t d) {
+ int64_t n=1;
+ for(size_t i=0; i<t.dim(); ++i)
+  if(i != d) n*=t.size(i);
+ narrow_(t,d,0,t.storage().size()/n);
+}
+
 KAPI narrow(K x) {
  KTRY
-  J d,i,n,*s; Tensor t;
-  if(xten(x,0,t) && xlong(x,1,d) && xlong(x,2,i) && xlong(x,3,n) && x->n==4) {
-   s=(J*)t.sizes().data(); s[d]=n;
-   return t.set_(t.storage(),i*t.stride(d),t.sizes(),t.strides()), (K)0;
+  B b=true; J d,i,n; Tensor t;
+  if(xten(x,0,t) && xlong(x,1,d) && xlong(x,2,i) && xlong(x,3,n) && (x->n==4 || (x->n==5 && xbool(x,4,b)))) {
+   if(b)
+    return narrow_(t,d,i,n), (K)0;
+   else
+    return kten(t.narrow(d,i,n));
   } else {
-   return KERR("Unrecognized arg(s) for set_");
+   return KERR("Unrecognized arg(s) for narrow, expecting (tensor;dim;offset;size;inplace flag)");
   }
  KCATCH("narrow");
 }

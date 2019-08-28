@@ -474,15 +474,6 @@ KAPI kstep(K x) {
  return (K)0;
 }
 
-KAPI permute(K x) {
- Tensor i,t;
- if(xten(x,t)) {
-  i=torch::randperm(t.size(0),torch::kLong);
-  t=t.index_select(0,i);
- }
- return(K)0;
-}
-
 V optfn(K x) {
  fn(x, "opt",  KFN(opt),1);
  fn(x, "step", KFN(kstep),1);

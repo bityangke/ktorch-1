@@ -240,6 +240,43 @@ KAPI kshuffle(K x) {
  KCATCH("shuffle");
 }
 
+/*
+KAPI shuffle(K x) {
+ KTRY
+  if(x->t<0) {
+   AT_ERROR("shuffle not implemented for ",kname(x->t));
+  } else if(x->t) {
+   auto t=kput(x);
+   auto n=t.size(0);
+   auto p=
+
+ KCATCH("shuffle");
+}
+*/
+
+KAPI lbfgs(K x) {
+    int i, n=x->j;
+    auto t=torch::randn({n});
+
+    std::vector<torch::Tensor> v = {torch::randn({n}, torch::requires_grad())};
+    //torch::optim::SGD o(v, /*lr=*/0.01);
+    torch::optim::LBFGS o(v, 1);
+
+    auto cost = [&](){
+        o.zero_grad();
+        auto d = torch::pow(v[0] - t, 2).sum();
+        std::cerr << i << ") " << d.item().toDouble() << "\n";
+        d.backward();
+        return d;
+    };
+
+    for (i = 0; i < 5; ++i){
+        o.step(cost);//for LBFGS
+        //cost(); o.step(); // for SGD
+    }
+    return kget(torch::stack({t,v[0]}));
+}
+
 KAPI learn(K x) {
  KTRY
   Scalar s; Tensor t;
@@ -275,31 +312,42 @@ KAPI kindex(K x) {
  KCATCH("index");
 }
 
-V setsize(Tensor& t,int64_t d,int64_t n) {auto s=(int64_t*)t.sizes().data(); s[d]=n; }
-
-V narrow_(Tensor& t,int64_t d,int64_t i,int64_t n) {
- setsize(t,d,n);
- t.set_(t.storage(),i*t.stride(d),t.sizes(),t.strides());
+V subset(Tensor& t,int64_t i,int64_t n) {
+ auto s=(int64_t*)t.sizes().data(); s[0]=n;
+ t.set_(t.storage(),i*t.stride(0),t.sizes(),t.strides());
 }
+
+/*
+i=t.storage_offset()+t.numel;
+if(i < t.storage().size()-t.numel())
+ return true;
+else if
+*/
 
 V resize(Tensor& t,int64_t d) {
  int64_t n=1;
- for(size_t i=0; i<t.dim(); ++i)
-  if(i != d) n*=t.size(i);
- narrow_(t,d,0,t.storage().size()/n);
+ for(size_t i=1; i<t.dim(); ++i) n*=t.size(i);
+ subset(t,0,t.storage().size()/n);
+}
+
+V subset(std::vector<Tensor>& v,int64_t i,int64_t n) {
+ size_t j=0;
+ for(auto& t:v) {
+  /*
+  TORCH_CHECK(t.dim(), "dim");
+  TORCH_CHECK(i<t.storage().size()/t.stride(d), "offset");
+  */
+  subset(t,i,n); j++;
+ }
 }
 
 KAPI narrow(K x) {
  KTRY
-  B b=true; J d,i,n; Tensor t;
-  if(xten(x,0,t) && xlong(x,1,d) && xlong(x,2,i) && xlong(x,3,n) && (x->n==4 || (x->n==5 && xbool(x,4,b)))) {
-   if(b)
-    return narrow_(t,d,i,n), (K)0;
-   else
-    return kten(t.narrow(d,i,n));
-  } else {
-   return KERR("Unrecognized arg(s) for narrow, expecting (tensor;dim;offset;size;inplace flag)");
-  }
+  J d,i,n; Tensor t;
+  if(xlong(x,1,d) && xlong(x,2,i) && xlong(x,3,n) && x->n==4)
+   return xten(x,0,t) ? kten(t.narrow(d,i,n)) : kget(kput(x,0).narrow(d,i,n));
+  else
+   return KERR("Unrecognized arg(s) for narrow, expecting (input;dim;offset;size)");
  KCATCH("narrow");
 }
 

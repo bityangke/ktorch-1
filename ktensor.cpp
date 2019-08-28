@@ -431,7 +431,12 @@ K tensordetail(Ptr p,I y) {
 K vecinit(K x) {
  auto v=torch::make_unique<std::vector<Tensor>>();
  if(x->t) {
-  v->emplace_back(kput(x));
+  Tensor t=kput(x);
+  if(t.dim())
+   for(size_t i=0;i<t.size(0);++i)
+    v->emplace_back(t[i]);
+  else
+   v->emplace_back(t);
  } else {
   for(J i=0;i<x->n;++i) {
    Tensor t;
@@ -461,6 +466,50 @@ KAPI vector(K x) {
   }
  KCATCH("vector");
 }
+
+// ----------------------------------------------------------------------------------------------
+// dim - return no. of tensor dimensions, or dimensions of each tensor in vector of tensors
+// size - return sizes of each tensor dimension, or list of sizes for vector
+// stride - return strides of each tensor dimension, or list of strides for vector
+// ----------------------------------------------------------------------------------------------
+KAPI dim(K x) {
+ KTRY
+  Tensor t;
+  if(xten(x,t)) {
+   return kj(t.dim());
+  } else if(auto* v=xvec(x)) {
+   K d=ktn(KJ,v->size());
+   for(size_t i=0; i<v->size(); ++i)
+    kJ(d)[i]=v->at(i).dim();
+   return d;
+  } else {
+   return kj(kput(x).dim());
+  }
+ KCATCH("dim");
+}
+
+ZK ksize1(const Tensor& t,B b) {
+ return klist(t.dim(),b ? t.sizes().data() : t.strides().data());
+}
+
+ZK ksize2(K x,B b) {
+ KTRY
+  Tensor t;
+  if(xten(x,t)) {
+   return ksize1(t,b);
+  } else if(auto* v=xvec(x)) {
+   K s=ktn(0,v->size());
+   for(size_t i=0; i<v->size(); ++i)
+    kK(s)[i]=ksize1(v->at(i),b);
+   return s;
+  } else {
+   return ksize1(kput(x),b);
+  }
+ KCATCH("size/stride");
+}
+
+KAPI size  (K x) {return ksize2(x,true);}
+KAPI stride(K x) {return ksize2(x,false);}
 
 // ------------------------------------------------------------------------------------------
 // vecshuffle -
@@ -538,5 +587,8 @@ V tensorfn(K x) {
  fn(x, "backward",  KFN(backward),1);
  fn(x, "grad",      KFN(grad),1);
  fn(x, "vector",    KFN(vector),1);
+ fn(x, "dim",       KFN(dim),1);
+ fn(x, "size",      KFN(size),1);
+ fn(x, "stride",    KFN(stride),1);
  fn(x, "shuffle",   KFN(shuffle),1);
 }

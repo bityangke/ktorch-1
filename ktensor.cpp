@@ -3,31 +3,17 @@
 
 // -------------------------------------------------------------------------
 // kten - given tensor, return ptr to struct w'attrs, void ptr to tensor
-// kswitch - switch tensor pointer kept in k object
 // kvec - given ptr to vector of tensors, return ptr to struct w'attrs
+// kswitch - switch tensor pointer kept in k object
 // -------------------------------------------------------------------------
-K kten(const Tensor &t) {
- auto o=torch::make_unique<Obj>();
- auto u=torch::make_unique<Tensor>(t);
- o->t=Class::tensor;
- o->c=Cast::tensor;
- o->v=u.release();
- return kptr(o.release());
-}
+K kten(const Tensor& t) {return kptr(new Kten(t));}
+K kvec(const std::vector<Tensor>& v) {return kptr(new Kvec(v));}
 
 V kswitch(Ptr &p,const Tensor &t) {
  if(p->t != Class::tensor) AT_ERROR("Invalid tensor pointer from k");
  auto u=torch::make_unique<Tensor>(t);
  delete (Tensor*)p->v;
  p->v=u.release();
-}
-
-K kvec(std::unique_ptr<std::vector<Tensor>> v) {
- auto o=torch::make_unique<Obj>();
- o->t=Class::vector;
- o->c=Cast::tensor;
- o->v=v.release();
- return kptr(o.release());
 }
 
 // -------------------------------------------------------------------------
@@ -38,7 +24,6 @@ K kvec(std::unique_ptr<std::vector<Tensor>> v) {
 //      - take reference to vector of tensors, return k lists
 // -------------------------------------------------------------------------
 K kgetscalar(const Tensor &t){
- // if CUDA tensor, move to CPU, convert to scalar
  auto s=t.item();
  switch(t.scalar_type()) {
   case torch::kFloat:  return ke(s.toFloat());
@@ -429,21 +414,21 @@ K tensordetail(Ptr p,I y) {
 // vector -
 // ------------------------------------------------------------------------------------------
 K vecinit(K x) {
- auto v=torch::make_unique<std::vector<Tensor>>();
+ std::vector<Tensor> v;
  if(x->t) {
   Tensor t=kput(x);
   if(t.dim())
-   for(size_t i=0;i<t.size(0);++i)
-    v->emplace_back(t[i]);
+   for(int64_t i=0;i<t.size(0);++i)
+    v.emplace_back(t[i]);
   else
-   v->emplace_back(t);
+   v.emplace_back(t);
  } else {
   for(J i=0;i<x->n;++i) {
    Tensor t;
-   v->emplace_back(xten(x,i,t) ? std::move(t) : kput(kK(x)[i]));
+   v.emplace_back(xten(x,i,t) ? std::move(t) : kput(kK(x)[i]));
   }
  }
- return kvec(std::move(v));
+ return kvec(v);
 }
 
 KAPI vector(K x) {

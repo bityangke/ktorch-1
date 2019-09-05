@@ -22,6 +22,8 @@ B xptr(K x) {return !x->t && x->n==1 && kK(x)[0]->t==-KJ;}
 B xptr(K x,Ptr &p) {return xptr(x) ? p=(Ptr)kK(x)[0]->j,true : false;}
 B xptr(K x,J i,Ptr &p) {return xind(x,i) && xptr(kK(x)[i],p);}
 
+Ktag* xtag(K x) {return xptr(x) ? (Ktag*)kK(x)[0]->j : nullptr;}
+
 B xhelp(K x) {return x->t == -KS && x->s == env().help;}
 B xhelp(K x,S &s) {
  if(x->t==KS && x->n == 2 && kS(x)[0]==env().help)
@@ -323,16 +325,40 @@ B xsize(K x,J i,J d,F       *a) {return xind(x,i) && xsize(kK(x)[i],d,a);}
 
 // ------------------------------------------------------------------------------------------------------
 // xten - check arg(s) for allocated ptr to tensor: set tensor & return true if found, else false
+//      - 2nd form, return tensor pointer if found from k value, else null
+// xvec - check arg(s) for allocated vector of tensors
+// ------------------------------------------------------------------------------------------------------
+B xten(K x,Tensor &t) {
+ if(auto* a=xtag(x))
+  if(a->a==Class::tensor && a->c==Cast::tensor)
+   return t=((Kten*)a)->t, true;
+ return false;
+}
+
+Tensor* xten(K x) {
+ if(auto* a=xtag(x))
+  if(a->a==Class::tensor && a->c==Cast::tensor)
+   return &((Kten*)a)->t;
+ return nullptr;
+}
+
+B xten(K x,J i,Tensor& t) {return xind(x,i) && xten(kK(x)[i],t);}
+Tensor* xten(K x,J i) {return xind(x,i) ? xten(kK(x)[i]) : nullptr;}
+
+std::vector<Tensor>* xvec(K x) {
+ if(auto* a=xtag(x))
+  if(a->a==Class::vector && a->c==Cast::tensor)
+   return &((Kvec*)a)->v;
+ return nullptr;
+}
+
+std::vector<Tensor>* xvec(K x,J i) {return xind(x,i) ? xvec(kK(x)[i]) : nullptr;}
+
+// ------------------------------------------------------------------------------------------------------
 // xtenpair - check arg(s) for a pair of allocated tensor ptrs: if found, set & return true, else false
 // xten3 - check arg(s) for a triplet of allocated tensors
 // xtenarg - check arg(s) for a list of allocated tensors, or list of input arrays or mix of both
 // ------------------------------------------------------------------------------------------------------
-B xten(K x,Tensor &t) {
- Ptr p;
- return (xptr(x,p) && p->t==Class::tensor && p->c==Cast::tensor) ? t=*(Tensor*)p->v,true : false;
-}
-
-B xten(K x,J i,Tensor& t) {return xind(x,i) && xten(kK(x)[i],t);}
 B xtenpair(K x,Tensor& y,Tensor& z) {return xten(x,0,y) && xten(x,1,z);}
 B xtenpair(K x,J i,Tensor& y,Tensor& z) {return xind(x,i) && xtenpair(kK(x)[i],y,z);}
 B xten3(K x,Tensor& t1,Tensor& t2,Tensor& t3) {return xten(x,0,t1) && xten(x,1,t2) && xten(x,2,t3);}
@@ -357,30 +383,32 @@ B xtenarg(K x,Tensor& a,Tensor &b)           {return xtenarg(x,0,a,b);}
 B xtenarg(K x,Tensor& a,Tensor &b,Tensor &c) {return xtenarg(x,0,a,b,c);}
  
 // ------------------------------------------------------------------------------------------------------
-// xseq - check arg(s) for allocated sequential modules
+// xseq - check arg(s) for allocated sequential module, return boolean/pointer
 // xloss - check arg(s) for allocated loss module
 // xoptim - check arg(s) for allocated optimizer pointer
-// xvec - check arg(s) for allocated vector of tensors
 // ------------------------------------------------------------------------------------------------------
-B xseq(K x,Sequential &s) {
- Ptr p;
- return (xptr(x,p) && p->t==Class::sequential) ? s=*(Sequential*)p->v,true : false;
+B xseq(K x,Sequential &q) {
+ if(auto* a=xtag(x))
+  if(a->a==Class::sequential && a->c==Cast::sequential) 
+   return q=((Kseq*)a)->q, true;
+ return false;
+}
+
+Sequential* xseq(K x) {
+ if(auto* a=xtag(x))
+  if(a->a==Class::sequential && a->c==Cast::sequential)
+   return &((Kseq*)a)->q;
+ return nullptr;
 }
 
 B xseq(K x,J i,Sequential& s) {return xind(x,i) && xseq(kK(x)[i],s);}
+Sequential* xseq(K x,J i) {return xind(x,i) ? xseq(kK(x)[i]) : nullptr;}
 
 B xloss(K x,Ptr &p) {return xptr(x,p) && p->t==Class::loss;}
 B xloss(K x,J i,Ptr &p) {return xind(x,i) && xloss(kK(x)[i],p);}
 
 B xoptim(K x,Ptr &p) {return xptr(x,p) && p->t==Class::optimizer;}
 B xoptim(K x,J i,Ptr &p) {return xind(x,i) && xoptim(kK(x)[i],p);}
-
-std::vector<Tensor>* xvec(K x) {
- Ptr p;
- return (xptr(x,p) && Class::vector==p->t && Cast::tensor==p->c) ? (std::vector<Tensor>*)p->v : nullptr;
-}
-
-std::vector<Tensor>* xvec(K x,J i) {return xind(x,i) ? xvec(kK(x)[i]) : nullptr;}
 
 // ------------------------------------------------------------------------------------------------------
 // xnum - check for double or long int k scalar, set double & return true, else false

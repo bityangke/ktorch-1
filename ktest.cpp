@@ -1,6 +1,54 @@
 #include "ktorch.h"
 #include "kmodule.h"
-#include <torch/nn/modules/named_any.h>  //should be included in modules.h
+
+/*
+struct TORCH_API Kloss : public Ktag {
+ std::shared_ptr<Loss> l;
+ //Kloss(const Sequential& x) : s(std::move(x)) {a=Class::loss; c=Cast::sequential;}
+};
+*/
+
+K kten1(const Tensor& t)     {return kptr(new Kten(t));}
+
+KAPI kfree1(K x) {
+ if(auto* a=xtag(x)) {
+  delete a;
+  return (K)0;
+ } else {
+  return KERR("Not a recognized pointer");
+ }
+}
+
+KAPI ten1(K x) {
+ KTRY
+  auto t=kput(x);
+  //return ktens(t);
+  return kten1(t);
+ KCATCH("tensor");
+}
+
+KAPI ten2(K x) {
+ KTRY
+  Tensor t;
+  if(xten(x,t)) {
+   //std::cerr << "Ref count: " << t.use_count() << ", weak ref count: " << t.weak_use_count() << "\n";
+   return kget(t);
+  } else {
+   return (K)0;
+  }
+ KCATCH("tensor");
+}
+
+KAPI ten3(K x) {
+ KTRY
+  if(auto* t=xten(x)) {
+   std::cerr << "Ref count: " << t->use_count() << ", weak ref count: " << t->weak_use_count() << "\n";
+   return kget(*t);
+  } else {
+   return (K)0;
+  }
+ KCATCH("tensor");
+}
 
 void errfail() {
  if(true) {
@@ -254,6 +302,18 @@ KAPI shuffle(K x) {
 }
 */
 
+/*
+K model(Sequential& q,Loss *l,Optimizer *o,LossClosureOptimizer *oc) {
+    
+ auto cost=[&]() {
+  o->zero_grad();
+  auto z=l->forward(q->forward(v[0]
+  z.backward();
+  return d;
+ };
+}
+*/
+
 KAPI lbfgs(K x) {
     int i, n=x->j;
     auto t=torch::randn({n});
@@ -325,8 +385,8 @@ else if
 */
 
 V resize(Tensor& t,int64_t d) {
- int64_t n=1;
- for(size_t i=1; i<t.dim(); ++i) n*=t.size(i);
+ int64_t i,n=1;
+ for(i=1; i<t.dim(); ++i) n*=t.size(i);
  subset(t,0,t.storage().size()/n);
 }
 

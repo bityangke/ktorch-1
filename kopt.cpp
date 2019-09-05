@@ -15,10 +15,13 @@ using SGD            = torch::optim::SGD;
 using SGDOptions     = torch::optim::SGDOptions;
 
 // --------------------------------------------------------------------------------------
+// kopt - given optimizer type & shared pointer to newly created optimizer, return k ptr
 // omap - map to/from optimizer symbol/enumeration and default learning rate
 // oset - optimizer settings, map sym <-> enum
 // osize - size of buffers required (not counting trailing parameters without gradients)
 // --------------------------------------------------------------------------------------
+K kopt(Cast x,const std::shared_ptr<OptimizerBase>& y) {return kptr(new Kopt(x,y));}
+
 ZV omap(S s,Cast &c,double &r) {
  for(auto& m:env().opt)
    if(s==std::get<0>(m)) {c=std::get<1>(m); r=std::get<2>(m); return;}
@@ -67,7 +70,7 @@ ZV bset(size_t n,cS s,const std::vector<Tensor>& p,std::vector<int64_t>& v,const
  K y=bget(x,s);
  if(!y || !y->n) return;
  if(y->t != KJ) AT_ERROR("type error: ",s,", expecting long list, input is ",kname(y->t));
- if(n != y->n) AT_ERROR("length error: ",s,", expecting ",n," longs, input has ",y->n);
+ if(n != (unsigned)y->n) AT_ERROR("length error: ",s,", expecting ",n," longs, input has ",y->n);
  v.resize(n);
  for(size_t i=0; i<n; ++i) v.emplace_back(kJ(y)[i]);
 }
@@ -76,7 +79,7 @@ ZV bset(size_t n,cS s,const std::vector<Tensor>& p,std::vector<Tensor>& v,const 
  K y=bget(x,s);
  if(!y || !y->n) return;
  if(y->t) AT_ERROR("type error: ",s,", expecting general list, input is ",kname(y->t));
- if(n != y->n) AT_ERROR("length error: ",s,", expecting ",n," arrays, input has ",y->n);
+ if(n != (unsigned)y->n) AT_ERROR("length error: ",s,", expecting ",n," arrays, input has ",y->n);
  v.resize(n);
  for(size_t i=0; i<n; ++i) {
   auto a=kput(kK(y)[i]);
@@ -382,7 +385,8 @@ ZK sgd(SGD* v) {  //return internal buffer state as k dictionary
 Z std::vector<Tensor> optparms(Ptr p) {
  switch(p ? p->t : Class::undefined) {
   case Class::tensor:     return {*(Tensor*)p->v};
-  case Class::sequential: return {(*(Sequential*)p->v)->parameters()};
+//case Class::sequential: return {(*(Sequential*)p->v)->parameters()};
+  case Class::sequential: return (*(Sequential*)p->v)->parameters();
   case Class::undefined:  return {};
   default: AT_ERROR("Unrecognized pointer, expecting tensor or module(s)");
  }

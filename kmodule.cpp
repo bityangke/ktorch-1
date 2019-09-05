@@ -15,14 +15,7 @@
 // kseq - allocate an object to store a pointer to a sequential module
 // kseqto - given ptr to allocated sequential module, change device/data type
 // ----------------------------------------------------------------------------
-K kseq(const Sequential &s,Cast c) {  //c:cast used to signal single module
- auto o=torch::make_unique<Obj>();
- auto p=torch::make_unique<Sequential>(s);
- o->t=Class::sequential;
- o->c=c;
- o->v=p.release();
- return kptr(o.release());
-}
+K kseq(const Sequential& q) {return kptr(new Kseq(q));}
 
 V kseqto(Ptr &p,TensorOptions &o,B b) {
  Sequential q=*(Sequential*)p->v; auto t=torch::typeMetaToScalarType(o.dtype());
@@ -988,7 +981,7 @@ ZK tchild(S s,const Module& c) {
 }
 
 ZK mchild(B a,J i,S s,const Sequential &q) {
- if(i<0 || i>=q->size())
+ if(i<0 || (unsigned)i>=q->size())
   AT_ERROR("Invalid module index: ",i);
  if(s) {
   return tchild(s,*q->children()[i]);

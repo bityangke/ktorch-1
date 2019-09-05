@@ -65,8 +65,9 @@ using TypeMeta=caffe2::TypeMeta;
 using TensorOptions=torch::TensorOptions;
 using Module=torch::nn::Module;
 using Sequential=torch::nn::Sequential;
-using Optimizer=torch::optim::Optimizer;
 using OptimizerBase=torch::optim::detail::OptimizerBase;
+using Optimizer=torch::optim::Optimizer;
+using LossClosureOptimizer=torch::optim::LossClosureOptimizer;
 using TensorDict = torch::OrderedDict<std::string, torch::Tensor>;
 
 typedef struct {
@@ -156,6 +157,32 @@ enum class State:char {
  Class,module,name,options,parms,buffers
 };
 
+struct TORCH_API Ktag {
+ Class a = Class::undefined;
+ Cast  c = Cast::undefined;
+ virtual ~Ktag() = default;
+};
+
+struct TORCH_API Kten : public Ktag {
+ Tensor t;
+ Kten(const Tensor& x) : t(std::move(x)) {a=Class::tensor; c=Cast::tensor;}
+};
+
+struct TORCH_API Kvec : public Ktag {
+ std::vector<Tensor> v;
+ Kvec(const std::vector<Tensor>& x) : v(std::move(x)) {a=Class::vector; c=Cast::tensor;}
+};
+
+struct TORCH_API Kseq : public Ktag {
+ Sequential q;
+ Kseq(const Sequential& x) : q(std::move(x)) {a=Class::sequential; c=Cast::sequential;}
+};
+
+struct TORCH_API Kopt : public Ktag {
+ std::shared_ptr<OptimizerBase> o;
+ Kopt(Cast x,const std::shared_ptr<OptimizerBase>& y) : o(std::move(y)) {a=Class::optimizer; c=x;}
+};
+
 typedef struct {
  Class t;          // tensor, optimizer, etc.
  Cast c;           // used to cast pointer
@@ -170,6 +197,7 @@ K kptr(V*);
 B xptr(K);
 B xptr(K,Ptr&);
 B xptr(K,J,Ptr&);
+Ktag* xtag(K);
 
 B match(const Scalar&,const Scalar&);
 K kscalar(const Scalar&);
@@ -220,6 +248,8 @@ B xsize(K,J,J,F*);
 
 B xten(K,Tensor&);
 B xten(K,J,Tensor&);
+Tensor* xten(K);
+Tensor* xten(K,J);
 B xtenpair(K,Tensor&,Tensor&);
 B xtenpair(K,J,Tensor&,Tensor&);
 B xten3(K,Tensor&,Tensor&,Tensor&);
@@ -230,6 +260,8 @@ B xtenarg(K,Tensor&,Tensor&);
 B xtenarg(K,Tensor&,Tensor&,Tensor&);
 B xseq(K,Sequential&);
 B xseq(K,J,Sequential&);
+Sequential* xseq(K);
+Sequential* xseq(K,J);
 B xloss(K,Ptr&);
 B xloss(K,J,Ptr&);
 B xoptim(K,Ptr&);
@@ -320,7 +352,7 @@ K kget(const std::deque<Tensor>&);
 Tensor kput(K);
 Tensor kput(K,J);
 K kten(const Tensor&);
-K kvec(std::unique_ptr<std::vector<Tensor>>);
+K kvec(const std::vector<Tensor>&);
 V kswitch(Ptr&,const Tensor&);
 V ktento(Ptr&,TensorOptions&,B);
 K ktenpair(B,Tensor&,Tensor&);
@@ -330,7 +362,8 @@ V tensorcopy(Tensor&,const Tensor&,B async=false);
 V tensorfn(K);
 
 // module routines:
-K kseq(const Sequential&,Cast c=Cast::sequential);
+//K kseq(const Sequential&,Cast c=Cast::sequential);
+K kseq(const Sequential&);
 V kseqto(Ptr&,TensorOptions&,B);
 V modfn(K);
 K mstate(K);

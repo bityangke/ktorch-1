@@ -133,14 +133,14 @@ ZV adagrad(K x,J i,AdagradOptions& o) {
   }
 }
 
-Z V* adagrad(const std::vector<Tensor>& w,const AdagradOptions& a,K y) {
- auto o=torch::make_unique<Adagrad>(w,a);
+Z Optptr adagrad(const std::vector<Tensor>& w,const AdagradOptions& a,K y) {
+ auto o=std::make_shared<Adagrad>(w,a);
  auto n=osize(o->parameters());
  if(y && n) {
   bset(n, "step_buffers", o->parameters(), o->step_buffers, y);
   bset(n, "sum_buffers",  o->parameters(), o->sum_buffers,  y);
  }
- return o.release();
+ return o;
 }
 
 ZK adagrad(B a,F r,Adagrad* v) { //return all or non-default options as k dictionary
@@ -182,8 +182,8 @@ ZV adam(K x,J i,AdamOptions& o) {
   }
 }
 
-Z V* adam(const std::vector<Tensor>& w,const AdamOptions& a,K y) {
- auto o=torch::make_unique<Adam>(w,a);
+Z Optptr adam(const std::vector<Tensor>& w,const AdamOptions& a,K y) {
+ auto o=std::make_shared<Adam>(w,a);
  auto n=osize(o->parameters());
  if(y && n) {
   bset(n, "step_buffers",                o->parameters(), o->step_buffers,               y);
@@ -191,7 +191,7 @@ Z V* adam(const std::vector<Tensor>& w,const AdamOptions& a,K y) {
   bset(n, "exp_average_sq_buffers",      o->parameters(), o->exp_average_sq_buffers,     y);
   bset(n, "max_exp_average_sq_buffers",  o->parameters(), o->max_exp_average_sq_buffers, y);
  }
- return o.release();
+ return o;
 }
 
 ZK adam(B a,F r,Adam* v) { //return all or non-default options as k dictionary
@@ -238,8 +238,8 @@ ZV lbfgs(K x,J i,LBFGSOptions& o) {
   }
 }
 
-Z V* lbfgs(const std::vector<Tensor>& w,const LBFGSOptions& a,K y) {
- auto o=torch::make_unique<LBFGS>(w,a); auto n=osize(o->parameters());
+Z Optptr lbfgs(const std::vector<Tensor>& w,const LBFGSOptions& a,K y) {
+ auto o=std::make_shared<LBFGS>(w,a); auto n=osize(o->parameters());
  if(y) {
   bset(n, "d",              o->parameters(), o->d, y);
   bset(n, "t",              o->parameters(), o->t, y);
@@ -249,7 +249,7 @@ Z V* lbfgs(const std::vector<Tensor>& w,const LBFGSOptions& a,K y) {
   bset(n, "old_dirs",       o->parameters(), o->old_dirs, y);
   bset(n, "old_stps",       o->parameters(), o->old_stps, y);
  }
- return o.release();
+ return o;
 }
 
 ZK lbfgs(B a,F r,LBFGS* v) { //return all or non-default options as k dictionary
@@ -299,15 +299,15 @@ ZV rmsprop(K x,J i,RMSpropOptions& o) {
   }
 }
 
-Z V* rmsprop(const std::vector<Tensor>& w,const RMSpropOptions& a,K y) {
- auto o=torch::make_unique<RMSprop>(w,a);
+Z Optptr rmsprop(const std::vector<Tensor>& w,const RMSpropOptions& a,K y) {
+ auto o=std::make_shared<RMSprop>(w,a);
  auto n=osize(o->parameters());
  if(y && n) {
   bset(n, "square_average_buffers", o->parameters(), o->square_average_buffers, y);
   bset(n, "momentum_buffers",       o->parameters(), o->momentum_buffers,       y);
   bset(n, "grad_average_buffers",   o->parameters(), o->grad_average_buffers,   y);
  }
- return o.release();
+ return o;
 }
 
 ZK rmsprop(B a,F r,RMSprop* v) { //return all or non-default options as k dictionary
@@ -351,12 +351,12 @@ ZV sgd(K x,J i,SGDOptions& o) {
   }
 }
 
-Z V* sgd(const std::vector<Tensor>& w,const SGDOptions& a,K y) {
- auto o=torch::make_unique<SGD>(w,a);
+Z Optptr sgd(const std::vector<Tensor>& w,const SGDOptions& a,K y) {
+ auto o=std::make_shared<SGD>(w,a);
  auto n=osize(o->parameters());
  if(y && n)
   bset(n, "momentum_buffers", o->parameters(), o->momentum_buffers, y);
- return o.release();
+ return o;
 }
 
 ZK sgd(B a,F r,SGD* v) { //return all or non-default options as k dictionary
@@ -379,36 +379,39 @@ ZK sgd(SGD* v) {  //return internal buffer state as k dictionary
 // optparms - return vector of parameters from given tensor/sequential ptr
 // optinit - initialize one of the supported optimizers, return pointer to k
 // optstate - return optimizer name & options and optionally, internal buffer values
-// optfree - free previously allocated optimizer module
 // opt - main optimizer interface function for q
 // ---------------------------------------------------------------------------------------
-Z std::vector<Tensor> optparms(Ptr p) {
- switch(p ? p->t : Class::undefined) {
-  case Class::tensor:     return {*(Tensor*)p->v};
-//case Class::sequential: return {(*(Sequential*)p->v)->parameters()};
-  case Class::sequential: return (*(Sequential*)p->v)->parameters();
-  case Class::undefined:  return {};
-  default: AT_ERROR("Unrecognized pointer, expecting tensor or module(s)");
- }
+Z std::vector<Tensor> optparms(K x,J i) {
+ if(auto *a=xseq(x,i))
+  return (*a)->parameters();
+ else if(auto *a=xvec(x,i))
+  return *a;
+ else if(auto *a=xten(x,i))
+  return {*a};
+ else if(xempty(x,i))
+  return {};
+ else if(xptr(x,i))
+  AT_ERROR("Unrecognized pointer, expecting tensor(s) or module(s)");
+ else
+  AT_ERROR("Unrecognized argument, ",kname(x->t ? x->t : kK(x)[i]->t),", expecting tensor(s) or module(s)");
 }
 
-ZK optinit(S s,Ptr p,K x,K y=nullptr);  //p:ptr w'parms,x:options,y:buffers
-ZK optinit(S s,Ptr p,K x,K y) {
+ZK optinit(S s,K x,K y=nullptr);  //s:optimizer name, x:options, y:buffers
+ZK optinit(S s,K x,K y) {
  J i=xdict(x) ? -1 : 2; Cast c; F r; omap(s,c,r);
- if(!(x->t==-KS || xdict(x) || xempty(x,1) || xptr(x,1,p)))
-  AT_ERROR("Optimizer ",s," expects args of optimizer name or\n"
-           "(name; module(s)/tensor/empty; option(s)..)\n"
-           "(saved state; module(s))");
- auto w=optparms(p); auto u=torch::make_unique<Obj>(); u->t=Class::optimizer; u->c=c;
+ if(!(x->t==-KS || xdict(x) || xempty(x,1) || xptr(x,1)))
+  AT_ERROR("Optimizer ",s," expects args of form:\n",
+           "name\n", "(name; parm(s); option(s)..)\n" "(saved state; parm(s))");
+ auto w=optparms(x,1); Optptr o;
  switch(c) {
-  case Cast::adagrad: {auto a=AdagradOptions(r); adagrad(x,i,a); u->v=adagrad(w,a,y); break;}
-  case Cast::adam:    {auto a=AdamOptions(r);    adam(x,i,a);    u->v=adam(w,a,y);    break;}
-  case Cast::lbfgs:   {auto a=LBFGSOptions(r);   lbfgs(x,i,a);   u->v=lbfgs(w,a,y);   break;}
-  case Cast::rmsprop: {auto a=RMSpropOptions(r); rmsprop(x,i,a); u->v=rmsprop(w,a,y); break;}
-  case Cast::sgd:     {auto a=SGDOptions(r);     sgd(x,i,a);     u->v=sgd(w,a,y);     break;}
+  case Cast::adagrad: {auto a=AdagradOptions(r); adagrad(x,i,a); o=adagrad(w,a,y); break;}
+  case Cast::adam:    {auto a=AdamOptions(r);    adam(x,i,a);    o=adam(w,a,y);    break;}
+  case Cast::lbfgs:   {auto a=LBFGSOptions(r);   lbfgs(x,i,a);   o=lbfgs(w,a,y);   break;}
+  case Cast::rmsprop: {auto a=RMSpropOptions(r); rmsprop(x,i,a); o=rmsprop(w,a,y); break;}
+  case Cast::sgd:     {auto a=SGDOptions(r);     sgd(x,i,a);     o=sgd(w,a,y);     break;}
   default: AT_ERROR("Unrecognized optimizer: ",s); break;
  }
- return kptr(u.release());
+ return kptr(new Kopt(c,o));
 }
 
 K optstate(B a,B b,Ptr p) {
@@ -436,31 +439,23 @@ K optstate(B a,B b,Ptr p) {
  return xD(k,v);
 }
 
-V optfree(Cast c,V *v) {
- switch(c) {
-  case Cast::adagrad: delete(torch::optim::Adagrad*)v; break;
-  case Cast::adam:    delete(torch::optim::Adam*)v;    break;
-  case Cast::lbfgs:   delete(torch::optim::LBFGS*)v;   break;
-  case Cast::rmsprop: delete(torch::optim::RMSprop*)v; break;
-  case Cast::sgd:     delete(torch::optim::SGD*)v;     break;
-  default: AT_ERROR("Unrecognized optimizer: ",(I)c); break;
- }
-}
-
 KAPI opt(K x) {
  KTRY
   B a=env().alloptions; S s; Ptr p=nullptr,q=nullptr;
   if(xsym(x,s) || (xsym(x,0,s) && (xptr(x,1,p) || xempty(x,1)))) {
-   return optinit(s,p,x);
+   return optinit(s,x);
   } else if(xdict(x)) {
-   return optinit(statesym(State::module,x),p,statedict(State::options,x));
+   return optinit(statesym(State::module,x),
+                  statedict(State::options,x));
   } else if(xdict(x,0) && xptr(x,1,p) && x->n==2) { // ALLOW empty list or null for pointer??
    K d=kK(x)[0];
-   return optinit(statesym(State::module,d),p,statedict(State::options,d),statedict(State::buffers,d));
+   return optinit(statesym(State::module,d),
+                  statedict(State::options,d),
+                  statedict(State::buffers,d));
   } else if(xoptim(x,p) || (xbool(x,1,a) && xoptim(x,0,p) && x->n==2)) {
    return optstate(a,false,p);
   } else if(xoptim(x,0,p) && xptr(x,1,q) && x->n==2) {
-   return ((OptimizerBase*)p->v)->add_parameters(optparms(q)), (K)0;
+   return ((OptimizerBase*)p->v)->add_parameters(optparms(x,1)), (K)0;
   } else {
    AT_ERROR("Unrecognized optimizer arg(s)");
   }

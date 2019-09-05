@@ -66,9 +66,12 @@ using TensorOptions=torch::TensorOptions;
 using Module=torch::nn::Module;
 using Sequential=torch::nn::Sequential;
 using OptimizerBase=torch::optim::detail::OptimizerBase;
+using Optptr=std::shared_ptr<OptimizerBase>;
 using Optimizer=torch::optim::Optimizer;
 using LossClosureOptimizer=torch::optim::LossClosureOptimizer;
 using TensorDict = torch::OrderedDict<std::string, torch::Tensor>;
+class TORCH_API Loss;
+using Lossptr=std::shared_ptr<Loss>;
 
 typedef struct {
  A a = 0;  // type: 1-dict, 2-list of pairs, 3-general list, 4-sym list
@@ -179,8 +182,13 @@ struct TORCH_API Kseq : public Ktag {
 };
 
 struct TORCH_API Kopt : public Ktag {
- std::shared_ptr<OptimizerBase> o;
- Kopt(Cast x,const std::shared_ptr<OptimizerBase>& y) : o(std::move(y)) {a=Class::optimizer; c=x;}
+ Optptr o;
+ Kopt(Cast x,const Optptr& y) : o(std::move(y)) {a=Class::optimizer; c=x;}
+};
+
+struct TORCH_API Kloss : public Ktag {
+ Lossptr l;
+ Kloss(Cast x,const Lossptr& y) : l(std::move(y)) {a=Class::loss; c=x;}
 };
 
 typedef struct {
@@ -195,6 +203,7 @@ V dictadd(K,cS,K);
 B xind(K,J);
 K kptr(V*);
 B xptr(K);
+B xptr(K,J);
 B xptr(K,Ptr&);
 B xptr(K,J,Ptr&);
 Ktag* xtag(K);
@@ -375,7 +384,6 @@ V lossfn(K);
 
 // optimization functions:
 K optstate(B,B,Ptr);
-V optfree(Cast,V*);
 V optfn(K);
 
 // global environment

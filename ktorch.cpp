@@ -19,6 +19,7 @@ V dictadd(K x,cS s,K v){K *k=kK(x); js(&k[0],cs(s)); jk(&k[1],v);}
 B xind(K x,J i) {return !x->t && -1<i && i<x->n;}
 K kptr(V *v){return knk(1,kj((intptr_t)v));}
 B xptr(K x) {return !x->t && x->n==1 && kK(x)[0]->t==-KJ;}
+B xptr(K x,J i) {return xind(x,i) && xptr(kK(x)[i]);}
 B xptr(K x,Ptr &p) {return xptr(x) ? p=(Ptr)kK(x)[0]->j,true : false;}
 B xptr(K x,J i,Ptr &p) {return xind(x,i) && xptr(kK(x)[i],p);}
 
@@ -853,17 +854,11 @@ K kexpand(J n,const F       *e) {return kex<F>      (n,e) ? kf(e[0]) : klist(n,e
 // -----------------------------------------------------------------------------------------
 KAPI kfree(K x){
  KTRY
-  Ptr p=nullptr;
-  switch(xptr(x,p) ? p->t : Class::undefined) {
-   case Class::tensor:     delete (Tensor*)p->v; break;
-   case Class::sequential: delete (Sequential*)p->v; break;
-   case Class::loss:       lossfree(p); break;
-   case Class::optimizer:  optfree(p->c,p->v); break;
-   case Class::vector:     delete (std::vector<Tensor>*)p->v; break;
-   default: return KERR("Not a recognized pointer");
-  }
-  return delete p,(K)0;
- KCATCH("Unable to free object")
+  if(auto* a=xtag(x))
+   return delete a, (K)0;
+  else
+   return KERR("Not a recognized pointer, unable to free");
+ KCATCH("free");
 }
 
 KAPI kstate(K x) {

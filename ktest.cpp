@@ -1,55 +1,6 @@
 #include "ktorch.h"
 #include "kmodule.h"
 
-/*
-struct TORCH_API Kloss : public Ktag {
- std::shared_ptr<Loss> l;
- //Kloss(const Sequential& x) : s(std::move(x)) {a=Class::loss; c=Cast::sequential;}
-};
-*/
-
-K kten1(const Tensor& t)     {return kptr(new Kten(t));}
-
-KAPI kfree1(K x) {
- if(auto* a=xtag(x)) {
-  delete a;
-  return (K)0;
- } else {
-  return KERR("Not a recognized pointer");
- }
-}
-
-KAPI ten1(K x) {
- KTRY
-  auto t=kput(x);
-  //return ktens(t);
-  return kten1(t);
- KCATCH("tensor");
-}
-
-KAPI ten2(K x) {
- KTRY
-  Tensor t;
-  if(xten(x,t)) {
-   //std::cerr << "Ref count: " << t.use_count() << ", weak ref count: " << t.weak_use_count() << "\n";
-   return kget(t);
-  } else {
-   return (K)0;
-  }
- KCATCH("tensor");
-}
-
-KAPI ten3(K x) {
- KTRY
-  if(auto* t=xten(x)) {
-   std::cerr << "Ref count: " << t->use_count() << ", weak ref count: " << t->weak_use_count() << "\n";
-   return kget(*t);
-  } else {
-   return (K)0;
-  }
- KCATCH("tensor");
-}
-
 void errfail() {
  if(true) {
   AT_ERROR("err");

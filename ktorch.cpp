@@ -411,8 +411,6 @@ Kloss* xloss(K x,J i) {return xind(x,i) ? xloss(kK(x)[i]) : nullptr;}
 
 Kopt* xoptim(K x) {auto* a=xtag(x); return a ? (Kopt*)a : nullptr;}
 Kopt* xoptim(K x,J i) {return xind(x,i) ? xoptim(kK(x)[i]) : nullptr;}
-B xoptim(K x,Ptr &p) {return xptr(x,p) && p->t==Class::optimizer;}
-B xoptim(K x,J i,Ptr &p) {return xind(x,i) && xoptim(kK(x)[i],p);}
 
 // ------------------------------------------------------------------------------------------------------
 // xnum - check for double or long int k scalar, set double & return true, else false
@@ -918,7 +916,7 @@ KAPI kto(K x,K y,K z) {
     AT_ERROR("No device or datatype specified");
    switch(p->t) {
     case Class::tensor:     ktento(p,o,b); break;
-    case Class::sequential: kseqto(p,o,b); break;
+    case Class::sequential: kseqto(*(Sequential*)p->v,o,b); break;
     default: AT_ERROR("Unrecognized pointer from k, expecting allocated tensor or module");
    }
   }
@@ -933,7 +931,7 @@ KAPI kdetail(K x) {
    if(n<0 || n>2)
     return KERR("Specify level of detail: 0,1,2");
    switch(p->t) {
-    case Class::tensor:  return tensordetail(p,n);
+    case Class::tensor:  return tensordetail((Tensor*)p->v,n);
     default:           return KERR("Unrecognized pointer");
    }
   } else {

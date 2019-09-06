@@ -13,12 +13,12 @@
 
 // ----------------------------------------------------------------------------
 // kseq - allocate an object to store a pointer to a sequential module
-// kseqto - given ptr to allocated sequential module, change device/data type
+// kseqto - given sequential module & options, change device/data type
 // ----------------------------------------------------------------------------
 K kseq(const Sequential& q) {return kptr(new Kseq(q));}
 
-V kseqto(Ptr &p,TensorOptions &o,B b) {
- Sequential q=*(Sequential*)p->v; auto t=torch::typeMetaToScalarType(o.dtype());
+V kseqto(Sequential &q,TensorOptions &o,B b) {
+ auto t=torch::typeMetaToScalarType(o.dtype());
  if(o.has_device() && o.has_dtype()) q->to(o.device(),t,b);
  else if(o.has_device())             q->to(o.device(),b);
  else                                q->to(t,b);

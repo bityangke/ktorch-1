@@ -92,15 +92,16 @@ typedef struct {
 enum class Class:char {
  undefined=0,
  tensor,
+ vector,
  sequential,
  loss,
  optimizer,
- vector
+ model
 };
 
 enum class Cast:char {
  undefined=0, 
- tensor,      sequential,                   //basic structures
+ tensor,      sequential,  model,           //basic structures
 
  adaptavg1d,  adaptavg2d,  adaptavg3d,      //modules
  adaptmax1d,  adaptmax2d,  adaptmax3d,
@@ -195,6 +196,15 @@ struct TORCH_API Kopt : public Ktag {
  OptimizerBase* get() {TORCH_CHECK(!is_empty(), "Undefined optimizer"); return o.get();}
 };
 
+struct TORCH_API Kmodel : public Ktag {
+ Cast lc;          // loss fn
+ Cast oc;          // optimizer
+ Sequential q;     // sequential module
+ Lossptr l;        // shared ptr to loss module
+ Optptr o;         // shared ptr to optimizer
+ Kmodel(Sequential x,Kloss y,Kopt z) : lc(y.c),oc(z.c),q(x),l(y.l),o(z.o) {a=Class::model; c=Cast::model;}
+};
+
 typedef struct {
  Class t;          // tensor, optimizer, etc.
  Cast c;           // used to cast pointer
@@ -280,8 +290,6 @@ Kloss* xloss(K);
 Kloss* xloss(K,J);
 Kopt* xoptim(K);
 Kopt* xoptim(K,J);
-B xoptim(K,Ptr&);
-B xoptim(K,J,Ptr&);
 std::vector<Tensor>* xvec(K);
 std::vector<Tensor>* xvec(K,J);
 
@@ -373,14 +381,14 @@ V kswitch(Ptr&,const Tensor&);
 V ktento(Ptr&,TensorOptions&,B);
 K ktenpair(B,Tensor&,Tensor&);
 K kten3(B,Tensor&,Tensor&,Tensor&);
-K tensordetail(Ptr,I);
+K tensordetail(Tensor*,I);
 V tensorcopy(Tensor&,const Tensor&,B async=false);
 V tensorfn(K);
 
 // module routines:
 //K kseq(const Sequential&,Cast c=Cast::sequential);
 K kseq(const Sequential&);
-V kseqto(Ptr&,TensorOptions&,B);
+V kseqto(Sequential&,TensorOptions&,B);
 V modfn(K);
 K mstate(K);
 

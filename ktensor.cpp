@@ -374,8 +374,8 @@ ZK tensordata(B b,Tensor &t) {  //tensor flag: true-use tensor, false-use storag
  return x;
 }
 
-K tensordetail(Ptr p,I y) {
- auto t=(Tensor*)p->v; B s=t->is_sparse(); J n=t->dim();
+K tensordetail(Tensor *t,I y) {
+ B s=t->is_sparse(); J n=t->dim();
  K x=xD(ktn(KS,0),ktn(0,0)),*a=&kK(x)[0],*b=&kK(x)[1];
  js(a,cs("device"));   jk(b,ks(optsym(t->device())));
  js(a,cs("dtype"));    jk(b,ks(optsym(t->dtype())));

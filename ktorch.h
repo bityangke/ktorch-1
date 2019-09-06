@@ -181,14 +181,18 @@ struct TORCH_API Kseq : public Ktag {
  Kseq(const Sequential& x) : q(std::move(x)) {a=Class::sequential; c=Cast::sequential;}
 };
 
-struct TORCH_API Kopt : public Ktag {
- Optptr o;
- Kopt(Cast x,const Optptr& y) : o(std::move(y)) {a=Class::optimizer; c=x;}
-};
-
 struct TORCH_API Kloss : public Ktag {
  Lossptr l;
  Kloss(Cast x,const Lossptr& y) : l(std::move(y)) {a=Class::loss; c=x;}
+ bool is_empty() const noexcept {return l == nullptr;}
+ Loss* get() {TORCH_CHECK(!is_empty(), "Undefined loss function"); return l.get();}
+};
+
+struct TORCH_API Kopt : public Ktag {
+ Optptr o;
+ Kopt(Cast x,const Optptr& y) : o(std::move(y)) {a=Class::optimizer; c=x;}
+ bool is_empty() const noexcept {return o == nullptr;}
+ OptimizerBase* get() {TORCH_CHECK(!is_empty(), "Undefined optimizer"); return o.get();}
 };
 
 typedef struct {
@@ -207,6 +211,7 @@ B xptr(K,J);
 B xptr(K,Ptr&);
 B xptr(K,J,Ptr&);
 Ktag* xtag(K);
+Ktag* xtag(K,J);
 
 B match(const Scalar&,const Scalar&);
 K kscalar(const Scalar&);
@@ -271,8 +276,10 @@ B xseq(K,Sequential&);
 B xseq(K,J,Sequential&);
 Sequential* xseq(K);
 Sequential* xseq(K,J);
-B xloss(K,Ptr&);
-B xloss(K,J,Ptr&);
+Kloss* xloss(K);
+Kloss* xloss(K,J);
+Kopt* xoptim(K);
+Kopt* xoptim(K,J);
 B xoptim(K,Ptr&);
 B xoptim(K,J,Ptr&);
 std::vector<Tensor>* xvec(K);
@@ -378,8 +385,7 @@ V modfn(K);
 K mstate(K);
 
 // loss functions:
-K lossdict(B,B,Ptr);
-V lossfree(Ptr);
+K lossdict(B,B,Cast,Loss*);
 V lossfn(K);
 
 // optimization functions:

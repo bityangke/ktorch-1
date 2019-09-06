@@ -24,6 +24,7 @@ B xptr(K x,Ptr &p) {return xptr(x) ? p=(Ptr)kK(x)[0]->j,true : false;}
 B xptr(K x,J i,Ptr &p) {return xind(x,i) && xptr(kK(x)[i],p);}
 
 Ktag* xtag(K x) {return xptr(x) ? (Ktag*)kK(x)[0]->j : nullptr;}
+Ktag* xtag(K x,J i) {return xind(x,i) ? xtag(kK(x)[0]) : nullptr;}
 
 B xhelp(K x) {return x->t == -KS && x->s == env().help;}
 B xhelp(K x,S &s) {
@@ -405,9 +406,11 @@ Sequential* xseq(K x) {
 B xseq(K x,J i,Sequential& s) {return xind(x,i) && xseq(kK(x)[i],s);}
 Sequential* xseq(K x,J i) {return xind(x,i) ? xseq(kK(x)[i]) : nullptr;}
 
-B xloss(K x,Ptr &p) {return xptr(x,p) && p->t==Class::loss;}
-B xloss(K x,J i,Ptr &p) {return xind(x,i) && xloss(kK(x)[i],p);}
+Kloss* xloss(K x) {auto* a=xtag(x); return a ? (Kloss*)a : nullptr;}
+Kloss* xloss(K x,J i) {return xind(x,i) ? xloss(kK(x)[i]) : nullptr;}
 
+Kopt* xoptim(K x) {auto* a=xtag(x); return a ? (Kopt*)a : nullptr;}
+Kopt* xoptim(K x,J i) {return xind(x,i) ? xoptim(kK(x)[i]) : nullptr;}
 B xoptim(K x,Ptr &p) {return xptr(x,p) && p->t==Class::optimizer;}
 B xoptim(K x,J i,Ptr &p) {return xind(x,i) && xoptim(kK(x)[i],p);}
 
@@ -871,12 +874,32 @@ KAPI kstate(K x) {
    AT_ERROR((p->t==Class::loss ? "Loss" : "Optimizer")," state expects ptr or (ptr;options flag)");
   switch(p->t) {
    case Class::sequential: return mstate(x);
-   case Class::loss:       return lossdict(a,true,p);
+// case Class::loss:       return lossdict(a,true,p);
    case Class::optimizer:  return optstate(a,true,p);
    case Class::tensor:     AT_ERROR("state not defined for tensor");
    default: return KERR("Not a recognized pointer");
   }
  KCATCH("Unable to get object state")
+}
+
+KAPI state(K x) {
+ KTRY
+  B a=env().alloptions; Ktag *g;
+  if(!((g=xtag(x)) || (g=xtag(x,0))))
+   AT_ERROR("state expects a pointer to previously allocated module, optimizer or loss function");
+  if((g->a==Class::loss || g->a==Class::optimizer) &&
+    !(x->n==1 || (x->n==2 && xbool(x,1,a))))
+   AT_ERROR((g->a==Class::loss ? "Loss" : "Optimizer")," state expects ptr or (ptr;options flag)");
+  switch(g->a) {
+/*
+   case Class::sequential: return mstate(x);
+   case Class::loss:       return lossdict(a,true,p);
+   case Class::optimizer:  return optstate(a,true,p);
+*/
+   case Class::tensor:     AT_ERROR("state not defined for tensor");
+   default: return KERR("Not a recognized pointer");
+  }
+ KCATCH("state")
 }
 
 KAPI kto(K x,K y,K z) {

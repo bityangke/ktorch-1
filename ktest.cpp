@@ -66,15 +66,6 @@ KAPI namecheck(K x) {
   return(K)0;
 }
 
-template<typename M> K mptr(const M &m,Cast c) {
- auto o=torch::make_unique<Obj>();
- auto p=torch::make_unique<M>(m);
- o->t=Class::sequential;
- o->c=c;
- o->v=p.release();
- return kptr(o.release());
-}
-
 KAPI dupname(K x) {
 KTRY
  Sequential q(torch::nn::modules_ordered_dict(
@@ -82,35 +73,6 @@ KTRY
    {"B", torch::nn::Conv2d(3,4,5)}}));
  return (K)0;
 KCATCH("duplicate names");
-}
-
-class Eg {
- public:
-  int id;
-  Eg() {std::cerr << "creating   Eg with id=" << id <<"\n";}
-  ~Eg(){std::cerr << "destroying Eg with id=" << id <<"\n";}
-  void SetId(int x){id=x;}
-};
-
-typedef std::shared_ptr<Eg> EgPtr;
-
-KAPI f1(K x) {
- auto p=std::make_shared<Eg>();
- p->SetId(x->j);
- std::cerr << "ref count: " << p.use_count() << "\n";
- auto u=torch::make_unique<EgPtr>(p);
- std::cerr << "ref count: " << p.use_count() << "\n";
- return kj((intptr_t)u.release());
-}
-
-KAPI f2(K x) {
- auto *u=(EgPtr*)x->j;
- auto p=*u;
- std::cerr <<"returning to Eg with id=" << p->id <<"\n";
- std::cerr << "ref count: " << p.use_count() << "\n";
- delete u;
- std::cerr << "ref count after delete: " << p.use_count() << "\n";
- return(K)0;
 }
 
 KAPI kdict(K x) {
@@ -204,16 +166,6 @@ KAPI modptr(K x) {
  std::cout << "ref count: "<< "ref count: "<< p->weight.use_count() << "\n";
  std::cout << p->weight << "\n";
  return kptr(p.release());
-}
-
-KAPI modget(K x) {
- Ptr p;
- if (xptr(x,p)) {
-  auto l=(torch::nn::LinearImpl*)p;
-  return kten(l->weight);
- } else {
-  return (K)0;
- }
 }
 
 V shuffle(std::vector<Tensor>& v) {
@@ -424,113 +376,3 @@ KAPI sparse1(K x) {
  //return kten(torch::sparse_coo_tensor(i.t(),v));
  return kten(torch::sparse_coo_tensor(i.t(),v,m.sizes()));
 }
-
-KAPI refs(K x) {
- Tensor t=torch::randn({3,4});
- std::cout << "sizeof tensor: " << sizeof(Tensor) << "\n";
- std::cout << "Tensor  refcount: " << t.use_count()           << "\n";
- std::cout << "Storage refcount: " << t.storage().use_count() << "\n";
-//const c10::intrusive_ptr<TensorImpl, UndefinedTensorImpl>
- auto p=t.getIntrusivePtr();
- std::cout << "ptr get: " << (intptr_t)p.get() << "\n";
- auto ti=p.release();
- std::cout << "Tensor defined(after release): " << t.defined() << "\n";
- std::cout << "Intrusive pointer: " << (intptr_t)p << "\n";
- std::cout << "Intrusive pointer released: " << (intptr_t)ti << "\n";
- std::cout << "Tensor  refcount: " << t.use_count()           << "\n";
- return(K)0;
-}
-
-V stor(const Tensor &t) {
- auto s=t.storage();
- auto r=s.use_count();
- auto n=s.size();
- auto e=s.elementSize();
- auto v=s.data();
- printf("storage pointer: %ld, reference count: %lu, number of elements: %ld, element size: %ld\n",(intptr_t)v,r,n,e);
-}
-
-V ten(const Tensor &t) {
- auto r=t.use_count();
- auto w=t.weak_use_count();
- auto v=t.data_ptr();           // storage ptr + offset  t.data() complicated by template(?)
- auto o=t.storage_offset();     // in number of elements, not bytes
- auto n=t.numel();
- auto g=t.unsafeGetTensorImpl();     //TensorImpl *  get();
- auto p=t.getIntrusivePtr();         // c10::intrusive_ptr<TensorImpl,UndefinedTensorImpl>
- std::cout << "tensor pointer: " <<  (intptr_t)g <<
-              ", data pointer: " <<  (intptr_t)v <<
-              ", reference count: " << r <<
-              ", weak count: " << w <<
-              ", number of elements: " << n <<
-              ", offset: " << o << "\n";
-// sizes,strides  size(i),stride(i);  set_sizes, set_strides
-// is_variable is_empty is_contiguous is_wrapped_number
-}
-
-KAPI info(K x) {Tensor t; if(xten(x,t)) ten(t), stor(t); return (K)0;}
-
-/*
-KAPI ktest4(K x,K y,K z) {
- Tensor a,b,r;
- if(xten(x,0,a) && xten(x,1,b)) {
-  if(xempty(z)) {
-   r=a.type().tensor({});
-   mm_out(r,a,b);
-   return kten(r);
-  } else if(xten(x,2,r)) {
-   mm_out(r,a,b);
-   return r1(z);
-  }
- }
- return(K)0;
-}
-
-KAPI transpose(K x) {
- KTRY
-  Tensor a; J n=-1,*s;
-  if (xten(x,a) || (xten(x,0,a) && xlong(x,1,n,s) && x->n==2 && n==2)) {
-   Tensor t=(n==-1) ? torch::t(a) : torch::transpose(a,s[0],s[1]);
-   return kten(t);
-  } else {
-   return KERR("Unrecognized arg(s) for transpose, supply tensor or (tensor;dims)");
-  }
- KCATCH("Transpose error");
-}
-
-KAPI nonzero(K x) {
- auto a=kput(x);
- auto t=torch::nonzero(a);
- return kten(t);
-}
-
-typedef V*(*voidfn)();
-typedef Tensor(*f1)(IntList,const TensorOptions&);
-
-V tensorerr(K x,Tensormode m,B in,B out) {
- auto a="Unrecognized arg(s) for tensor creation via: ";
- auto b=in ? " with input tensor" : (out ? " with output tensor" : "");
- AT_ERROR(a,xx->s,b);
-}
-
-J jtensor(Tensor& t) {return(intptr_t)new Tensor(t);}
-
-KAPI ktenmake(K x) {
- Tensor t=torch::randn({3,4});
- std::cout <<"Tensor pointer: " << t.get() << "\n";
- printf("Tensor pointer: %ld\n",(intptr_t)t.get());
-  std::cout << "Tensor reference count: " << t.get()->use_count() << "\n";
-  std::cout << t << "\n";
- return kten(t);
-}
-
-cS tensorhelp(Tensormode m) {
- return "Line 1\n"
-        "Line 2";
-}
-
-KAPI tensorhelp(K x) {
- return kp((S)tensorhelp(Tensormode::zeros));
-}
-
-*/

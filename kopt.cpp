@@ -414,15 +414,15 @@ ZK optinit(S s,K x,K y) {
  return kptr(new Kopt(c,o));
 }
 
-K optstate(B a,B b,Ptr p) {
- F r; S s; omap(p->c,s,r); K k,v,x,y;
- switch(p->c) {
-  case Cast::adagrad: {auto m=(Adagrad*)p->v; x=adagrad(a,r,m); if(b) y=adagrad(m); break;}
-  case Cast::adam:    {auto m=(Adam*)p->v;    x=adam(a,r,m);    if(b) y=adam(m);    break;}
-  case Cast::lbfgs:   {auto m=(LBFGS*)p->v;   x=lbfgs(a,r,m);   if(b) y=lbfgs(m);   break;}
-  case Cast::rmsprop: {auto m=(RMSprop*)p->v; x=rmsprop(a,r,m); if(b) y=rmsprop(m); break;}
-  case Cast::sgd:     {auto m=(SGD*)p->v;     x=sgd(a,r,m);     if(b) y=sgd(m);     break;}
-  default: AT_ERROR("Unrecognized optimizer; ",(I)p->c); break;
+K optstate(B a,B b,Cast c,OptimizerBase *o) {
+ F r; S s; omap(c,s,r); K k,v,x,y;
+ switch(c) {
+  case Cast::adagrad: {auto m=(Adagrad*)o; x=adagrad(a,r,m); if(b) y=adagrad(m); break;}
+  case Cast::adam:    {auto m=(Adam*)o;    x=adam(a,r,m);    if(b) y=adam(m);    break;}
+  case Cast::lbfgs:   {auto m=(LBFGS*)o;   x=lbfgs(a,r,m);   if(b) y=lbfgs(m);   break;}
+  case Cast::rmsprop: {auto m=(RMSprop*)o; x=rmsprop(a,r,m); if(b) y=rmsprop(m); break;}
+  case Cast::sgd:     {auto m=(SGD*)o;     x=sgd(a,r,m);     if(b) y=sgd(m);     break;}
+  default: AT_ERROR("Unrecognized optimizer; ",(I)c); break;
  }
  if(b) {
   k=statekeys(); v=ktn(0,k->n);
@@ -441,21 +441,21 @@ K optstate(B a,B b,Ptr p) {
 
 KAPI opt(K x) {
  KTRY
-  B a=env().alloptions; S s; Ptr p=nullptr,q=nullptr;
-  if(xsym(x,s) || (xsym(x,0,s) && (xptr(x,1,p) || xempty(x,1)))) {
+  B a=env().alloptions; S s; Kopt *o;
+  if(xsym(x,s) || (xsym(x,0,s) && (xptr(x,1) || xempty(x,1)))) {
    return optinit(s,x);
   } else if(xdict(x)) {
    return optinit(statesym(State::module,x),
                   statedict(State::options,x));
-  } else if(xdict(x,0) && xptr(x,1,p) && x->n==2) { // ALLOW empty list or null for pointer??
+  } else if(xdict(x,0) && x->n==2 && (xptr(x,1) || xempty(x,1))) {
    K d=kK(x)[0];
    return optinit(statesym(State::module,d),
                   statedict(State::options,d),
                   statedict(State::buffers,d));
-  } else if(xoptim(x,p) || (xbool(x,1,a) && xoptim(x,0,p) && x->n==2)) {
-   return optstate(a,false,p);
-  } else if(xoptim(x,0,p) && xptr(x,1,q) && x->n==2) {
-   return ((OptimizerBase*)p->v)->add_parameters(optparms(x,1)), (K)0;
+  } else if((o=xoptim(x)) || (xbool(x,1,a) && (o=xoptim(x,0)) && x->n==2)) {
+   return optstate(a,false,o->c,o->get());
+  } else if((o=xoptim(x,0)) && xptr(x,1) && x->n==2) {
+   return o->get()->add_parameters(optparms(x,1)), (K)0;
   } else {
    AT_ERROR("Unrecognized optimizer arg(s)");
   }
@@ -463,12 +463,11 @@ KAPI opt(K x) {
 }
 
 KAPI kstep(K x) {
- Ptr l,p; Sequential q;
- if(xoptim(x,p)) {
-  if(p->c == Cast::lbfgs)
+ Kopt *o;
+ if((o=xoptim(x))) {
+  if(o->c == Cast::lbfgs)
    AT_ERROR("LBFGS optimizer requires model, loss & inputs");
-  ((Optimizer*)p->v)->step();
- } else if(xoptim(x,0,p) && xseq(x,1,q) && xloss(x,2,l)) {
+  ((Optimizer*)o->get())->step();
  }
  return (K)0;
 }
@@ -476,60 +475,4 @@ KAPI kstep(K x) {
 V optfn(K x) {
  fn(x, "opt",  KFN(opt),1);
  fn(x, "step", KFN(kstep),1);
-}
-
-KAPI vec(K a,K b) {
-KTRY
- Ptr p; Sequential m;
- xoptim(a,p); xseq(b,m);
- auto* o=(Adam*)p->v;
- auto x=torch::ones({10,5},torch::kCPU);
- //auto x=torch::ones({10,5},torch::kCUDA);
- auto y=m->forward(x).sum();
- std::cerr << m << "\n";
- std::cerr << y << "\n";
- y.backward();
- o->step();
- y=m->forward(x).sum();
- std::cerr << y << "\n";
- y.backward();
- o->step();
- y=m->forward(x).sum();
- std::cerr << y << "\n";
- y.backward();
- o->step();
- return (K)0;
-KCATCH("trouble");
-}
- 
-KAPI vec1(K a) {
- auto m=torch::nn::Linear(5,2); m->to(torch::kCUDA);
- auto* o=new torch::optim::Adam(m->parameters(),torch::optim::AdamOptions(.001));
- if(o->exp_average_buffers.size()) {
-  std::cerr << o->exp_average_buffers[0] << "\n";
-  std::cerr << o->exp_average_buffers[0].device() << "\n";
- } else {
-  std::cerr << "exp_average_buffers is empty\n";
- }
- auto x=torch::ones({10,5},torch::kCUDA);
- auto y=m->forward(x).sum();
- std::cerr << y << "\n";
- y.backward();
- o->step();
- y=m->forward(x).sum();
- std::cerr << y << "\n";
- y.backward();
- o->step();
- y=m->forward(x).sum();
- std::cerr << y << "\n";
- y.backward();
- o->step();
- K r=xD(ktn(KS,0),ktn(0,0));
- std::cerr << o->exp_average_buffers[0] << "\n";
- std::cerr << o->exp_average_buffers[0].device() << "\n";
- OPTBUFFER(r,o,step_buffers);
- OPTBUFFER(r,o,exp_average_buffers);
- OPTBUFFER(r,o,exp_average_sq_buffers);
- OPTBUFFER(r,o,max_exp_average_sq_buffers);
- return r;
 }

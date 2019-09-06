@@ -405,41 +405,39 @@ KAPI ctc(K a) {
 }
 
 // ---------------------------------------------------------------------------------------------------
-// lossfree - free previously allocated loss module
 // lossinit - initialize loss modules, return k pointer
 // lossopt - retrieve loss module options, return k dictionary of symbol -> setting
 // lossdict - dictionary of loss module & options or full state (w'class, empty name, parms & buffers)
+// lossfwd - given loss object, calls forward function on remaining inputs and returns loss
+// loss - main api function that creates/calls loss objects and queries their properties
 // ---------------------------------------------------------------------------------------------------
-V lossfree(Ptr p) {delete(Loss*)p->v;}
-
 ZK lossinit(S s,K x,J i) {
- J j; F m; Cast c=lmap(s); Tensor w; int64_t r;
- auto u=torch::make_unique<Obj>(); u->t=Class::loss; u->c=c;
+ J j; F m; Cast c=lmap(s); Tensor w; int64_t r; Lossptr a;
  switch(c) {
-  case Cast::bce:         u->v=new BCELoss(reduce(s,x,i)); break;
-  case Cast::kl:          u->v=new KLDivLoss(reduce(s,x,i)); break;
-  case Cast::l1:          u->v=new L1Loss(reduce(s,x,i)); break;
-  case Cast::mse:         u->v=new MSELoss(reduce(s,x,i)); break;
-  case Cast::multilabel:  u->v=new MultiLabelMarginLoss(reduce(s,x,i)); break;
-  case Cast::smoothl1:    u->v=new SmoothL1Loss(reduce(s,x,i)); break;
-  case Cast::softmargin:  u->v=new SoftMarginLoss(reduce(s,x,i)); break;
+  case Cast::bce:         a=std::make_shared<BCELoss>(reduce(s,x,i)); break;
+  case Cast::kl:          a=std::make_shared<KLDivLoss>(reduce(s,x,i)); break;
+  case Cast::l1:          a=std::make_shared<L1Loss>(reduce(s,x,i)); break;
+  case Cast::mse:         a=std::make_shared<MSELoss>(reduce(s,x,i)); break;
+  case Cast::multilabel:  a=std::make_shared<MultiLabelMarginLoss>(reduce(s,x,i)); break;
+  case Cast::smoothl1:    a=std::make_shared<SmoothL1Loss>(reduce(s,x,i)); break;
+  case Cast::softmargin:  a=std::make_shared<SoftMarginLoss>(reduce(s,x,i)); break;
 
-  case Cast::bcelogits:   wtargs(c,s,x,i,w,j,r); u->v=new BCEWithLogitsLoss(w,r); break;
-  case Cast::multisoft:   wtargs(c,s,x,i,w,j,r); u->v=new MultiLabelSoftMarginLoss(w,r); break;
-  case Cast::ce:          wtargs(c,s,x,i,w,j,r); u->v=new CrossEntropyLoss(w,j,r); break;
-  case Cast::nll:         wtargs(c,s,x,i,w,j,r); u->v=new NLLLoss(w,j,r); break;
+  case Cast::bcelogits:   wtargs(c,s,x,i,w,j,r); a=std::make_shared<BCEWithLogitsLoss>(w,r); break;
+  case Cast::multisoft:   wtargs(c,s,x,i,w,j,r); a=std::make_shared<MultiLabelSoftMarginLoss>(w,r); break;
+  case Cast::ce:          wtargs(c,s,x,i,w,j,r); a=std::make_shared<CrossEntropyLoss>(w,j,r); break;
+  case Cast::nll:         wtargs(c,s,x,i,w,j,r); a=std::make_shared<NLLLoss>(w,j,r); break;
 
-  case Cast::hinge:       marginargs(c,s,x,i,m,r); u->v=new HingeEmbeddingLoss(m,r); break;
-  case Cast::cosineloss:  marginargs(c,s,x,i,m,r); u->v=new CosineEmbeddingLoss(m,r); break;
-  case Cast::margin:      marginargs(c,s,x,i,m,r); u->v=new MarginRankingLoss(m,r); break;
+  case Cast::hinge:       marginargs(c,s,x,i,m,r); a=std::make_shared<HingeEmbeddingLoss>(m,r); break;
+  case Cast::cosineloss:  marginargs(c,s,x,i,m,r); a=std::make_shared<CosineEmbeddingLoss>(m,r); break;
+  case Cast::margin:      marginargs(c,s,x,i,m,r); a=std::make_shared<MarginRankingLoss>(m,r); break;
 
-  case Cast::multimargin: {Scalar p,m; multiargs(x,i,p,m,w,r); u->v=new MultiMarginLoss(p,m,w,r); break;}
-  case Cast::triplet:     {B s;F e,p; triargs(x,i,m,p,e,s,r); u->v=new TripletMarginLoss(m,p,e,s,r); break;}
-  case Cast::poissonloss: {B l,f;F e; poissonargs(x,i,l,f,e,r); u->v=new PoissonNLLLoss(l,f,e,r); break;}
-  case Cast::ctc:         {B z;int64_t b; ctc1(x,i,b,z,r); u->v=new CTCLoss(b,z,r); break;}
+  case Cast::multimargin: {Scalar p,m; multiargs(x,i,p,m,w,r);  a=std::make_shared<MultiMarginLoss>(p,m,w,r); break;}
+  case Cast::triplet:     {B s;F e,p; triargs(x,i,m,p,e,s,r);   a=std::make_shared<TripletMarginLoss>(m,p,e,s,r); break;}
+  case Cast::poissonloss: {B l,f;F e; poissonargs(x,i,l,f,e,r); a=std::make_shared<PoissonNLLLoss>(l,f,e,r); break;}
+  case Cast::ctc:         {B z;int64_t b; ctc1(x,i,b,z,r);      a=std::make_shared<CTCLoss>(b,z,r); break;}
   default: AT_ERROR("Unrecognized loss function: ",s); break;
  }
- return kptr(u.release());
+ return kptr(new Kloss(c,a));
 }
 
 ZK lossopt(B a,Cast c,Loss *l) {
@@ -485,14 +483,14 @@ ZK lossopt(B a,Cast c,Loss *l) {
   if(a || d.zeroinf() != o.zeroinf()) OPTION(x, zeroinf, kb(o.zeroinf()));
   if(a || d.reduce()  != o.reduce())  OPTION(x, reduce,  ks(rmap(o.reduce())));
  } else {
-  AT_ERROR("Unrecognized loss pointer, cast: ",(I)c);
+  AT_ERROR("Unrecognized loss pointer",(I)c);
  }
  return x;
 }
  
-K lossdict(B a,B b,Ptr p) {
+K lossdict(B a,B b,Cast c,Loss* l) {
  //a:true if all options, b:true if full state
- K k,v; Cast c=p->c; auto *l=(Loss*)p->v;
+ K k,v;
  if(b) {
   k=statekeys(); v=ktn(0,k->n);
   kK(v)[0]=kc('l');   //class="l" for loss
@@ -530,15 +528,15 @@ ZK lossfwd(Cast c,Loss *l,K a) {
 
 KAPI loss(K x) {
  KTRY
-  S s; Ptr p; B a=env().alloptions;
+  S s; B a=env().alloptions; Kloss *l;
   if(xsyms(x,s) || xsym(x,0,s)) {
    return lossinit(s,x,1); //define loss from sym or (sym;option(s)..)
   } else if(xdict(x)) {    //define loss from state dictionary
    return lossinit(statesym(State::module,x),statedict(State::options,x),-1);
-  } else if(xloss(x,p) || (xbool(x,1,a) && x->n==2 && xloss(x,0,p))) {
-   return lossdict(a,false,p); //given allocated loss ptr or ptr w'boolean, return options
-  } else if(xloss(x,0,p) && x->n>1) {
-   return lossfwd(p->c,(Loss*)p->v,x); //else, run forward calculation w'loss and input,target,..
+  } else if(((l=xloss(x))) || (xbool(x,1,a) && x->n==2 && ((l=xloss(x,0))))) {
+   return lossdict(a,false,l->c,l->get()); //given allocated loss ptr or ptr w'boolean, return options
+  } else if((l=xloss(x,0)) && x->n>1) {
+   return lossfwd(l->c,l->get(),x); //else, run forward calculation w'loss and input,target,..
   } else {
    AT_ERROR("Unrecognized arg(s)");
   }

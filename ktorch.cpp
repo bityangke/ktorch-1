@@ -41,6 +41,7 @@ B xhelp(K x,S &s) {
 // kname - string from k data type
 // ksizeof - given k type, return size of element, e.g. KF -> 8
 // maptype - map k data type to/from torch type
+// mapclass - make k class enum to symbol
 // ------------------------------------------------------------------------------------------
 B match(const Scalar &x,const Scalar &y) {
  if(x.isIntegral()) {
@@ -146,6 +147,12 @@ TypeMeta maptype(A k) {
  for(auto &m:env().ktype)
   if(t==std::get<0>(m)) return std::get<1>(m);
  AT_ERROR("No torch type found for k: ",kname(k));
+}
+
+S mapclass(Class a) {
+ for(auto& m:env().kclass)
+  if(a==std::get<1>(m)) return std::get<0>(m);
+ AT_ERROR("Unrecognized k class", (I)a);
 }
 
 // ------------------------------------------------------------------------------------------
@@ -864,37 +871,16 @@ KAPI kfree(K x){
 
 KAPI kstate(K x) {
  KTRY
-  B a=env().alloptions; Ptr p;
-  if(!(xptr(x,p) || xptr(x,0,p)))
-   AT_ERROR("state expects a pointer to previously allocated object");
-  if((p->t==Class::loss || p->t==Class::optimizer) &&
-    !(x->n==1 || (x->n==2 && xbool(x,1,a))))
-   AT_ERROR((p->t==Class::loss ? "Loss" : "Optimizer")," state expects ptr or (ptr;options flag)");
-  switch(p->t) {
-   case Class::sequential: return mstate(x);
-// case Class::loss:       return lossdict(a,true,p);
-   case Class::optimizer:  return optstate(a,true,p);
-   case Class::tensor:     AT_ERROR("state not defined for tensor");
-   default: return KERR("Not a recognized pointer");
-  }
- KCATCH("Unable to get object state")
-}
-
-KAPI state(K x) {
- KTRY
-  B a=env().alloptions; Ktag *g;
+  Ktag *g;
   if(!((g=xtag(x)) || (g=xtag(x,0))))
    AT_ERROR("state expects a pointer to previously allocated module, optimizer or loss function");
-  if((g->a==Class::loss || g->a==Class::optimizer) &&
-    !(x->n==1 || (x->n==2 && xbool(x,1,a))))
-   AT_ERROR((g->a==Class::loss ? "Loss" : "Optimizer")," state expects ptr or (ptr;options flag)");
   switch(g->a) {
-/*
    case Class::sequential: return mstate(x);
-   case Class::loss:       return lossdict(a,true,p);
-   case Class::optimizer:  return optstate(a,true,p);
-*/
-   case Class::tensor:     AT_ERROR("state not defined for tensor");
+   case Class::loss:       return lossdict(g,x);
+   case Class::optimizer:  return optstate(g,x);
+   case Class::tensor:
+   case Class::vector:
+   case Class::model:      AT_ERROR("state not defined for ",mapclass(g->a));
    default: return KERR("Not a recognized pointer");
   }
  KCATCH("state")

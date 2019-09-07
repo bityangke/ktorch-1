@@ -393,11 +393,11 @@ V modfn(K);
 K mstate(K);
 
 // loss functions:
-K lossdict(B,B,Cast,Loss*);
+K lossdict(Ktag*,K);
 V lossfn(K);
 
 // optimization functions:
-K optstate(B,B,Ptr);
+K optstate(Ktag*,K);
 V optfn(K);
 
 // global environment
@@ -448,6 +448,15 @@ typedef struct {
   std::make_tuple(cs("sync"),   false)
  }};
 */
+
+ std::array<std::tuple<S,Class>,6> kclass = {{
+  std::make_tuple(cs("tensor"),     Class::tensor),          
+  std::make_tuple(cs("vector"),     Class::vector),
+  std::make_tuple(cs("sequential"), Class::sequential),
+  std::make_tuple(cs("loss"),       Class::loss),
+  std::make_tuple(cs("optimizer"),  Class::optimizer),
+  std::make_tuple(cs("model"),      Class::model)
+ }};
 
  std::array<std::tuple<S,Tensormode>,13> tensormode = {{    //tensor creation mode: map symbol -> enum
   std::make_tuple(cs("empty"),    Tensormode::empty),

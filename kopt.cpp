@@ -414,7 +414,7 @@ ZK optinit(S s,K x,K y) {
  return kptr(new Kopt(c,o));
 }
 
-K optstate(B a,B b,Cast c,OptimizerBase *o) {
+ZK optstate(B a,B b,Cast c,OptimizerBase *o) {
  F r; S s; omap(c,s,r); K k,v,x,y;
  switch(c) {
   case Cast::adagrad: {auto m=(Adagrad*)o; x=adagrad(a,r,m); if(b) y=adagrad(m); break;}
@@ -437,6 +437,15 @@ K optstate(B a,B b,Cast c,OptimizerBase *o) {
  kK(v)[b ? 1 : 0]=ks(s);
  kK(v)[b ? 3 : 1]=x;
  return xD(k,v);
+}
+
+// this version of optstate() called from generic state() function in k-level api
+K optstate(Ktag *g,K x) {
+ B a=env().alloptions;
+ if(x->n==1 || (x->n==2 && xbool(x,1,a)))
+  return optstate(a,true,g->c,((Kopt*)g)->o.get());
+ else
+  AT_ERROR("Optimizer state requires 1-2 args: previously allocated ptr or (ptr;options flag)");
 }
 
 KAPI opt(K x) {

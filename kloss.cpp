@@ -507,6 +507,15 @@ K lossdict(B a,B b,Cast c,Loss* l) {
  return xD(k,v);
 }
  
+// this version of lossdict() called from generic state() function in k-level api
+K lossdict(Ktag *g,K x) {
+ B a=env().alloptions;
+ if(x->n==1 || (x->n==2 && xbool(x,1,a)))
+  return lossdict(a,true,g->c,((Kloss*)g)->l.get());
+ else
+  AT_ERROR("Loss state requires 1-2 args: previously allocated ptr or (ptr;options flag)");
+}
+
 ZK lossfwd(Cast c,Loss *l,K a) {
  B p; Tensor r,x,y,z;
  if(a->n==3) {

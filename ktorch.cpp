@@ -5,7 +5,8 @@
 // dictadd - add an entry in a dictionary mapping symbol -> k value
 // xind - true if i is valid index of k list (type=0)
 // kptr - given void *, return K value(type=0) containing a single long scalar = (intptr_t)void *
-// xptr - given k value, set object pointer if possible and return true, else false
+// xptr - given k value, return true if enclosed scalar
+// xtag - if enclosed integer ptr detected from k, return pointer to tag structure
 // xhelp - check for single argument: `help, or 2 symbols, e.g. `help`conv2d
 // --------------------------------------------------------------------------------------------------
 S krrbuf(const char *s) {
@@ -20,9 +21,6 @@ B xind(K x,J i) {return !x->t && -1<i && i<x->n;}
 K kptr(V *v){return knk(1,kj((intptr_t)v));}
 B xptr(K x) {return !x->t && x->n==1 && kK(x)[0]->t==-KJ;}
 B xptr(K x,J i) {return xind(x,i) && xptr(kK(x)[i]);}
-B xptr(K x,Ptr &p) {return xptr(x) ? p=(Ptr)kK(x)[0]->j,true : false;}
-B xptr(K x,J i,Ptr &p) {return xind(x,i) && xptr(kK(x)[i],p);}
-
 Ktag* xtag(K x) {return xptr(x) ? (Ktag*)kK(x)[0]->j : nullptr;}
 Ktag* xtag(K x,J i) {return xind(x,i) ? xtag(kK(x)[0]) : nullptr;}
 
@@ -152,7 +150,7 @@ TypeMeta maptype(A k) {
 S mapclass(Class a) {
  for(auto& m:env().kclass)
   if(a==std::get<1>(m)) return std::get<0>(m);
- AT_ERROR("Unrecognized k class", (I)a);
+ AT_ERROR("Unrecognized class: ", (I)a);
 }
 
 // ------------------------------------------------------------------------------------------
@@ -587,6 +585,8 @@ B xto(K x,TensorOptions &o) {
  }
 }
 
+B xto(K x,J i,TensorOptions &o) {return xind(x,i) ? xto(kK(x)[i],o) : false;}
+
 B xmode(K x,S &s,Tensormode &m) {
  if(x->t == -KS) {
   for(auto &v:env().tensormode)
@@ -886,53 +886,44 @@ KAPI kstate(K x) {
  KCATCH("state")
 }
 
-KAPI kto(K x,K y,K z) {
+KAPI kto(K x) {
  KTRY
-  B b=false; Ptr p; Tensor t; TensorOptions o;
-  if(!(xptr(x,p))) {
-   AT_ERROR("1st argument is a ",kname(x->t),", expected allocated tensor or module");
-  } else if(!(xto(y,o) || xten(y,t))) {
-   AT_ERROR("2nd argument is a ",kname(y->t),", expected tensor or tensor option(s), e.g. `cuda`float");
-  } else if(!(xbool(z,b))) {
-   AT_ERROR("3rd argument is a ",kname(z->t),", expected boolean flag for async");
-  } else {
-   if(t.defined())
-    o=o.device(t.device()).dtype(t.dtype());
-   if(!(o.has_device() || o.has_dtype()))
-    AT_ERROR("No device or datatype specified");
-   switch(p->t) {
-    case Class::tensor:     ktento(p,o,b); break;
-    case Class::sequential: kseqto(*(Sequential*)p->v,o,b); break;
-    default: AT_ERROR("Unrecognized pointer from k, expecting allocated tensor or module");
+  Ktag *g; Tensor t; TensorOptions o;
+  if((g=xtag(x,0)) && (xto(x,1,o) || xten(x,1,t))) {
+   switch(g->a) {
+    case Class::tensor:     return tento((Kten*)g,o,t);
+    case Class::vector:     return tento((Kvec*)g,o,t);
+    case Class::sequential: return seqto((Kseq*)g,o,t);
+    default: AT_ERROR("to() not implemented for: ",mapclass(g->a));
    }
+  } else {
+   AT_ERROR("to: unrecognized arg(s)");
   }
-  return (K)0;
  KCATCH("to");
 }
 
 KAPI kdetail(K x) {
  KTRY
-  I n=0; Ptr p=nullptr;
-  if(xptr(x,p) || (xptr(x,0,p) && xlevel(x,1,n) && x->n==2)) {
-   if(n<0 || n>2)
-    return KERR("Specify level of detail: 0,1,2");
-   switch(p->t) {
-    case Class::tensor:  return tensordetail((Tensor*)p->v,n);
+  I n=0; Ktag *g;
+  if((g=xtag(x)) || ((g=xtag(x,0)) && xlevel(x,1,n) && x->n==2)) {
+   TORCH_CHECK((n>-1 && n<3),"Specify level of detail: 0,1,2");
+   switch(g->a) {
+    case Class::tensor:  return tensordetail(&((Kten*)g)->t,n);
     default:           return KERR("Unrecognized pointer");
    }
   } else {
-   return KERR("Expected argument of ptr or (ptr;level)");
+   return KERR("detail: unrecognized arg(s)");
   }
- KCATCH("Unable to get detail")
+ KCATCH("detail")
 }
 
 KAPI kzerograd(K x) {
  KTRY
-  Ptr p=nullptr;
-  switch(xptr(x,p) ? p->t : Class::undefined) {
-   case Class::tensor: {auto *t=(Tensor*)p->v; if(t->grad().defined()) t->grad().detach().zero_(); break;}
-   case Class::sequential:(*(Sequential*)p->v)->zero_grad(); break;
-   case Class::optimizer:  ((OptimizerBase*)p->v)->zero_grad(); break;
+  Ktag *g;
+  switch((g=xtag(x)) ? g->a : Class::undefined) {
+   case Class::tensor:     {auto& t=((Kten*)g)->t; if(t.grad().defined()) t.grad().detach().zero_(); break;}
+   case Class::sequential: ((Kseq*)g)->q->zero_grad(); break;
+   case Class::optimizer:  ((Kopt*)g)->o->zero_grad(); break;
    default: AT_ERROR("Expecting pointer to tensor, module or optimizer");
   }
   return (K)0;
@@ -977,6 +968,8 @@ KAPI cudadevice(K x) {
 // ---------------------------------------------------------------------------------------------
 // optsym - given tensor options, return underlying device,data type,layout & grad/nograd as sym
 // optmap - given tensor options, return dictionary of attribute -> setting
+// optkey - symbol keys/cols for tensor option dictionary or table
+// optval - symbol vector/lists of option values
 // ---------------------------------------------------------------------------------------------
 S& optsym(const torch::Device& d) {
  for(auto &m:env().device) if(d==std::get<1>(m)) return std::get<0>(m);
@@ -998,13 +991,32 @@ S& optsym(const bool& g) {
  AT_ERROR("Unrecognized gradient setting: ",g);
 }
 
+K optkey() {
+ K x=ktn(KS,4);
+ kS(x)[0]=cs("device");
+ kS(x)[1]=cs("dtype");
+ kS(x)[2]=cs("layout");
+ kS(x)[3]=cs("gradient");
+ return x;
+}
+
+K optval(const TensorOptions &o,K x,J i) {
+ if(x->t==KS) {
+  kS(x)[0]=optsym(o.device());
+  kS(x)[1]=optsym(o.dtype());
+  kS(x)[2]=optsym(o.layout());
+  kS(x)[3]=optsym(o.requires_grad());
+ } else {
+  kS(kK(x)[0])[i]=optsym(o.device());
+  kS(kK(x)[1])[i]=optsym(o.dtype());
+  kS(kK(x)[2])[i]=optsym(o.layout());
+  kS(kK(x)[3])[i]=optsym(o.requires_grad());
+ }
+ return x;
+}
+
 K optmap(const TensorOptions &o) {
- K a=ktn(KS,4),b=ktn(KS,4);
- kS(a)[0]=cs("device");   kS(b)[0]=optsym(o.device());
- kS(a)[1]=cs("dtype");    kS(b)[1]=optsym(o.dtype());
- kS(a)[2]=cs("layout");   kS(b)[2]=optsym(o.layout());
- kS(a)[3]=cs("gradient"); kS(b)[3]=optsym(o.requires_grad());
- return xD(a,b);
+ return xD(optkey(),optval(o,ktn(KS,4)));
 }
 
 // ---------------------------------------------------------------------------------------------

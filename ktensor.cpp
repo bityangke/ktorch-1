@@ -4,17 +4,9 @@
 // -------------------------------------------------------------------------
 // kten - given tensor, return ptr to struct w'attrs, void ptr to tensor
 // kvec - given ptr to vector of tensors, return ptr to struct w'attrs
-// kswitch - switch tensor pointer kept in k object
 // -------------------------------------------------------------------------
 K kten(const Tensor& t) {return kptr(new Kten(t));}
 K kvec(const std::vector<Tensor>& v) {return kptr(new Kvec(v));}
-
-V kswitch(Ptr &p,const Tensor &t) {
- if(p->t != Class::tensor) AT_ERROR("Invalid tensor pointer from k");
- auto u=torch::make_unique<Tensor>(t);
- delete (Tensor*)p->v;
- p->v=u.release();
-}
 
 // -------------------------------------------------------------------------
 // kgetscalar - return k scalar given a scalar tensor
@@ -84,16 +76,16 @@ K kget(const std::deque<torch::Tensor>& v) {
 }
 
 // -------------------------------------------------------------------------
-// ktento - change tensor device/type, free prev tensor & replace void ptr
+// tento - change tensor device/type, return new tensor if copy flag set
 // ktenpair - given a pair of tensors return pair of pointers or array
 // kten3 - given a triplet of tensors return triplet of pointers or array
 // -------------------------------------------------------------------------
-V ktento(Ptr &p,TensorOptions &o,B b) {
- Tensor r,t=*(Tensor*)p->v;
- if(o.has_device() && o.has_dtype()) r=t.to(o.device(),o.dtype(),b);
- else if(o.has_device())             r=t.to(o.device(),b);
- else                                r=t.to(o.dtype(),b);
- if(!t.is_same(r)) kswitch(p,r);
+K tento(Kten* p,const TensorOptions& o,const Tensor& t) {
+ return (K)0;
+}
+
+K tento(Kvec* v,const TensorOptions& o,const Tensor& t) {
+ return (K)0;
 }
 
 K ktenpair(B p,Tensor& a,Tensor& b) {  // p:true if returning tensor pointers
@@ -343,7 +335,7 @@ KAPI grad(K x) {
    if(p) return t.grad().defined() ? kten(t.grad()) : KERR("No gradient defined");
    else  return t.grad().defined() ? kget(t.grad()) : (K)0;
  } else {
-  return KERR("Unexpected arg(s) for gradient, expectining tensor ptr (enlist to return gradient ptr)");
+  return KERR("Unexpected arg(s) for gradient, expectining tensor (enlist to return gradient ptr)");
  }
  KCATCH("Unable to get gradient");
 }
@@ -456,6 +448,8 @@ KAPI vector(K x) {
 // dim - return no. of tensor dimensions, or dimensions of each tensor in vector of tensors
 // size - return sizes of each tensor dimension, or list of sizes for vector
 // stride - return strides of each tensor dimension, or list of strides for vector
+// device - return device(s) for given tensor(s)
+// options - return options for tensor(s)
 // ----------------------------------------------------------------------------------------------
 KAPI dim(K x) {
  KTRY
@@ -495,6 +489,40 @@ ZK ksize2(K x,B b) {
 
 KAPI size  (K x) {return ksize2(x,true);}
 KAPI stride(K x) {return ksize2(x,false);}
+
+KAPI device(K x) {
+ KTRY
+  Tensor t;
+  if(xten(x,t)) {
+   return ks(optsym(t.device()));
+  } else if(auto* v=xvec(x)) {
+   K y=ktn(KS,v->size());
+   for(size_t i=0; i<v->size(); ++i)
+    kS(y)[i]=optsym(v->at(i).device());
+   return y;
+  } else {
+   AT_ERROR("Unrecognized arg(s) for device, expected tensor(s)");
+  }
+ KCATCH("device");
+}
+
+KAPI options(K x) {
+ KTRY
+  Tensor t;
+  if(xten(x,t)) {
+   return optmap(t.options());
+  } else if(auto* v=xvec(x)) {
+   K y=ktn(0,4);
+   for(size_t i=0; i<4; ++i) 
+    kK(y)[i]=ktn(KS,v->size());
+   for(size_t i=0; i<v->size(); ++i)
+    optval(v->at(i).options(),y,i);
+   return xT(xD(optkey(),y));
+  } else {
+   AT_ERROR("Unrecognized arg(s) for options, expected tensor(s)");
+  }
+ KCATCH("options");
+}
 
 // ------------------------------------------------------------------------------------------
 // vecshuffle -
@@ -575,5 +603,7 @@ V tensorfn(K x) {
  fn(x, "dim",       KFN(dim),1);
  fn(x, "size",      KFN(size),1);
  fn(x, "stride",    KFN(stride),1);
+ fn(x, "device",    KFN(device),1);
+ fn(x, "options",   KFN(options),1);
  fn(x, "shuffle",   KFN(shuffle),1);
 }

@@ -17,6 +17,10 @@
 // ----------------------------------------------------------------------------
 K kseq(const Sequential& q) {return kptr(new Kseq(q));}
 
+K seqto(Kseq* q,const TensorOptions& o,const Tensor& t) {
+ return (K)0;
+}
+
 V kseqto(Sequential &q,TensorOptions &o,B b) {
  auto t=torch::typeMetaToScalarType(o.dtype());
  if(o.has_device() && o.has_dtype()) q->to(o.device(),t,b);

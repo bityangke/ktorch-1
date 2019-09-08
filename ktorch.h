@@ -205,12 +205,6 @@ struct TORCH_API Kmodel : public Ktag {
  Kmodel(Sequential x,Kloss y,Kopt z) : lc(y.c),oc(z.c),q(x),l(y.l),o(z.o) {a=Class::model; c=Cast::model;}
 };
 
-typedef struct {
- Class t;          // tensor, optimizer, etc.
- Cast c;           // used to cast pointer
- V *v;             // underlying tensor, module,..
-} Obj,*Ptr;
-
 S krrbuf(const char *);
 V dictadd(K,S,K);
 V dictadd(K,cS,K);
@@ -218,8 +212,6 @@ B xind(K,J);
 K kptr(V*);
 B xptr(K);
 B xptr(K,J);
-B xptr(K,Ptr&);
-B xptr(K,J,Ptr&);
 Ktag* xtag(K);
 Ktag* xtag(K,J);
 
@@ -326,6 +318,7 @@ B xopt(K,TensorOptions&);
 B xopt(K,J,TensorOptions&);
 B xto(S,TensorOptions&);
 B xto(K,TensorOptions&);
+B xto(K,J,TensorOptions&);
 B xmode(K,S&,Tensormode&);
 B xmode(K,J,S&,Tensormode&);
 B xbacksym(K,B&,B&);
@@ -353,6 +346,8 @@ S& optsym(const torch::Device&);
 S& optsym(const TypeMeta&);
 S& optsym(const torch::Layout&);
 S& optsym(const bool&);
+K optkey();
+K optval(const TensorOptions &o,K x,J i=-1);
 K optmap(const TensorOptions&);
 K kcast(A,K);
 K kbool(K);
@@ -377,8 +372,9 @@ Tensor kput(K);
 Tensor kput(K,J);
 K kten(const Tensor&);
 K kvec(const std::vector<Tensor>&);
-V kswitch(Ptr&,const Tensor&);
-V ktento(Ptr&,TensorOptions&,B);
+K tento(Kten*,const TensorOptions&,const Tensor&);
+K tento(Kvec*,const TensorOptions&,const Tensor&);
+
 K ktenpair(B,Tensor&,Tensor&);
 K kten3(B,Tensor&,Tensor&,Tensor&);
 K tensordetail(Tensor*,I);
@@ -388,6 +384,7 @@ V tensorfn(K);
 // module routines:
 //K kseq(const Sequential&,Cast c=Cast::sequential);
 K kseq(const Sequential&);
+K seqto(Kseq*,const TensorOptions&,const Tensor&);
 V kseqto(Sequential&,TensorOptions&,B);
 V modfn(K);
 K mstate(K);

@@ -202,7 +202,8 @@ struct TORCH_API Kmodel : public Ktag {
  Sequential q;     // sequential module
  Lossptr l;        // shared ptr to loss module
  Optptr o;         // shared ptr to optimizer
- Kmodel(Sequential x,Kloss y,Kopt z) : lc(y.c),oc(z.c),q(x),l(y.l),o(z.o) {a=Class::model; c=Cast::model;}
+ Kmodel(Kseq x,Kloss y,Kopt z) : lc(y.c),oc(z.c),q(x.q),l(y.l),o(z.o) {a=Class::model; c=Cast::model;}
+ Kmodel(Kseq *x,Kloss *y,Kopt *z) : lc(y->c),oc(z->c),q(x->q),l(y->l),o(z->o) {a=Class::model; c=Cast::model;}
 };
 
 S krrbuf(const char *);
@@ -223,6 +224,7 @@ cS kname(A);
 J ksizeof(A);
 A maptype(TypeMeta);
 TypeMeta maptype(A);
+S mapclass(Class);
 
 S statekey(State);
 K statekeys();
@@ -282,6 +284,8 @@ Kloss* xloss(K);
 Kloss* xloss(K,J);
 Kopt* xoptim(K);
 Kopt* xoptim(K,J);
+Kmodel* xmodel(K);
+Kmodel* xmodel(K,J);
 std::vector<Tensor>* xvec(K);
 std::vector<Tensor>* xvec(K,J);
 
@@ -377,7 +381,7 @@ K tento(Kvec*,const TensorOptions&,const Tensor&);
 
 K ktenpair(B,Tensor&,Tensor&);
 K kten3(B,Tensor&,Tensor&,Tensor&);
-K tensordetail(Tensor*,I);
+K tensordetail(const Tensor&,I);
 V tensorcopy(Tensor&,const Tensor&,B async=false);
 V tensorfn(K);
 

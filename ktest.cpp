@@ -1,6 +1,46 @@
 #include "ktorch.h"
 #include "kmodule.h"
 
+ZV modelpart(K x,J i,Kseq*& q,Kloss*& l,Kopt*& o) {
+ for(;i<x->n;++i) {
+  auto* g=xtag(x,i);
+  switch(g ? g->a : Class::undefined) {
+   case Class::sequential: q=(Kseq*)g;  break;
+   case Class::loss:       l=(Kloss*)g; break;
+   case Class::optimizer:  o=(Kopt*)g;  break;
+   default: AT_ERROR("model arg[",i,"] unrecognized: ",
+                    (g ? mapclass(g->a) : kname(kK(x)[i]->t))); break;
+  }
+ }
+}
+
+K modelstate(B a,B b,Kmodel *m) {
+  std::cerr << "model state..\n";
+ return (K)0;
+}
+
+KAPI model(K x) {
+ KTRY
+  B a=env().alloptions;
+  Kseq *q=nullptr; Kloss *l=nullptr; Kopt *o=nullptr; Kmodel *m=nullptr;
+  TORCH_CHECK(!x->t, "model not implemented for ",kname(x->t));
+  if((m=xmodel(x)) || (x->n==2 && xbool(x,1,a) && (m=xmodel(x,0)))) {
+   return modelstate(a,false,m);
+  } else {
+   m=xmodel(x,0); modelpart(x,m ? 1 : 0,q,l,o);
+   if(m) {
+    if(q) m->q=q->q;              // reassign model's sequential module
+    if(l) m->lc=l->c, m->l=l->l;  // loss function
+    if(o) m->oc=o->c, m->o=o->o;  // optimizer
+    return (K)0;
+   } else {
+    TORCH_CHECK(q && l && o, (q ? (l ? "optimizer" : "loss") : "sequential module")," not specified");
+    return kptr(new Kmodel(q,l,o));
+   }
+  }
+ KCATCH("model");
+}
+
 void errfail() {
  if(true) {
   AT_ERROR("err");

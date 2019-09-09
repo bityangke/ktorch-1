@@ -22,7 +22,7 @@ K kptr(V *v){return knk(1,kj((intptr_t)v));}
 B xptr(K x) {return !x->t && x->n==1 && kK(x)[0]->t==-KJ;}
 B xptr(K x,J i) {return xind(x,i) && xptr(kK(x)[i]);}
 Ktag* xtag(K x) {return xptr(x) ? (Ktag*)kK(x)[0]->j : nullptr;}
-Ktag* xtag(K x,J i) {return xind(x,i) ? xtag(kK(x)[0]) : nullptr;}
+Ktag* xtag(K x,J i) {return xind(x,i) ? xtag(kK(x)[i]) : nullptr;}
 
 B xhelp(K x) {return x->t == -KS && x->s == env().help;}
 B xhelp(K x,S &s) {
@@ -393,6 +393,7 @@ B xtenarg(K x,Tensor& a,Tensor &b,Tensor &c) {return xtenarg(x,0,a,b,c);}
 // xseq - check arg(s) for allocated sequential module, return boolean/pointer
 // xloss - check arg(s) for allocated loss module
 // xoptim - check arg(s) for allocated optimizer pointer
+// xmodel - check arg(s) for allocated model pointer (module, loss & optimizer)
 // ------------------------------------------------------------------------------------------------------
 B xseq(K x,Sequential &q) {
  if(auto* a=xtag(x))
@@ -411,11 +412,14 @@ Sequential* xseq(K x) {
 B xseq(K x,J i,Sequential& s) {return xind(x,i) && xseq(kK(x)[i],s);}
 Sequential* xseq(K x,J i) {return xind(x,i) ? xseq(kK(x)[i]) : nullptr;}
 
-Kloss* xloss(K x) {auto* a=xtag(x); return a ? (Kloss*)a : nullptr;}
+Kloss* xloss(K x) {auto* g=xtag(x); return (g && g->a==Class::loss) ? (Kloss*)g : nullptr;}
 Kloss* xloss(K x,J i) {return xind(x,i) ? xloss(kK(x)[i]) : nullptr;}
 
-Kopt* xoptim(K x) {auto* a=xtag(x); return a ? (Kopt*)a : nullptr;}
+Kopt* xoptim(K x) {auto* g=xtag(x); return (g && g->a==Class::optimizer) ? (Kopt*)g : nullptr;}
 Kopt* xoptim(K x,J i) {return xind(x,i) ? xoptim(kK(x)[i]) : nullptr;}
+
+Kmodel* xmodel(K x) {auto* g=xtag(x); return (g && g->a==Class::model) ? (Kmodel*)g : nullptr;}
+Kmodel* xmodel(K x,J i) {return xind(x,i) ? xmodel(kK(x)[i]) : nullptr;}
 
 // ------------------------------------------------------------------------------------------------------
 // xnum - check for double or long int k scalar, set double & return true, else false
@@ -858,7 +862,7 @@ K kexpand(J n,const F       *e) {return kex<F>      (n,e) ? kf(e[0]) : klist(n,e
 // kstate - retrieve module/loss/optimizer state: options, internal buffers & parameters
 // kto - convert tensor/module device and or data type, e.g. to[tensor;`cuda`float;0b]
 // kdetail - return dictionary of attributes of given object and level of detail
-// kzerograd - return dictionary of attributes of given object and level of detail
+// zerograd - return dictionary of attributes of given object and level of detail
 // -----------------------------------------------------------------------------------------
 KAPI kfree(K x){
  KTRY
@@ -908,7 +912,7 @@ KAPI kdetail(K x) {
   if((g=xtag(x)) || ((g=xtag(x,0)) && xlevel(x,1,n) && x->n==2)) {
    TORCH_CHECK((n>-1 && n<3),"Specify level of detail: 0,1,2");
    switch(g->a) {
-    case Class::tensor:  return tensordetail(&((Kten*)g)->t,n);
+    case Class::tensor:  return tensordetail(((Kten*)g)->t,n);
     default:           return KERR("Unrecognized pointer");
    }
   } else {
@@ -917,14 +921,17 @@ KAPI kdetail(K x) {
  KCATCH("detail")
 }
 
-KAPI kzerograd(K x) {
+KAPI zerograd(K x) {
  KTRY
-  Ktag *g;
-  switch((g=xtag(x)) ? g->a : Class::undefined) {
-   case Class::tensor:     {auto& t=((Kten*)g)->t; if(t.grad().defined()) t.grad().detach().zero_(); break;}
+  auto *g=xtag(x);
+  auto f=[](Tensor& t) {if(t.grad().defined()) t.grad().detach().zero_();};
+  TORCH_CHECK(g, "zerograd not implemented for ",kname(x->t));
+  switch(g->a) {
+   case Class::tensor:     f(((Kten*)g)->t); break;
+   case Class::vector:     for(auto& t:((Kvec*)g)->v) f(t); break;
    case Class::sequential: ((Kseq*)g)->q->zero_grad(); break;
    case Class::optimizer:  ((Kopt*)g)->o->zero_grad(); break;
-   default: AT_ERROR("Expecting pointer to tensor, module or optimizer");
+   default: AT_ERROR("zerograd not implemented for ",mapclass(g->a));
   }
   return (K)0;
  KCATCH("zero gradients");
@@ -1172,7 +1179,7 @@ KAPI fns(K x){
  fn(x, "to",          KFN(kto),         3);
  fn(x, "detail",      KFN(kdetail),     1);
  fn(x, "state",       KFN(kstate),      1);
- fn(x, "zerograd",    KFN(kzerograd),   1);
+ fn(x, "zerograd",    KFN(zerograd),    1);
  fn(x, "default",     KFN(kdefault),    1);
  fn(x, "setting",     KFN(ksetting),    1);
  fn(x, "config",      KFN(config),      1);

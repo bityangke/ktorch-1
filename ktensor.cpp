@@ -340,9 +340,9 @@ KAPI grad(K x) {
  KCATCH("Unable to get gradient");
 }
 
-ZV graphdetail(K *a,K *b,Tensor *t) {
- if(t->is_variable()) {
-  auto& v=torch::autograd::as_variable_ref(*t);
+ZV graphdetail(K *a,K *b,const Tensor& t) {
+ if(t.is_variable()) {
+  auto& v=torch::autograd::as_variable_ref(t);
   cS s=v.grad_fn() ? v.grad_fn()->name().c_str() : "";
   js(a,cs("leaf"));   jk(b,kb(v.is_leaf()));
   js(a,cs("gradfn")); jk(b,ks((S)s));
@@ -366,34 +366,34 @@ ZK tensordata(B b,Tensor &t) {  //tensor flag: true-use tensor, false-use storag
  return x;
 }
 
-K tensordetail(Tensor *t,I y) {
- B s=t->is_sparse(); J n=t->dim();
+K tensordetail(const Tensor& t,I y) {
+ B s=t.is_sparse(); J n=t.dim();
  K x=xD(ktn(KS,0),ktn(0,0)),*a=&kK(x)[0],*b=&kK(x)[1];
- js(a,cs("device"));   jk(b,ks(optsym(t->device())));
- js(a,cs("dtype"));    jk(b,ks(optsym(t->dtype())));
- js(a,cs("layout"));   jk(b,ks(optsym(t->layout())));
- js(a,cs("gradient")); jk(b,ks(optsym(t->is_variable() ? t->requires_grad() : false)));
+ js(a,cs("device"));   jk(b,ks(optsym(t.device())));
+ js(a,cs("dtype"));    jk(b,ks(optsym(t.dtype())));
+ js(a,cs("layout"));   jk(b,ks(optsym(t.layout())));
+ js(a,cs("gradient")); jk(b,ks(optsym(t.is_variable() ? t.requires_grad() : false)));
  graphdetail(a,b,t);
- js(a,cs("ktype"));    jk(b,kh(maptype(t->dtype())));
+ js(a,cs("ktype"));    jk(b,kh(maptype(t.dtype())));
  js(a,cs("dim"));      jk(b,kj(n));
- js(a,cs("size"));     jk(b,ktn(KJ,n)); memcpy(kG(kK(*b)[(*b)->n-1]),t->sizes().data(),n*sizeof(J));
+ js(a,cs("size"));     jk(b,ktn(KJ,n)); memcpy(kG(kK(*b)[(*b)->n-1]),t.sizes().data(),n*sizeof(J));
  js(a,cs("stride"));   jk(b,ktn(KJ,s ? 0 : n));
-                       if(!s) memcpy(kG(kK(*b)[(*b)->n-1]),t->strides().data(),n*sizeof(J));
+                       if(!s) memcpy(kG(kK(*b)[(*b)->n-1]),t.strides().data(),n*sizeof(J));
  if(y<1) return x;
- js(a,cs("contiguous"));  jk(b,s ? 0 : kb(t->is_contiguous()));
- js(a,cs("distributed")); jk(b,kb(t->is_distributed()));
- js(a,cs("tensorptr"));   jk(b,kj((intptr_t)t->unsafeGetTensorImpl()));
- js(a,cs("offset"));      jk(b,kj(t->storage_offset()));
- js(a,cs("dataptr"));     jk(b,kj((intptr_t)t->data_ptr()));
- js(a,cs("datasize"));    jk(b,kj(t->numel()));
- js(a,cs("storageptr"));  jk(b,kj((intptr_t)t->storage().data()));
- js(a,cs("storagesize")); jk(b,kj(t->storage().size()));
- js(a,cs("elementsize")); jk(b,kj(t->storage().elementSize()));
- js(a,cs("ref"));         jk(b,kj(t->use_count()));
- js(a,cs("weakref"));     jk(b,kj(t->weak_use_count()));
- js(a,cs("storageref"));  jk(b,kj(t->storage().use_count()));
+ js(a,cs("contiguous"));  jk(b,s ? 0 : kb(t.is_contiguous()));
+ js(a,cs("distributed")); jk(b,kb(t.is_distributed()));
+ js(a,cs("tensorptr"));   jk(b,kj((intptr_t)t.unsafeGetTensorImpl()));
+ js(a,cs("offset"));      jk(b,kj(t.storage_offset()));
+ js(a,cs("dataptr"));     jk(b,kj((intptr_t)t.data_ptr()));
+ js(a,cs("datasize"));    jk(b,kj(t.numel()));
+ js(a,cs("storageptr"));  jk(b,kj((intptr_t)t.storage().data()));
+ js(a,cs("storagesize")); jk(b,kj(t.storage().size()));
+ js(a,cs("elementsize")); jk(b,kj(t.storage().elementSize()));
+ js(a,cs("ref"));         jk(b,kj(t.use_count()));
+ js(a,cs("weakref"));     jk(b,kj(t.weak_use_count()));
+ js(a,cs("storageref"));  jk(b,kj(t.storage().use_count()));
  if(y<2) return x;
- auto c=t->toBackend(torch::Backend::CPU);
+ auto c=t.toBackend(torch::Backend::CPU);
  js(a,cs("storagedata")); jk(b,tensordata(false,c));
  js(a,cs("data"));        jk(b,tensordata(true, c));
  return x;
@@ -402,7 +402,7 @@ K tensordetail(Tensor *t,I y) {
 // ------------------------------------------------------------------------------------------
 // tensor vector fns: 
 // ------------------------------------------------------------------------------------------
-// vecinit -
+// vecinit - initialize vector of tensors from k array, tensor ptr(s) or some mix of both
 // vector -
 // ------------------------------------------------------------------------------------------
 K vecinit(K x) {
@@ -414,6 +414,8 @@ K vecinit(K x) {
     v.emplace_back(t[i]);
   else
    v.emplace_back(t);
+ } else if(auto *t=xten(x)) {
+  v.emplace_back(*t);
  } else {
   for(J i=0;i<x->n;++i) {
    Tensor t;

@@ -306,10 +306,10 @@ TORCH_MODULE(FractionalMaxPool3d);
 // lp pool 1d & 2d 
 // ------------------------------------------
 template <size_t D>
-struct LpPoolOptions {
+struct LPPoolOptions {
  using Ex=torch::ExpandingArray<D>;
- LpPoolOptions(double p,Ex s) : power_(p),size_(std::move(s)) {stride_=size_;}
- LpPoolOptions() {}
+ LPPoolOptions(double p,Ex s) : power_(p),size_(std::move(s)) {stride_=size_;}
+ LPPoolOptions() {}
  TORCH_ARG(double, power)=0;
  TORCH_ARG(Ex,     size)=0;
  TORCH_ARG(Ex,     stride)=0;
@@ -317,38 +317,38 @@ struct LpPoolOptions {
 };
 
 template <size_t D, typename Derived>
-class LpPoolImpl : public torch::nn::Cloneable<Derived> {
+class LPPoolImpl : public torch::nn::Cloneable<Derived> {
  public:
-  LpPoolImpl(double p,torch::ExpandingArray<D> s) : LpPoolImpl(LpPoolOptions<D>(p,s)) {}
-  explicit LpPoolImpl(LpPoolOptions<D> o) : options(std::move(o)) {reset();}
+  LPPoolImpl(double p,torch::ExpandingArray<D> s) : LPPoolImpl(LPPoolOptions<D>(p,s)) {}
+  explicit LPPoolImpl(LPPoolOptions<D> o) : options(std::move(o)) {reset();}
   void reset() override {
    bool z=true;
    for(auto i:*options.stride_) if(i){z=false; break;}
    if(z) *options.stride_ = *options.size_;
   }
-  LpPoolOptions<D> options;
+  LPPoolOptions<D> options;
 };
 
-class TORCH_API LpPool1dImpl : public LpPoolImpl<1, LpPool1dImpl> {
+class TORCH_API LPPool1dImpl : public LPPoolImpl<1, LPPool1dImpl> {
  public:
-  using LpPoolImpl<1, LpPool1dImpl>::LpPoolImpl;
+  using LPPoolImpl<1, LPPool1dImpl>::LPPoolImpl;
   torch::Tensor forward(const torch::Tensor& t) {
    auto r=torch::avg_pool1d(t.pow(options.power_),options.size_,options.stride_,0,options.ceiling_);
    return r.mul((*options.size_)[0]).pow(1.0/options.power_);
   }
 };
 
-class TORCH_API LpPool2dImpl : public LpPoolImpl<2, LpPool2dImpl> {
+class TORCH_API LPPool2dImpl : public LPPoolImpl<2, LPPool2dImpl> {
  public:
-  using LpPoolImpl<2, LpPool2dImpl>::LpPoolImpl;
+  using LPPoolImpl<2, LPPool2dImpl>::LPPoolImpl;
   torch::Tensor forward(const torch::Tensor& t) {
    auto r=torch::avg_pool2d(t.pow(options.power_),options.size_,options.stride_,0,options.ceiling_);
    return (torch::sign(r) * torch::relu(torch::abs(r))).mul((*options.size_)[0]*(*options.size_)[1]).pow(1.0/options.power_);
   }
 };
 
-TORCH_MODULE(LpPool1d);
-TORCH_MODULE(LpPool2d);
+TORCH_MODULE(LPPool1d);
+TORCH_MODULE(LPPool2d);
 
 // -------------------------------------------------------------------------------
 // flexible/fixed-dim padding options for constant/reflect/replicate padding
@@ -476,13 +476,13 @@ class TORCH_API TanhshrinkImpl : public torch::nn::Cloneable<TanhshrinkImpl> {
 };
 TORCH_MODULE(Tanhshrink);
 
-class TORCH_API SoftSignImpl : public torch::nn::Cloneable<SoftSignImpl> {
+class TORCH_API SoftsignImpl : public torch::nn::Cloneable<SoftsignImpl> {
  public:
-  SoftSignImpl() = default;
+  SoftsignImpl() = default;
   void reset() override {}
   torch::Tensor forward(const torch::Tensor& input) {return input / (input.abs() + 1);}
 };
-TORCH_MODULE(SoftSign);
+TORCH_MODULE(Softsign);
 
 class TORCH_API TanhImpl : public torch::nn::Cloneable<TanhImpl> {
  public:

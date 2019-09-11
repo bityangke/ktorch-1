@@ -376,8 +376,8 @@ Tensor kput(K);
 Tensor kput(K,J);
 K kten(const Tensor&);
 K kvec(const std::vector<Tensor>&);
-K tento(Kten*,const TensorOptions&,const Tensor&);
-K tento(Kvec*,const TensorOptions&,const Tensor&);
+K tento(Kten*,const TensorOptions&,B,B);
+K vecto(Kvec*,const TensorOptions&,B);
 
 K ktenpair(B,Tensor&,Tensor&);
 K kten3(B,Tensor&,Tensor&,Tensor&);
@@ -388,13 +388,13 @@ V tensorfn(K);
 // module routines:
 //K kseq(const Sequential&,Cast c=Cast::sequential);
 K kseq(const Sequential&);
-K seqto(Kseq*,const TensorOptions&,const Tensor&);
-V kseqto(Sequential&,TensorOptions&,B);
+K seqto(Kseq*,const TensorOptions&,B);
 V modfn(K);
 K mstate(K);
 
 // loss functions:
 K lossdict(Ktag*,K);
+K lossto(Kloss*,const TensorOptions&,B);
 V lossfn(K);
 
 // optimization functions:

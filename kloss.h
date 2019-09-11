@@ -128,19 +128,6 @@ class TORCH_API BCEWithLogitsLoss : public WeightedLoss {
 
 torch::Tensor multilabel_soft_margin_loss(const torch::Tensor& x,const torch::Tensor& y,const torch::Tensor& w={},int64_t r=Reduction::Mean);
 
-torch::Tensor multilabel_soft_margin_loss(const torch::Tensor& x,const torch::Tensor& y,const torch::Tensor& w,int64_t r) {
- auto l = -(y * torch::log_sigmoid(x) + (1 - y) * torch::log_sigmoid(-x));
- if(w.defined()) l *= w;
- l = l.sum(1) / x.size(1); // only return n=batch size loss values
- switch(r) {
-  case Reduction::None: return l;
-  case Reduction::Mean: return l.mean();
-  case Reduction::Sum:  return l.sum();
-  default: AT_ERROR("Unrecognized reduction: ",r);
- }
- // unable to use torch::apply_loss_reduction(l,r), in anonymous namespace in ATen/native/Loss.cpp
-}
-
 class TORCH_API MultiLabelSoftMarginLoss : public WeightedLoss {
  public:
  using WeightedLoss::WeightedLoss;

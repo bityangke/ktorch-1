@@ -13,19 +13,16 @@
 
 // ----------------------------------------------------------------------------
 // kseq - allocate an object to store a pointer to a sequential module
-// kseqto - given sequential module & options, change device/data type
+// seqto - given sequential module & options, change device/data type
 // ----------------------------------------------------------------------------
 K kseq(const Sequential& q) {return kptr(new Kseq(q));}
 
-K seqto(Kseq* q,const TensorOptions& o,const Tensor& t) {
+K seqto(Kseq* q,const TensorOptions& o,B a) {
+ auto s=torch::typeMetaToScalarType(o.dtype());
+ if(o.has_device() && o.has_dtype()) q->q->to(o.device(),s,a);
+ else if(o.has_device())             q->q->to(o.device(),a);
+ else                                q->q->to(s,a);
  return (K)0;
-}
-
-V kseqto(Sequential &q,TensorOptions &o,B b) {
- auto t=torch::typeMetaToScalarType(o.dtype());
- if(o.has_device() && o.has_dtype()) q->to(o.device(),t,b);
- else if(o.has_device())             q->to(o.device(),b);
- else                                q->to(t,b);
 }
 
 // --------------------------------------------------------------------------------------------
@@ -388,7 +385,7 @@ ZV fpool(B a,K x,const M* m) {
 template<size_t D,typename M>
 Z M lppool(K x,J i) {
  B b0=false,b1=false; Pairs p; J n=xargc(x,i,p);
- LpPoolOptions<D> o; torch::Scalar s; Expand<D> a(0);
+ LPPoolOptions<D> o; torch::Scalar s; Expand<D> a(0);
  if(n==1 && xnum(x,i,s)) {                            // single numeric exponent
   o.power(s.toDouble()); b0=true;
  } else if(n==2 && xnum(x,i,s) && XDIM(x,i+1,D,a)) {  // exponent & size(s)
@@ -414,7 +411,7 @@ Z M lppool(K x,J i) {
 
 template<size_t D,typename M>
 ZV lppool(B a,K x,const M* m) {
- LpPoolOptions<D> o=m->options, d(o.power(),o.size());
+ LPPoolOptions<D> o=m->options, d(o.power(),o.size());
  OPTION(x, power, kf(o.power()));
  OPTION(x, size,  KEX(o.size()));
  if(a || *o.stride() != *d.stride()) OPTION(x, stride,  KEX(o.stride()));
@@ -796,8 +793,8 @@ V mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) {
   case Cast::fmaxpool2d:   PUSH(q,n,(fpool<2,FractionalMaxPool2d>(x,i))); break;
   case Cast::fmaxpool3d:   PUSH(q,n,(fpool<3,FractionalMaxPool3d>(x,i))); break;
 
-  case Cast::lppool1d:     PUSH(q,n,(lppool<1,LpPool1d>(x,i))); break;
-  case Cast::lppool2d:     PUSH(q,n,(lppool<2,LpPool2d>(x,i))); break;
+  case Cast::lppool1d:     PUSH(q,n,(lppool<1,LPPool1d>(x,i))); break;
+  case Cast::lppool2d:     PUSH(q,n,(lppool<2,LPPool2d>(x,i))); break;
 
   case Cast::pad:          PUSH(q,n,(pad(x,i))); break;
   case Cast::reflect1d:    PUSH(q,n,(rpad<2,ReflectionPad1d>(x,i,s))); break;
@@ -812,7 +809,7 @@ V mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) {
 
   case Cast::logsigmoid:   noarg(s,x,i); PUSH(q,n,LogSigmoid()); break;
   case Cast::sigmoid:      noarg(s,x,i); PUSH(q,n,Sigmoid()); break;
-  case Cast::softsign:     noarg(s,x,i); PUSH(q,n,SoftSign()); break;
+  case Cast::softsign:     noarg(s,x,i); PUSH(q,n,Softsign()); break;
   case Cast::tanh:         noarg(s,x,i); PUSH(q,n,Tanh()); break;
   case Cast::tanhshrink:   noarg(s,x,i); PUSH(q,n,Tanhshrink()); break;
   case Cast::gelu:         noarg(s,x,i); PUSH(q,n,GELU()); break;
@@ -896,8 +893,8 @@ V mopt(Module &g,B a,K &v,J i) { //g:generic module, a:true if all options, v:k 
  } else if(auto* m=g.as<FractionalMaxPool2d>()) { c=Cast::fmaxpool2d; fpool<2,FractionalMaxPool2dImpl>(a,x,m);
  } else if(auto* m=g.as<FractionalMaxPool3d>()) { c=Cast::fmaxpool3d; fpool<3,FractionalMaxPool3dImpl>(a,x,m);
 
- } else if(auto* m=g.as<LpPool1d>())         { c=Cast::lppool1d; lppool<1,LpPool1dImpl>(a,x,m);
- } else if(auto* m=g.as<LpPool2d>())         { c=Cast::lppool2d; lppool<2,LpPool2dImpl>(a,x,m);
+ } else if(auto* m=g.as<LPPool1d>())         { c=Cast::lppool1d; lppool<1,LPPool1dImpl>(a,x,m);
+ } else if(auto* m=g.as<LPPool2d>())         { c=Cast::lppool2d; lppool<2,LPPool2dImpl>(a,x,m);
 
  } else if(auto* m=g.as<Pad>())              { c=Cast::pad;         pad(a,x,m);
  } else if(auto* m=g.as<ReflectionPad1d>())  { c=Cast::reflect1d;   rpad(x,m);
@@ -912,7 +909,7 @@ V mopt(Module &g,B a,K &v,J i) { //g:generic module, a:true if all options, v:k 
 
  } else if(g.as<LogSigmoid>())         { c=Cast::logsigmoid;
  } else if(g.as<Sigmoid>())            { c=Cast::sigmoid;
- } else if(g.as<SoftSign>())           { c=Cast::softsign;
+ } else if(g.as<Softsign>())           { c=Cast::softsign;
  } else if(g.as<Tanh>())               { c=Cast::tanh;
  } else if(g.as<Tanhshrink>())         { c=Cast::tanhshrink;
  } else if(g.as<ReLU>())               { c=Cast::relu;
@@ -1170,8 +1167,8 @@ KAPI anytest(K x) {
   torch::nn::Linear(3,4),
   LogSigmoid(),
   LogSoftmax(1,torch::kDouble),
-  LpPool1d(2,3),
-  LpPool2d(2,3),
+  LPPool1d(2,3),
+  LPPool2d(2,3),
   MaxPool1d(2),
   MaxPool2d(2),
   MaxPool3d(2),
@@ -1189,7 +1186,7 @@ KAPI anytest(K x) {
   ReplicationPad3d(2),
   SELU(),
   Sigmoid(),
-  SoftSign(),
+  Softsign(),
   Softmax(-1),
   Softmin(1),
   Softplus(1,20),

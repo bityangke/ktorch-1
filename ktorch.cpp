@@ -860,7 +860,7 @@ K kexpand(J n,const F       *e) {return kex<F>      (n,e) ? kf(e[0]) : klist(n,e
 // -----------------------------------------------------------------------------------------
 // kfree - free allocated object according to tag
 // kstate - retrieve module/loss/optimizer state: options, internal buffers & parameters
-// kto - convert tensor/module device and or data type, e.g. to[tensor;`cuda`float;0b]
+// to - convert tensor/module device and or data type, e.g. to[tensor;`cuda`float;0b]
 // kdetail - return dictionary of attributes of given object and level of detail
 // zerograd - return dictionary of attributes of given object and level of detail
 // -----------------------------------------------------------------------------------------
@@ -890,14 +890,20 @@ KAPI kstate(K x) {
  KCATCH("state")
 }
 
-KAPI kto(K x) {
+KAPI to(K x) {
  KTRY
-  Ktag *g; Tensor t; TensorOptions o;
-  if((g=xtag(x,0)) && (xto(x,1,o) || xten(x,1,t))) {
+  B a=false,b=false; Ktag *g; Tensor t; TensorOptions o;
+  if((g=xtag(x,0)) && (xto(x,1,o) || xten(x,1,t)) &&
+     (x->n==2 || (xbool(x,2,a) && (x->n==3 || (x->n==4 && xbool(x,3,b)))))) {
+   TORCH_CHECK(b ? g->a == Class::tensor : true,
+               "4th arg, copy flag, can not be true for ",mapclass(g->a));
+   if(t.defined())
+    o=o.device(t.device()).dtype(t.dtype());
    switch(g->a) {
-    case Class::tensor:     return tento((Kten*)g,o,t);
-    case Class::vector:     return tento((Kvec*)g,o,t);
-    case Class::sequential: return seqto((Kseq*)g,o,t);
+    case Class::tensor:     return tento((Kten*)g,o,a,b);
+    case Class::vector:     return vecto((Kvec*)g,o,a);
+    case Class::sequential: return seqto((Kseq*)g,o,a);
+    case Class::loss:       return lossto((Kloss*)g,o,a);
     default: AT_ERROR("to() not implemented for: ",mapclass(g->a));
    }
   } else {
@@ -1032,19 +1038,19 @@ K optmap(const TensorOptions &o) {
 // config - print or return strings of pytorch config (CUDA capability, build options, etc.)
 // ---------------------------------------------------------------------------------------------
 KAPI kdefault(K x) {
- torch::TensorOptions a,o;
+ torch::TensorOptions o;
  KTRY
   if(xempty(x)) {
    return optmap(o);
   } else if(xopt(x,o)) {
-   if(a.device()!=o.device() || a.layout()!=o.layout() || a.requires_grad()!=o.requires_grad())
-    AT_ERROR("Currently, only default data type can be reset");
+   TORCH_CHECK(!(o.has_device() || o.has_layout() || o.has_requires_grad()),
+               "Currently, only default data type can be reset");
    torch::set_default_dtype(o.dtype());
    return(K)0;
   } else {
    return KERR("Unrecognized argument for querying/setting default tensor options");
   }
- KCATCH("Unable to query/set default tensor option(s)");
+ KCATCH("default");
 }
 
 KAPI ksetting(K x) {
@@ -1176,7 +1182,7 @@ V fn(K x,cS s,V *f,I n){dictadd(x,s,dl(f,n));}
 KAPI fns(K x){
  x=xD(ktn(KS,0),ktn(0,0));
  fn(x, "free",        KFN(kfree),       1);
- fn(x, "to",          KFN(kto),         3);
+ fn(x, "to",          KFN(to),          1);
  fn(x, "detail",      KFN(kdetail),     1);
  fn(x, "state",       KFN(kstate),      1);
  fn(x, "zerograd",    KFN(zerograd),    1);

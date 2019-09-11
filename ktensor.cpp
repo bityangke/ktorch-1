@@ -80,11 +80,20 @@ K kget(const std::deque<torch::Tensor>& v) {
 // ktenpair - given a pair of tensors return pair of pointers or array
 // kten3 - given a triplet of tensors return triplet of pointers or array
 // -------------------------------------------------------------------------
-K tento(Kten* p,const TensorOptions& o,const Tensor& t) {
+K tento(Kten* t,const TensorOptions& o,B a,B b) {
+ auto r=t->t.to(o,a,b);
+ if(b)                 // if copy flag set
+  return kten(r);      // return new tensor
+ if(!t->t.is_same(r))  // else if device/dtype caused new tensor
+  t->t=r;              // replace tensor in k ptr
  return (K)0;
 }
 
-K tento(Kvec* v,const TensorOptions& o,const Tensor& t) {
+K vecto(Kvec* v,const TensorOptions& o,B a) {
+ for(auto& t:v->v) {
+  auto r=t.to(o,a);
+  if(!t.is_same(r)) t=std::move(r);
+ }
  return (K)0;
 }
 
@@ -469,44 +478,59 @@ KAPI dim(K x) {
  KCATCH("dim");
 }
 
-ZK ksize1(const Tensor& t,B b) {
+ZK size1(const Tensor& t,B b) {
  return klist(t.dim(),b ? t.sizes().data() : t.strides().data());
 }
 
-ZK ksize2(K x,B b) {
+ZK size2(K x,B b) {
  KTRY
   Tensor t;
   if(xten(x,t)) {
-   return ksize1(t,b);
+   return size1(t,b);
   } else if(auto* v=xvec(x)) {
    K s=ktn(0,v->size());
    for(size_t i=0; i<v->size(); ++i)
-    kK(s)[i]=ksize1(v->at(i),b);
+    kK(s)[i]=size1(v->at(i),b);
    return s;
   } else {
-   return ksize1(kput(x),b);
+   return size1(kput(x),b);
   }
  KCATCH("size/stride");
 }
 
-KAPI size  (K x) {return ksize2(x,true);}
-KAPI stride(K x) {return ksize2(x,false);}
+KAPI size  (K x) {return size2(x,true);}
+KAPI stride(K x) {return size2(x,false);}
 
-KAPI device(K x) {
+ZS tensym(const Tensor& t,I m) {
+ switch(m) {
+  case 0: return optsym(t.device());
+  case 1: return optsym(t.dtype());
+  case 2: return optsym(t.layout());
+  case 3: return optsym(t.requires_grad());
+  default: AT_ERROR("Invalid mode for tensor setting: ",m);
+ }
+}
+
+K tensym(K x,I m,cS e) {
  KTRY
   Tensor t;
   if(xten(x,t)) {
-   return ks(optsym(t.device()));
+   return ks(tensym(t,m));
   } else if(auto* v=xvec(x)) {
    K y=ktn(KS,v->size());
    for(size_t i=0; i<v->size(); ++i)
-    kS(y)[i]=optsym(v->at(i).device());
+    kS(y)[i]=tensym(v->at(i),m);
    return y;
   } else {
-   AT_ERROR("Unrecognized arg(s) for device, expected tensor(s)");
+   AT_ERROR("Unrecognized arg(s) for ", e, ", expected tensor(s)");
   }
- KCATCH("device");
+ KCATCH(e);
 }
+
+KAPI device(K x) {return tensym(x,0,"device");}
+KAPI dtype(K x)  {return tensym(x,1,"dtype");}
+KAPI layout(K x) {return tensym(x,2,"layout");}
+//KAPI layout(K x) {return tensym(x,2,"layout");}
 
 KAPI options(K x) {
  KTRY
@@ -606,6 +630,8 @@ V tensorfn(K x) {
  fn(x, "size",      KFN(size),1);
  fn(x, "stride",    KFN(stride),1);
  fn(x, "device",    KFN(device),1);
+ fn(x, "dtype",     KFN(dtype),1);
+ fn(x, "layout",    KFN(layout),1);
  fn(x, "options",   KFN(options),1);
  fn(x, "shuffle",   KFN(shuffle),1);
 }

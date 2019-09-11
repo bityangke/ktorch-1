@@ -132,7 +132,7 @@ KAPI bce(K a) {
 
 // ------------------------------------------------------------------------------------------------------
 // wtargs - process args from k for weight tensor, index to ignore & reduction method (or some subset)
-// wtloss - functional form for nll,cross entropy loss
+// wtloss - functional form for nll,cross entropy, multi-label soft margin (no c++ version yet)
 // ------------------------------------------------------------------------------------------------------
 ZV wtargs(Cast c,cS s,K x,J i,Tensor& w,J& j,int64_t &r) {
  B b=c==Cast::ce || c==Cast::nll; Pairs p; J n=xargc(x,i,p); j=-100; r=reduce();
@@ -149,6 +149,19 @@ ZV wtargs(Cast c,cS s,K x,J i,Tensor& w,J& j,int64_t &r) {
    default: AT_ERROR("Unrecognized option: ",p.k," for ",s," loss"); break;
   }
  }
+}
+
+Tensor multilabel_soft_margin_loss(const Tensor& x,const Tensor& y,const Tensor& w,int64_t r) {
+ auto l = -(y * torch::log_sigmoid(x) + (1 - y) * torch::log_sigmoid(-x));
+ if(w.defined()) l *= w;
+ l = l.sum(1) / x.size(1); // only return n=batch size loss values
+ switch(r) {
+  case Reduction::None: return l;
+  case Reduction::Mean: return l.mean();
+  case Reduction::Sum:  return l.sum();
+  default: AT_ERROR("Unrecognized reduction: ",r);
+ }
+ // unable to use torch::apply_loss_reduction(l,r), in anonymous namespace in ATen/native/Loss.cpp
 }
 
 ZK wtloss(K a,Cast c,cS s) {
@@ -409,6 +422,8 @@ KAPI ctc(K a) {
 // lossopt - retrieve loss module options, return k dictionary of symbol -> setting
 // lossdict - dictionary of loss module & options or full state (w'class, empty name, parms & buffers)
 // lossfwd - given loss object, calls forward function on remaining inputs and returns loss
+// lossto - given loss object and device/data type, converts tensors in options (e.g. class weights)
+// losswt - return class wts if tensor is defined (used to determine device/datatype)
 // loss - main api function that creates/calls loss objects and queries their properties
 // ---------------------------------------------------------------------------------------------------
 ZK lossinit(S s,K x,J i) {
@@ -533,6 +548,25 @@ ZK lossfwd(Cast c,Loss *l,K a) {
   return p ? kten(r) : kget(r);
  else
   AT_ERROR("Unrecognized arg(s) for ",lmap(c)," forward call");
+}
+
+K lossto(Kloss* l,const TensorOptions& o,B a) {
+ auto s=torch::typeMetaToScalarType(o.dtype());
+ if(o.has_device() && o.has_dtype()) l->l->to(o.device(),s,a);
+ else if(o.has_device())             l->l->to(o.device(),a);
+ else                                l->l->to(s,a);
+ return (K)0;
+}
+
+Tensor losswt(Loss *l) {
+ if(auto* p=dynamic_cast<WeightedLoss*>(l))
+  return p->options.weight();
+ else if(auto* p=dynamic_cast<LogLoss*>(l))
+  return p->options.weight();
+ else if(auto* p=dynamic_cast<MultiMarginLoss*>(l))
+  return p->options.weight();
+ else
+ return {};
 }
 
 KAPI loss(K x) {

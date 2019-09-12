@@ -45,7 +45,7 @@ ZS oset(Setting e) {
  AT_ERROR("Unrecognized optimizer setting: ",(I)e);
 }
 
-Z size_t osize(const std::vector<Tensor>& p) {
+Z size_t osize(const TensorVector& p) {
  size_t i,n=0;
  for(i=0; i<p.size(); ++i) 
   if(p.at(i).grad().defined()) n=i+1;
@@ -65,7 +65,7 @@ ZK bget(K x,cS s) {
  return (i<0 || kK(x)[1]->t) ? nullptr : kK(kK(x)[1])[i];
 }
 
-ZV bset(size_t n,cS s,const std::vector<Tensor>& p,std::vector<int64_t>& v,const K x) {
+ZV bset(size_t n,cS s,const TensorVector& p,LongVector& v,const K x) {
  // restore vector of longs (parameter vector not referenced, included for uniform call)
  K y=bget(x,s);
  if(!y || !y->n) return;
@@ -75,7 +75,7 @@ ZV bset(size_t n,cS s,const std::vector<Tensor>& p,std::vector<int64_t>& v,const
  for(size_t i=0; i<n; ++i) v.emplace_back(kJ(y)[i]);
 }
 
-ZV bset(size_t n,cS s,const std::vector<Tensor>& p,std::vector<Tensor>& v,const K x) {
+ZV bset(size_t n,cS s,const TensorVector& p,TensorVector& v,const K x) {
  K y=bget(x,s);
  if(!y || !y->n) return;
  if(y->t) AT_ERROR("type error: ",s,", expecting general list, input is ",kname(y->t));
@@ -96,7 +96,7 @@ ZV bset(size_t n,cS s,const std::vector<Tensor>& p,std::vector<Tensor>& v,const 
  }
 }
 
-ZV bset(size_t n,cS s,const std::vector<Tensor>& p,std::deque<Tensor>& v,const K x) {
+ZV bset(size_t n,cS s,const TensorVector& p,TensorDeque& v,const K x) {
  // used w'LBFGS, not sure if parameter count/type/device relevant
  K y=bget(x,s);
  if(!y || !y->n) return;
@@ -106,7 +106,7 @@ ZV bset(size_t n,cS s,const std::vector<Tensor>& p,std::deque<Tensor>& v,const K
   v[i]=kput(kK(y)[i]);
 }
 
-ZV bset(size_t n,cS s,const std::vector<Tensor>& p,Tensor& t,const K x) {
+ZV bset(size_t n,cS s,const TensorVector& p,Tensor& t,const K x) {
  // used w'LBFGS, not sure if parameter count/type/device relevant
  K y=bget(x,s);
  if(!y || !y->n) return;
@@ -133,7 +133,7 @@ ZV adagrad(K x,J i,AdagradOptions& o) {
   }
 }
 
-Z Optptr adagrad(const std::vector<Tensor>& w,const AdagradOptions& a,K y) {
+Z Optptr adagrad(const TensorVector& w,const AdagradOptions& a,K y) {
  auto o=std::make_shared<Adagrad>(w,a);
  auto n=osize(o->parameters());
  if(y && n) {
@@ -182,7 +182,7 @@ ZV adam(K x,J i,AdamOptions& o) {
   }
 }
 
-Z Optptr adam(const std::vector<Tensor>& w,const AdamOptions& a,K y) {
+Z Optptr adam(const TensorVector& w,const AdamOptions& a,K y) {
  auto o=std::make_shared<Adam>(w,a);
  auto n=osize(o->parameters());
  if(y && n) {
@@ -238,7 +238,7 @@ ZV lbfgs(K x,J i,LBFGSOptions& o) {
   }
 }
 
-Z Optptr lbfgs(const std::vector<Tensor>& w,const LBFGSOptions& a,K y) {
+Z Optptr lbfgs(const TensorVector& w,const LBFGSOptions& a,K y) {
  auto o=std::make_shared<LBFGS>(w,a); auto n=osize(o->parameters());
  if(y) {
   bset(n, "d",              o->parameters(), o->d, y);
@@ -299,7 +299,7 @@ ZV rmsprop(K x,J i,RMSpropOptions& o) {
   }
 }
 
-Z Optptr rmsprop(const std::vector<Tensor>& w,const RMSpropOptions& a,K y) {
+Z Optptr rmsprop(const TensorVector& w,const RMSpropOptions& a,K y) {
  auto o=std::make_shared<RMSprop>(w,a);
  auto n=osize(o->parameters());
  if(y && n) {
@@ -351,7 +351,7 @@ ZV sgd(K x,J i,SGDOptions& o) {
   }
 }
 
-Z Optptr sgd(const std::vector<Tensor>& w,const SGDOptions& a,K y) {
+Z Optptr sgd(const TensorVector& w,const SGDOptions& a,K y) {
  auto o=std::make_shared<SGD>(w,a);
  auto n=osize(o->parameters());
  if(y && n)
@@ -381,7 +381,7 @@ ZK sgd(SGD* v) {  //return internal buffer state as k dictionary
 // optstate - return optimizer name & options and optionally, internal buffer values
 // opt - main optimizer interface function for q
 // ---------------------------------------------------------------------------------------
-Z std::vector<Tensor> optparms(K x,J i) {
+Z TensorVector optparms(K x,J i) {
  if(auto *a=xseq(x,i))
   return (*a)->parameters();
  else if(auto *a=xvec(x,i))

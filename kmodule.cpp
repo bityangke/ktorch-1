@@ -425,7 +425,7 @@ ZV lppool(B a,K x,const M* m) {
 // rpad - reflect/replicate fixed dimension padding
 // ----------------------------------------------------------------------------------
 Z Pad pad(K x,J i) {
- JRef a; Scalar s=PadOptions().value(); Pairs p; J n=xargc(x,i,p); std::vector<int64_t> v;
+ JRef a; Scalar s=PadOptions().value(); Pairs p; J n=xargc(x,i,p); LongVector v;
  if(!((n==0 && p.n) || (xsize(x,i,a) && (n==1 || (n==2 && xnum(x,i+1,s))))))
   AT_ERROR("Unrecognized arguments for padding module");
  while(xpair(p))
@@ -1173,7 +1173,7 @@ KAPI anytest(K x) {
   MaxPool2d(2),
   MaxPool3d(2),
   PReLU(1),
-  Pad(std::vector<int64_t>{1,1}),
+  Pad(LongVector{1,1}),
   torch::nn::RNN(4,5),
   RReLU(.125,.333),
   GELU(),

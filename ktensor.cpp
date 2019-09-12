@@ -6,7 +6,7 @@
 // kvec - given ptr to vector of tensors, return ptr to struct w'attrs
 // -------------------------------------------------------------------------
 K kten(const Tensor& t) {return kptr(new Kten(t));}
-K kvec(const std::vector<Tensor>& v) {return kptr(new Kvec(v));}
+K kvec(const TensorVector& v) {return kptr(new Kvec(v));}
 
 // -------------------------------------------------------------------------
 // kgetscalar - return k scalar given a scalar tensor
@@ -61,15 +61,15 @@ K kget(const Tensor &t) {
  return kgets(0,j,maptype(t.dtype()),b,s,p);
 }
 
-K kget(const std::vector<int64_t>& v) {return klist(v.size(),v.data());}
+K kget(const LongVector& v) {return klist(v.size(),v.data());}
 
-K kget(const std::vector<torch::Tensor>& v) {
+K kget(const TensorVector& v) {
  K x=ktn(0,v.size());
  for(size_t i=0; i<v.size(); ++i) kK(x)[i]=kget(v[i]);
  return x;
 }
 
-K kget(const std::deque<torch::Tensor>& v) {
+K kget(const TensorDeque& v) {
  K x=ktn(0,v.size());
  for(size_t i=0; i<v.size(); ++i) kK(x)[i]=kget(v[i]);
  return x;
@@ -415,7 +415,7 @@ K tensordetail(const Tensor& t,I y) {
 // vector -
 // ------------------------------------------------------------------------------------------
 K vecinit(K x) {
- std::vector<Tensor> v;
+ TensorVector v;
  if(x->t) {
   Tensor t=kput(x);
   if(t.dim())
@@ -550,30 +550,61 @@ KAPI options(K x) {
  KCATCH("options");
 }
 
-// ------------------------------------------------------------------------------------------
-// vecshuffle -
-// shuffle -
-// ------------------------------------------------------------------------------------------
-ZV vecshuffle(std::vector<Tensor>& v) {
+// --------------------------------------------------------------------------------------------
+// perm - return permutation indices given tensor and dimension
+// vperm - check dimension size & device for each tensor in vector, return permutation indices
+// shuffle - shuffle tensor or vector of same size along given dimension
+// shuffle_ - in-place version of tensor/vector shuffle
+// kshuffle,1,2 - k api functions, expects tensor/vector input or (input;dim;inplace flag)
+// --------------------------------------------------------------------------------------------
+Z Tensor perm(const Tensor& t,int64_t d) {
+ return torch::randperm(t.size(d),torch::dtype(torch::kLong).device(t.device()));
+}
+
+Z Tensor vperm(const TensorVector& v,int64_t d) {
  size_t i=0; Tensor p;
  for(auto& t:v) {
   if(!p.defined())
-   p=torch::randperm(t.size(0),torch::dtype(torch::kLong).device(t.device()));
-  else if(t.size(0) != p.size(0))
-   AT_ERROR("Size mismatch: tensor[", i, "] length ",t.size(0), ", but permutation is ", p.size(0));
+   p=perm(t,d);
+  else if(t.size(d) != p.size(0))
+   AT_ERROR("Size mismatch: tensor[", i, "], dim[", d, "]=",t.size(d), ", but permutation size=", p.size(0));
   else if (t.device() != p.device())
-    AT_ERROR("Device mismatch: tensor[", i, "] is on ", t.device(), ", but permutation indices are on ", p.device());
-  t=t.index_select(0,p); ++i;
+   AT_ERROR("Device mismatch: tensor[", i, "] is on ", t.device(), ", but permutation indices are on ", p.device());
+  ++i;
  }
+ return p;
 }
 
-KAPI shuffle(K x) {
+Z Tensor shuffle(const Tensor &t,int64_t d) {return t.index_select(d,perm(t,d));}
+ZV shuffle_(Tensor &t,int64_t d) {t=shuffle(t,d);}
+
+Z TensorVector shuffle(const TensorVector& v,int64_t d) {
+ auto p=vperm(v,d); TensorVector r;
+ for(auto& t:v) r.emplace_back(t.index_select(d,p));
+ return r;
+}
+ 
+ZV shuffle_(TensorVector& v,int64_t d) {
+ auto p=vperm(v,d);
+ for(auto& t:v) t=t.index_select(d,p);
+}
+
+ZK kshuffle1(Tensor &t,int64_t d,B b) {return b ? shuffle_(t,d),(K)0 : kten(shuffle(t,d));}
+ZK kshuffle2(TensorVector& v,int64_t d,B b) {return b ? shuffle_(v,d),(K)0 : kvec(shuffle(v,d));
+}
+
+KAPI kshuffle(K x) {
  KTRY
-  if(auto* v=xvec(x))
-   vecshuffle(*v);
-  else
-   AT_ERROR("shuffle expects vector of tensors, input is ",kname(x->t));
-  return (K)0;
+  B b=true; int64_t d=0; Ktag *g; //default is in-place, along 1st dim
+  if((g=xtag(x)) || ((g=xtag(x,0)) && (x->n==2 && xint64(x,1,d)))) {
+   switch(g->a) {
+    case Class::tensor: return kshuffle1(((Kten*)g)->t,d,b);
+    case Class::vector: return kshuffle2(((Kvec*)g)->v,d,b);
+    default: AT_ERROR("shuffle not implemented for ",mapclass(g->a));
+   }
+  } else {
+   AT_ERROR("unrecognized arg(s) for shuffle");
+  }
  KCATCH("shuffle");
 }
 
@@ -633,5 +664,5 @@ V tensorfn(K x) {
  fn(x, "dtype",     KFN(dtype),1);
  fn(x, "layout",    KFN(layout),1);
  fn(x, "options",   KFN(options),1);
- fn(x, "shuffle",   KFN(shuffle),1);
+ fn(x, "shuffle",   KFN(kshuffle),1);
 }

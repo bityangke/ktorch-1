@@ -352,14 +352,14 @@ Tensor* xten(K x) {
 B xten(K x,J i,Tensor& t) {return xind(x,i) && xten(kK(x)[i],t);}
 Tensor* xten(K x,J i) {return xind(x,i) ? xten(kK(x)[i]) : nullptr;}
 
-std::vector<Tensor>* xvec(K x) {
+TensorVector* xvec(K x) {
  if(auto* a=xtag(x))
   if(a->a==Class::vector && a->c==Cast::tensor)
    return &((Kvec*)a)->v;
  return nullptr;
 }
 
-std::vector<Tensor>* xvec(K x,J i) {return xind(x,i) ? xvec(kK(x)[i]) : nullptr;}
+TensorVector* xvec(K x,J i) {return xind(x,i) ? xvec(kK(x)[i]) : nullptr;}
 
 // ------------------------------------------------------------------------------------------------------
 // xtenpair - check arg(s) for a pair of allocated tensor ptrs: if found, set & return true, else false

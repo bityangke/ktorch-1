@@ -201,50 +201,6 @@ KAPI pairtest(K x) {
  KCATCH("pairs test..");
 }
 
-KAPI modptr(K x) {
- auto p=torch::make_unique<torch::nn::LinearImpl>(10,7);
- std::cout << "ref count: "<< "ref count: "<< p->weight.use_count() << "\n";
- std::cout << p->weight << "\n";
- return kptr(p.release());
-}
-
-V shuffle(std::vector<Tensor>& v) {
- size_t i=0; Tensor p;
- for(auto& t:v) {
-  if(!p.defined())
-   p=torch::randperm(t.size(0),torch::dtype(torch::kLong).device(t.device()));
-  else if(t.size(0) != p.size(0))
-   AT_ERROR("Size mismatch: tensor[", i, "] length ",t.size(0), ", but permutation is ", p.size(0));
-  else if (t.device() != p.device())
-    AT_ERROR("Device mismatch: tensor[", i, "] is on ", t.device(), ", but permutation indices are on ", p.device());
-  t=t.index_select(0,p); ++i;
- }
-}
-
-KAPI kshuffle(K x) {
- KTRY
-  if(auto* v=xvec(x))
-   shuffle(*v);
-  else
-   AT_ERROR("shuffle expects vector of tensors, input is ",kname(x->t));
-  return (K)0;
- KCATCH("shuffle");
-}
-
-/*
-KAPI shuffle(K x) {
- KTRY
-  if(x->t<0) {
-   AT_ERROR("shuffle not implemented for ",kname(x->t));
-  } else if(x->t) {
-   auto t=kput(x);
-   auto n=t.size(0);
-   auto p=
-
- KCATCH("shuffle");
-}
-*/
-
 /*
 K model(Sequential& q,Loss *l,Optimizer *o,LossClosureOptimizer *oc) {
     
@@ -261,7 +217,7 @@ KAPI lbfgs(K x) {
     int i, n=x->j;
     auto t=torch::randn({n});
 
-    std::vector<torch::Tensor> v = {torch::randn({n}, torch::requires_grad())};
+    TensorVector v = {torch::randn({n}, torch::requires_grad())};
     //torch::optim::SGD o(v, /*lr=*/0.01);
     torch::optim::LBFGS o(v, 1);
 
@@ -333,7 +289,7 @@ V resize(Tensor& t,int64_t d) {
  subset(t,0,t.storage().size()/n);
 }
 
-V subset(std::vector<Tensor>& v,int64_t i,int64_t n) {
+V subset(TensorVector& v,int64_t i,int64_t n) {
  size_t j=0;
  for(auto& t:v) {
   /*

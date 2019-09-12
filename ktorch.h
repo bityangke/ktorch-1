@@ -58,6 +58,9 @@ using cS=const char*;
 
 using Tensor=torch::Tensor;
 using Scalar=torch::Scalar;
+using TensorVector=std::vector<Tensor>;
+using TensorDeque=std::deque<Tensor>;
+using LongVector=std::vector<int64_t>;
 using JRef=torch::IntArrayRef;
 template<size_t D,typename T=int64_t> using Expand=torch::ExpandingArray<D,T>;
 using ScalarType=torch::ScalarType;
@@ -173,8 +176,8 @@ struct TORCH_API Kten : public Ktag {
 };
 
 struct TORCH_API Kvec : public Ktag {
- std::vector<Tensor> v;
- Kvec(const std::vector<Tensor>& x) : v(std::move(x)) {a=Class::vector; c=Cast::tensor;}
+ TensorVector v;
+ Kvec(const TensorVector& x) : v(std::move(x)) {a=Class::vector; c=Cast::tensor;}
 };
 
 struct TORCH_API Kseq : public Ktag {
@@ -286,8 +289,8 @@ Kopt* xoptim(K);
 Kopt* xoptim(K,J);
 Kmodel* xmodel(K);
 Kmodel* xmodel(K,J);
-std::vector<Tensor>* xvec(K);
-std::vector<Tensor>* xvec(K,J);
+TensorVector* xvec(K);
+TensorVector* xvec(K,J);
 
 B xnum(K,F&);
 B xnum(K,J,F&);
@@ -369,13 +372,13 @@ V mathfn(K);
 
 // tensor routines:
 K kget(const Tensor&);
-K kget(const std::vector<int64_t>&);
-K kget(const std::vector<Tensor>&);
-K kget(const std::deque<Tensor>&);
+K kget(const LongVector&);
+K kget(const TensorVector&);
+K kget(const TensorDeque&);
 Tensor kput(K);
 Tensor kput(K,J);
 K kten(const Tensor&);
-K kvec(const std::vector<Tensor>&);
+K kvec(const TensorVector&);
 K tento(Kten*,const TensorOptions&,B,B);
 K vecto(Kvec*,const TensorOptions&,B);
 

@@ -271,33 +271,40 @@ KAPI kindex(K x) {
  KCATCH("index");
 }
 
-V subset(Tensor& t,int64_t i,int64_t n) {
- auto s=(int64_t*)t.sizes().data(); s[0]=n;
- t.set_(t.storage(),i*t.stride(0),t.sizes(),t.strides());
-}
-
-/*
-i=t.storage_offset()+t.numel;
-if(i < t.storage().size()-t.numel())
- return true;
-else if
-*/
-
-V resize(Tensor& t,int64_t d) {
+int64_t maxsize(Tensor& t,int64_t d) {
  int64_t i,n=1;
- for(i=1; i<t.dim(); ++i) n*=t.size(i);
- subset(t,0,t.storage().size()/n);
+ for(i=0; i<t.dim(); ++i) n*=i==d ? 1 : t.size(i);
+ return t.storage().size()/n;
 }
 
-V subset(TensorVector& v,int64_t i,int64_t n) {
- size_t j=0;
- for(auto& t:v) {
-  /*
-  TORCH_CHECK(t.dim(), "dim");
-  TORCH_CHECK(i<t.storage().size()/t.stride(d), "offset");
-  */
-  subset(t,i,n); j++;
+V setsize(Tensor &t,int64_t d,int64_t n) {((int64_t*)t.sizes().data())[d]=n;}
+
+int64_t resize(Tensor& t,int64_t d) {
+ auto m=maxsize(t,d);
+ if(t.size(d) != m)
+  setsize(t,d,m), t.set_(t.storage(),0,t.sizes(),t.strides());
+ return m;
+}
+
+B subset(Tensor& t,int64_t d,int64_t i,int64_t n) {
+ if(n != t.size(d)) setsize(t,d,n);
+ t.set_(t.storage(),i*t.stride(d),t.sizes(),t.strides());
+ return true;
+}
+
+KAPI sub(K x) {
+ Tensor t; int64_t d=0,n;
+ if(xten(x,0,t) && xint64(x,1,d) && xint64(x,2,n)) {
+  auto m=resize(t,d);
+  if(n>m) n=m;
+  for(int64_t i=0; i<m; i+=n) {
+   if(n>m-i) n=m-i;
+   subset(t,d,i,n);
+   std::cerr << t << "\n";
+  }
+  resize(t,d);
  }
+ return(K)0;
 }
 
 KAPI narrow(K x) {

@@ -561,19 +561,20 @@ Z Tensor perm(const Tensor& t,int64_t d) {
  return torch::randperm(t.size(d),torch::dtype(torch::kLong).device(t.device()));
 }
 
-Z Tensor vperm(const TensorVector& v,int64_t d) {
- size_t i=0; Tensor p;
+ZV vcheck(const TensorVector& v,int64_t d) {
+ int64_t i=0,n; torch::Device c=torch::kCPU;
  for(auto& t:v) {
-  if(!p.defined())
-   p=perm(t,d);
-  else if(t.size(d) != p.size(0))
-   AT_ERROR("Size mismatch: tensor[", i, "], dim[", d, "]=",t.size(d), ", but permutation size=", p.size(0));
-  else if (t.device() != p.device())
-   AT_ERROR("Device mismatch: tensor[", i, "] is on ", t.device(), ", but permutation indices are on ", p.device());
+  if(!i)
+   n=t.size(d),c=t.device();
+  else if(n != t.size(d))
+   AT_ERROR("Size mismatch: tensor[", i, "], dim[", d, "]=",t.size(d), ", but other size(s)=", n);
+  else if (c != t.device())
+   AT_ERROR("Device mismatch: tensor[", i, "] is on ", t.device(), ", but other tensor(s) are on ", c);
   ++i;
  }
- return p;
 }
+
+Z Tensor vperm(const TensorVector& v,int64_t d) {vcheck(v,d); return v.size() ? perm(v[0],d) : Tensor();}
 
 Z Tensor shuffle(const Tensor &t,int64_t d) {return t.index_select(d,perm(t,d));}
 ZV shuffle_(Tensor &t,int64_t d) {t=shuffle(t,d);}
@@ -590,26 +591,26 @@ ZV shuffle_(TensorVector& v,int64_t d) {
 }
 
 ZK kshuffle1(Tensor &t,int64_t d,B b) {return b ? shuffle_(t,d),(K)0 : kten(shuffle(t,d));}
-ZK kshuffle2(TensorVector& v,int64_t d,B b) {return b ? shuffle_(v,d),(K)0 : kvec(shuffle(v,d));
-}
+ZK kshuffle2(TensorVector& v,int64_t d,B b) {return b ? shuffle_(v,d),(K)0 : kvec(shuffle(v,d));}
 
 KAPI kshuffle(K x) {
  KTRY
   B b=true; int64_t d=0; Ktag *g; //default is in-place, along 1st dim
-  if((g=xtag(x)) || ((g=xtag(x,0)) && (x->n==2 && xint64(x,1,d)))) {
+  if((g=xtag(x)) || 
+    ((g=xtag(x,0)) && ((x->n==2 && (xint64(x,1,d) || xbool(x,1,b))) ||
+                       (x->n==3 &&  xint64(x,1,d) && xbool(x,2,b)))))
    switch(g->a) {
     case Class::tensor: return kshuffle1(((Kten*)g)->t,d,b);
     case Class::vector: return kshuffle2(((Kvec*)g)->v,d,b);
     default: AT_ERROR("shuffle not implemented for ",mapclass(g->a));
    }
-  } else {
+  else
    AT_ERROR("unrecognized arg(s) for shuffle");
-  }
  KCATCH("shuffle");
 }
 
 // ------------------------------------------------------------------------------------------
-// tensor utiity fns: 
+// tensor utility fns: 
 // ------------------------------------------------------------------------------------------
 // tensorcopy - tgt <- src values, must have same type & device, tgt resized if src larger
 // backward: backprop given tensor, optional tensor and sym for retain/create gradient graph

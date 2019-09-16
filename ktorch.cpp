@@ -39,7 +39,8 @@ B xhelp(K x,S &s) {
 // kname - string from k data type
 // ksizeof - given k type, return size of element, e.g. KF -> 8
 // maptype - map k data type to/from torch type
-// mapclass - make k class enum to symbol
+// mapclass - make class enum to symbol
+// mapattr - make attr enum to symbol
 // ------------------------------------------------------------------------------------------
 B match(const Scalar &x,const Scalar &y) {
  if(x.isIntegral()) {
@@ -151,6 +152,12 @@ S mapclass(Class a) {
  for(auto& m:env().kclass)
   if(a==std::get<1>(m)) return std::get<0>(m);
  AT_ERROR("Unrecognized class: ", (I)a);
+}
+
+S mapattr(Attr a) {
+ for(auto& m:env().attr)
+  if(a==std::get<1>(m)) return std::get<0>(m);
+ AT_ERROR("Unrecognized attribute: ", (I)a);
 }
 
 // ------------------------------------------------------------------------------------------
@@ -1006,10 +1013,10 @@ S& optsym(const bool& g) {
 
 K optkey() {
  K x=ktn(KS,4);
- kS(x)[0]=cs("device");
- kS(x)[1]=cs("dtype");
- kS(x)[2]=cs("layout");
- kS(x)[3]=cs("gradient");
+ kS(x)[0]=mapattr(Attr::device);
+ kS(x)[1]=mapattr(Attr::dtype);
+ kS(x)[2]=mapattr(Attr::layout);
+ kS(x)[3]=mapattr(Attr::gradient);
  return x;
 }
 
@@ -1152,6 +1159,40 @@ KAPI kseed(K x) {
 }
 
 // -----------------------------------------------------------------------------------------
+// query object attributes, e.g. tensor/vector and other object attributes
+// -----------------------------------------------------------------------------------------
+ZK attr(K x,A k,Attr a) {
+ KTRY
+  auto* g=xtag(x);
+  TORCH_CHECK(g, mapattr(a),": unrecognized arg(s) - ",kname(x->t));
+  switch(g->a) {
+   case Class::tensor: return tensorattr(((Kten*)g)->t,k,a);
+   case Class::vector: return vectorattr(((Kvec*)g)->v,k,a);
+   default: AT_ERROR(mapattr(a),": not implemented for ",mapclass(g->a));
+  }
+ KCATCH("attr");
+}
+
+KAPI      dim(K x) {return attr(x, -KJ, Attr::dim);}
+KAPI   offset(K x) {return attr(x, -KJ, Attr::offset);}
+KAPI      ref(K x) {return attr(x, -KJ, Attr::ref);}
+KAPI  weakref(K x) {return attr(x, -KJ, Attr::weakref);}
+KAPI      ptr(K x) {return attr(x, -KJ, Attr::ptr);}
+KAPI  storage(K x) {return attr(x, -KJ, Attr::storage);}
+
+KAPI   device(K x) {return attr(x, -KS, Attr::device);}
+KAPI    dtype(K x) {return attr(x, -KS, Attr::dtype);}
+KAPI   layout(K x) {return attr(x, -KS, Attr::layout);}
+KAPI gradient(K x) {return attr(x, -KS, Attr::gradient);}
+KAPI   gradfn(K x) {return attr(x, -KS, Attr::gradfn);}
+
+KAPI    leaf(K x) {return attr(x, -KB, Attr::leaf);}
+KAPI  pinned(K x) {return attr(x, -KB, Attr::pinned);}
+
+KAPI    size(K x) {return attr(x,  KJ, Attr::size);}
+KAPI  stride(K x) {return attr(x,  KJ, Attr::stride);}
+
+// -----------------------------------------------------------------------------------------
 // initialize globals: device counts, device sym-int mapping, etc.
 // kinit - called when shared library is first opened
 // -----------------------------------------------------------------------------------------
@@ -1191,7 +1232,27 @@ KAPI fns(K x){
  fn(x, "config",      KFN(config),      1);
  fn(x, "cudadevice",  KFN(cudadevice),  1);
  fn(x, "cudadevices", KFN(cudadevices), 1);
- fn(x, "seed",        KFN(kseed),1);
+ fn(x, "seed",        KFN(kseed),       1);
+
+ fn(x, "dim",         KFN(dim),         1);
+ fn(x, "offset",      KFN(offset),      1);
+ fn(x, "ptr",         KFN(ptr),         1);
+ fn(x, "ref",         KFN(ref),         1);
+ fn(x, "storage",     KFN(storage),     1);
+ fn(x, "weakref",     KFN(weakref),     1);
+
+ fn(x, "device",      KFN(device),      1);
+ fn(x, "dtype",       KFN(dtype),       1);
+ fn(x, "gradfn",      KFN(gradfn),      1);
+ fn(x, "gradient",    KFN(gradient),    1);
+ fn(x, "layout",      KFN(layout),      1);
+
+ fn(x, "leaf",        KFN(leaf),        1);
+ fn(x, "pinned",      KFN(pinned),      1);
+
+ fn(x, "size",        KFN(size),        1);
+ fn(x, "stride",      KFN(stride),      1);
+
  tensorfn(x);
  mathfn(x);
  modfn(x);

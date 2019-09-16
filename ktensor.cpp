@@ -329,85 +329,6 @@ KAPI tensor(K x) {
  KCATCH("Unable to complete tensor operation");
 }
 
-// ------------------------------------------------------------------------------------------------
-// diagnostic functions -- check underlying pointers, storage data, reference counts, etc.
-// ------------------------------------------------------------------------------------------------
-// grad = return gradient data or empty, if ptr enlisted, return gradient ptr, which must be free'd
-// graphdetail - return information related to autograd graph: leaf variable flag & backward fn
-// tensordata - return CPU tensor/storage data as k list
-// tensordetail - return dictionary of attributes given tensor and detail level 0,1,2
-// ------------------------------------------------------------------------------------------------
-KAPI grad(K x) {
- KTRY
-  B p=false; Tensor t;
-  if(xten(x,t) || (p=(xten(x,0,t) && x->n==1))) {
-   if(p) return t.grad().defined() ? kten(t.grad()) : KERR("No gradient defined");
-   else  return t.grad().defined() ? kget(t.grad()) : (K)0;
- } else {
-  return KERR("Unexpected arg(s) for gradient, expectining tensor (enlist to return gradient ptr)");
- }
- KCATCH("Unable to get gradient");
-}
-
-ZV graphdetail(K *a,K *b,const Tensor& t) {
- if(t.is_variable()) {
-  auto& v=torch::autograd::as_variable_ref(t);
-  cS s=v.grad_fn() ? v.grad_fn()->name().c_str() : "";
-  js(a,cs("leaf"));   jk(b,kb(v.is_leaf()));
-  js(a,cs("gradfn")); jk(b,ks((S)s));
- } else {
-  js(a,cs("leaf"));   jk(b,kb(false));
-  js(a,cs("gradfn")); jk(b,ks((S)""));
- }
-}
-
-ZK tensordata(B b,Tensor &t) {  //tensor flag: true-use tensor, false-use storage
- J e,n; V *v;
- if (t.is_cuda())
-  return KERR("CUDA tensor not supported -- no memcpy on CUDA data");
- if(b) {
-  e=t.storage().elementSize(); n=t.numel(); v=t.data_ptr();
- } else {
-   auto s=t.storage(); e=s.elementSize(); n=s.size(); v=s.data();
- }
- K x=ktn(maptype(t.dtype()),n);
- memcpy(kG(x),v,n*e);
- return x;
-}
-
-K tensordetail(const Tensor& t,I y) {
- B s=t.is_sparse(); J n=t.dim();
- K x=xD(ktn(KS,0),ktn(0,0)),*a=&kK(x)[0],*b=&kK(x)[1];
- js(a,cs("device"));   jk(b,ks(optsym(t.device())));
- js(a,cs("dtype"));    jk(b,ks(optsym(t.dtype())));
- js(a,cs("layout"));   jk(b,ks(optsym(t.layout())));
- js(a,cs("gradient")); jk(b,ks(optsym(t.is_variable() ? t.requires_grad() : false)));
- graphdetail(a,b,t);
- js(a,cs("ktype"));    jk(b,kh(maptype(t.dtype())));
- js(a,cs("dim"));      jk(b,kj(n));
- js(a,cs("size"));     jk(b,ktn(KJ,n)); memcpy(kG(kK(*b)[(*b)->n-1]),t.sizes().data(),n*sizeof(J));
- js(a,cs("stride"));   jk(b,ktn(KJ,s ? 0 : n));
-                       if(!s) memcpy(kG(kK(*b)[(*b)->n-1]),t.strides().data(),n*sizeof(J));
- if(y<1) return x;
- js(a,cs("contiguous"));  jk(b,s ? 0 : kb(t.is_contiguous()));
- js(a,cs("distributed")); jk(b,kb(t.is_distributed()));
- js(a,cs("tensorptr"));   jk(b,kj((intptr_t)t.unsafeGetTensorImpl()));
- js(a,cs("offset"));      jk(b,kj(t.storage_offset()));
- js(a,cs("dataptr"));     jk(b,kj((intptr_t)t.data_ptr()));
- js(a,cs("datasize"));    jk(b,kj(t.numel()));
- js(a,cs("storageptr"));  jk(b,kj((intptr_t)t.storage().data()));
- js(a,cs("storagesize")); jk(b,kj(t.storage().size()));
- js(a,cs("elementsize")); jk(b,kj(t.storage().elementSize()));
- js(a,cs("ref"));         jk(b,kj(t.use_count()));
- js(a,cs("weakref"));     jk(b,kj(t.weak_use_count()));
- js(a,cs("storageref"));  jk(b,kj(t.storage().use_count()));
- if(y<2) return x;
- auto c=t.toBackend(torch::Backend::CPU);
- js(a,cs("storagedata")); jk(b,tensordata(false,c));
- js(a,cs("data"));        jk(b,tensordata(true, c));
- return x;
-}
-
 // ------------------------------------------------------------------------------------------
 // tensor vector fns: 
 // ------------------------------------------------------------------------------------------
@@ -456,81 +377,83 @@ KAPI vector(K x) {
 }
 
 // ----------------------------------------------------------------------------------------------
-// dim - return no. of tensor dimensions, or dimensions of each tensor in vector of tensors
-// size - return sizes of each tensor dimension, or list of sizes for vector
-// stride - return strides of each tensor dimension, or list of strides for vector
-// device - return device(s) for given tensor(s)
-// options - return options for tensor(s)
+// tensorlong - tensor/vector attributes returned to k as long scalar
+// tensorsym - tensor/vector attributes returned to k as a symbol, e.g. device
+// tensorflag - tensor/vector attributes returned to k as a boolean, e.g. leaf
+// tensorsize - tensor/vector attributes returned to k as a long list, e.g. size/stride
+// tensorattr - handle tensor attribute queries according to k datatype returned
+// vectorattr - handle tensor vector attribute queries according to k datatype returned
+// options - return dictionary/table of tensor/vector attributes
 // ----------------------------------------------------------------------------------------------
-KAPI dim(K x) {
- KTRY
-  Tensor t;
-  if(xten(x,t)) {
-   return kj(t.dim());
-  } else if(auto* v=xvec(x)) {
-   K d=ktn(KJ,v->size());
-   for(size_t i=0; i<v->size(); ++i)
-    kJ(d)[i]=v->at(i).dim();
-   return d;
-  } else {
-   return kj(kput(x).dim());
-  }
- KCATCH("dim");
-}
-
-ZK size1(const Tensor& t,B b) {
- return klist(t.dim(),b ? t.sizes().data() : t.strides().data());
-}
-
-ZK size2(K x,B b) {
- KTRY
-  Tensor t;
-  if(xten(x,t)) {
-   return size1(t,b);
-  } else if(auto* v=xvec(x)) {
-   K s=ktn(0,v->size());
-   for(size_t i=0; i<v->size(); ++i)
-    kK(s)[i]=size1(v->at(i),b);
-   return s;
-  } else {
-   return size1(kput(x),b);
-  }
- KCATCH("size/stride");
-}
-
-KAPI size  (K x) {return size2(x,true);}
-KAPI stride(K x) {return size2(x,false);}
-
-ZS tensym(const Tensor& t,I m) {
- switch(m) {
-  case 0: return optsym(t.device());
-  case 1: return optsym(t.dtype());
-  case 2: return optsym(t.layout());
-  case 3: return optsym(t.requires_grad());
-  default: AT_ERROR("Invalid mode for tensor setting: ",m);
+ZJ tensorlong(const Tensor& t,Attr a) {
+ switch(a) {
+  case Attr::dim:     return t.dim();
+  case Attr::offset:  return t.storage_offset();
+  case Attr::ref:     return t.use_count();
+  case Attr::weakref: return t.weak_use_count();
+  case Attr::ptr:     return (intptr_t)t.unsafeGetTensorImpl();
+  case Attr::storage: return (intptr_t)t.storage().data();
+  default: AT_ERROR(mapattr(a),": not implemented for tensors");
  }
 }
 
-K tensym(K x,I m,cS e) {
- KTRY
-  Tensor t;
-  if(xten(x,t)) {
-   return ks(tensym(t,m));
-  } else if(auto* v=xvec(x)) {
-   K y=ktn(KS,v->size());
-   for(size_t i=0; i<v->size(); ++i)
-    kS(y)[i]=tensym(v->at(i),m);
-   return y;
-  } else {
-   AT_ERROR("Unrecognized arg(s) for ", e, ", expected tensor(s)");
-  }
- KCATCH(e);
+ZS tensorsym(const Tensor& t,Attr a) {
+ switch(a) {
+  case Attr::device:   return optsym(t.device());
+  case Attr::dtype:    return optsym(t.dtype());
+  case Attr::layout:   return optsym(t.layout());
+  case Attr::gradient: return optsym(t.requires_grad());
+  case Attr::gradfn:   return (S)(torch::autograd::as_variable_ref(t).grad_fn() ?
+                                  torch::autograd::as_variable_ref(t).grad_fn()->name().c_str() : "");
+  default: AT_ERROR(mapattr(a),": not implemented for tensors");
+ }
 }
 
-KAPI device(K x) {return tensym(x,0,"device");}
-KAPI dtype(K x)  {return tensym(x,1,"dtype");}
-KAPI layout(K x) {return tensym(x,2,"layout");}
-//KAPI layout(K x) {return tensym(x,2,"layout");}
+Z B tensorflag(const Tensor &t,Attr a) {
+ switch(a) {
+  case Attr::leaf:    return torch::autograd::as_variable_ref(t).is_leaf();
+  case Attr::pinned:  return t.is_pinned();
+  default: AT_ERROR(mapattr(a),": not implemented for tensors");
+ }
+}
+
+ZK tensorsize(const Tensor &t,Attr a) {
+ switch(a) {
+  case Attr::size:    return klist(t.dim(),t.sizes().data());
+  case Attr::stride:  return klist(t.dim(),t.strides().data());
+  default: AT_ERROR(mapattr(a),": not implemented for tensors");
+ }
+}
+
+K tensorattr(const Tensor &t,A k,Attr a) {
+ switch(k) {
+  case -KJ: return kj(tensorlong(t,a));
+  case  KJ: return tensorsize(t,a);
+  case -KS: return ks(tensorsym(t,a));
+  case -KB: return kb(tensorflag(t,a));
+  default: AT_ERROR(mapattr(a),": not implemented for tensors");
+ }
+}
+
+K vectorattr(const TensorVector &v,A k,Attr a) {
+ size_t i=0; K x=ktn(k<0 ? abs(k) : 0, v.size());
+ try {
+  for(auto&t:v) {
+   switch(k) {
+    case -KJ: kJ(x)[i]=tensorlong(t,a); break;
+    case  KJ: kK(x)[i]=tensorsize(t,a); break;
+    case -KS: kS(x)[i]=tensorsym(t,a);  break;
+    case -KB: kG(x)[i]=tensorflag(t,a); break;
+    default: AT_ERROR(mapattr(a),": not implemented for tensors");
+   }
+   ++i;
+  }
+ } catch(...) {
+  if(x) r0(x);
+  throw;
+ }
+ return x;
+}
 
 KAPI options(K x) {
  KTRY
@@ -550,9 +473,75 @@ KAPI options(K x) {
  KCATCH("options");
 }
 
+// ------------------------------------------------------------------------------------------------
+// diagnostic functions -- check underlying pointers, storage data, reference counts, etc.
+// ------------------------------------------------------------------------------------------------
+// grad = return gradient data or empty, if ptr enlisted, return gradient ptr, which must be free'd
+// tensordata - return CPU tensor/storage data as k list
+// tensordetail - return dictionary of attributes given tensor and detail level 0,1,2
+// ------------------------------------------------------------------------------------------------
+KAPI grad(K x) {
+ KTRY
+  B p=false; Tensor t;
+  if(xten(x,t) || (p=(xten(x,0,t) && x->n==1))) {
+   if(p) return t.grad().defined() ? kten(t.grad()) : KERR("No gradient defined");
+   else  return t.grad().defined() ? kget(t.grad()) : (K)0;
+ } else {
+  return KERR("Unexpected arg(s) for gradient, expectining tensor (enlist to return gradient ptr)");
+ }
+ KCATCH("Unable to get gradient");
+}
+
+ZK tensordata(B b,Tensor &t) {  //tensor flag: true-use tensor, false-use storage
+ J e,n; V *v;
+ if (t.is_cuda())
+  return KERR("CUDA tensor not supported -- no memcpy on CUDA data");
+ if(b) {
+  e=t.storage().elementSize(); n=t.numel(); v=t.data_ptr();
+ } else {
+   auto s=t.storage(); e=s.elementSize(); n=s.size(); v=s.data();
+ }
+ K x=ktn(maptype(t.dtype()),n);
+ memcpy(kG(x),v,n*e);
+ return x;
+}
+
+K tensordetail(const Tensor& t,I y) {
+ B s=t.is_sparse();
+ K x=xD(ktn(KS,0),ktn(0,0)),*a=&kK(x)[0],*b=&kK(x)[1];
+ js(a, mapattr(Attr::device));   jk(b, ks(tensorsym(t, Attr::device)));
+ js(a, mapattr(Attr::dtype));    jk(b, ks(tensorsym(t, Attr::dtype)));
+ js(a, mapattr(Attr::layout));   jk(b, ks(tensorsym(t, Attr::layout)));
+ js(a, mapattr(Attr::gradient)); jk(b, ks(tensorsym(t, Attr::gradient)));
+ js(a, mapattr(Attr::leaf));     jk(b, kb(tensorflag(t,Attr::leaf)));
+ js(a, mapattr(Attr::gradfn));   jk(b, ks(tensorsym(t,Attr::gradfn)));
+ js(a,cs("ktype"));    jk(b,kh(maptype(t.dtype())));
+ js(a, mapattr(Attr::dim));      jk(b, kj(tensorlong(t,Attr::dim)));
+ js(a, mapattr(Attr::size));     jk(b, tensorsize(t, Attr::size));
+ js(a, mapattr(Attr::stride));   jk(b, tensorsize(t, Attr::stride));
+ if(y<1) return x;
+ js(a,cs("contiguous"));  jk(b,s ? 0 : kb(t.is_contiguous()));
+ js(a,cs("distributed")); jk(b,kb(t.is_distributed()));
+ js(a,cs("tensorptr"));   jk(b,kj((intptr_t)t.unsafeGetTensorImpl()));
+ js(a, mapattr(Attr::offset));    jk(b, kj(tensorlong(t, Attr::offset)));
+ js(a,cs("dataptr"));     jk(b,kj((intptr_t)t.data_ptr()));
+ js(a,cs("datasize"));    jk(b,kj(t.numel()));
+ js(a,cs("storageptr"));  jk(b,kj((intptr_t)t.storage().data()));
+ js(a,cs("storagesize")); jk(b,kj(t.storage().size()));
+ js(a,cs("elementsize")); jk(b,kj(t.storage().elementSize()));
+ js(a, mapattr(Attr::ref));      jk(b, kj(tensorlong(t, Attr::ref)));
+ js(a, mapattr(Attr::weakref));  jk(b, kj(tensorlong(t, Attr::weakref)));
+ js(a,cs("storageref"));  jk(b,kj(t.storage().use_count()));
+ if(y<2) return x;
+ auto c=t.toBackend(torch::Backend::CPU);
+ js(a,cs("storagedata")); jk(b,tensordata(false,c));
+ js(a,cs("data"));        jk(b,tensordata(true, c));
+ return x;
+}
 // --------------------------------------------------------------------------------------------
 // perm - return permutation indices given tensor and dimension
-// vperm - check dimension size & device for each tensor in vector, return permutation indices
+// vcheck - check for matching dimension size & device for each tensor in vector
+// vperm - check vector for same dim size & device, return permutation indices
 // shuffle - shuffle tensor or vector of same size along given dimension
 // shuffle_ - in-place version of tensor/vector shuffle
 // kshuffle,1,2 - k api functions, expects tensor/vector input or (input;dim;inplace flag)
@@ -567,9 +556,9 @@ ZV vcheck(const TensorVector& v,int64_t d) {
   if(!i)
    n=t.size(d),c=t.device();
   else if(n != t.size(d))
-   AT_ERROR("Size mismatch: tensor[", i, "], dim[", d, "]=",t.size(d), ", but other size(s)=", n);
+   AT_ERROR("Size mismatch: tensor[",i,"] size=",t.size(d),", but previous tensor(s) have size=",n," for dim ",d);
   else if (c != t.device())
-   AT_ERROR("Device mismatch: tensor[", i, "] is on ", t.device(), ", but other tensor(s) are on ", c);
+   AT_ERROR("Device mismatch: tensor[",i,"] is on ",t.device(),", but previous tensor(s) are on ", c);
   ++i;
  }
 }
@@ -658,12 +647,6 @@ V tensorfn(K x) {
  fn(x, "backward",  KFN(backward),1);
  fn(x, "grad",      KFN(grad),1);
  fn(x, "vector",    KFN(vector),1);
- fn(x, "dim",       KFN(dim),1);
- fn(x, "size",      KFN(size),1);
- fn(x, "stride",    KFN(stride),1);
- fn(x, "device",    KFN(device),1);
- fn(x, "dtype",     KFN(dtype),1);
- fn(x, "layout",    KFN(layout),1);
  fn(x, "options",   KFN(options),1);
  fn(x, "shuffle",   KFN(kshuffle),1);
 }

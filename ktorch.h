@@ -164,6 +164,14 @@ enum class State:char {
  Class,module,name,options,parms,buffers
 };
 
+enum class Attr:char {
+ undefined = 0,
+ dim, offset, ptr, ref, storage, weakref,  // long attributes
+ device, dtype, gradfn, gradient, layout,  // symbol
+ leaf, pinned,                             // boolean
+ size, stride                              // longs
+};
+ 
 struct TORCH_API Ktag {
  Class a = Class::undefined;
  Cast  c = Cast::undefined;
@@ -205,7 +213,6 @@ struct TORCH_API Kmodel : public Ktag {
  Sequential q;     // sequential module
  Lossptr l;        // shared ptr to loss module
  Optptr o;         // shared ptr to optimizer
- Kmodel(Kseq x,Kloss y,Kopt z) : lc(y.c),oc(z.c),q(x.q),l(y.l),o(z.o) {a=Class::model; c=Cast::model;}
  Kmodel(Kseq *x,Kloss *y,Kopt *z) : lc(y->c),oc(z->c),q(x->q),l(y->l),o(z->o) {a=Class::model; c=Cast::model;}
 };
 
@@ -228,6 +235,7 @@ J ksizeof(A);
 A maptype(TypeMeta);
 TypeMeta maptype(A);
 S mapclass(Class);
+S mapattr(Attr);
 
 S statekey(State);
 K statekeys();
@@ -381,9 +389,10 @@ K kten(const Tensor&);
 K kvec(const TensorVector&);
 K tento(Kten*,const TensorOptions&,B,B);
 K vecto(Kvec*,const TensorOptions&,B);
-
 K ktenpair(B,Tensor&,Tensor&);
 K kten3(B,Tensor&,Tensor&,Tensor&);
+K tensorattr(const Tensor&t,A,Attr);
+K vectorattr(const TensorVector&,A,Attr);
 K tensordetail(const Tensor&,I);
 V tensorcopy(Tensor&,const Tensor&,B async=false);
 V tensorfn(K);
@@ -662,6 +671,24 @@ typedef struct {
   std::make_tuple(cs("centered"),   Setting::centered),
   std::make_tuple(cs("dampening"),  Setting::dampening),
   std::make_tuple(cs("nesterov"),   Setting::nesterov)
+ }};
+
+ std::array<std::tuple<S,Attr>,15> attr = {{            //attributes: map symbol -> enum
+  std::make_tuple(cs("device"),     Attr::device),
+  std::make_tuple(cs("dim"),        Attr::dim),
+  std::make_tuple(cs("dtype"),      Attr::dtype),
+  std::make_tuple(cs("gradfn"),     Attr::gradfn),
+  std::make_tuple(cs("gradient"),   Attr::gradient),
+  std::make_tuple(cs("layout"),     Attr::layout),
+  std::make_tuple(cs("leaf"),       Attr::leaf),
+  std::make_tuple(cs("offset"),     Attr::offset),
+  std::make_tuple(cs("pinned"),     Attr::pinned),
+  std::make_tuple(cs("ptr"),        Attr::ptr),
+  std::make_tuple(cs("ref"),        Attr::ref),
+  std::make_tuple(cs("size"),       Attr::size),
+  std::make_tuple(cs("storage"),    Attr::storage),
+  std::make_tuple(cs("stride"),     Attr::stride),
+  std::make_tuple(cs("weakref"),    Attr::weakref)
  }};
 
  std::array<std::tuple<S,bool,bool>,4> backsym = {{     //map sym to booleans for retain_graph & create_graph

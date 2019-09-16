@@ -271,13 +271,32 @@ KAPI kindex(K x) {
  KCATCH("index");
 }
 
+// -------------------------------------------------------------------------------------------
+// setsize -
+// maxsize -
+// resize -
+// -------------------------------------------------------------------------------------------
+V setsize(Tensor &t,int64_t d,int64_t n) {((int64_t*)t.sizes().data())[d]=n;}
+
 int64_t maxsize(Tensor& t,int64_t d) {
  int64_t i,n=1;
  for(i=0; i<t.dim(); ++i) n*=i==d ? 1 : t.size(i);
  return t.storage().size()/n;
 }
 
-V setsize(Tensor &t,int64_t d,int64_t n) {((int64_t*)t.sizes().data())[d]=n;}
+int64_t maxsize(TensorVector& v,int64_t d) {
+ int64_t i=0,m=-1;
+ for(auto&t:v) {
+  if(i) {
+   auto n=maxsize(t,d);
+   TORCH_CHECK(m==n, "tensor[",i,"] size=",n,", but previous tensor(s) have size=",m," for dim ",d);
+  } else {
+   m=maxsize(t,d);
+  }
+  ++i;
+ } 
+ return m;
+}
 
 int64_t resize(Tensor& t,int64_t d) {
  auto m=maxsize(t,d);

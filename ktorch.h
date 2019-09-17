@@ -56,6 +56,7 @@ using A=signed char;
 using B=bool;
 using cS=const char*;
 
+using Storage=torch::Storage;
 using Tensor=torch::Tensor;
 using Scalar=torch::Scalar;
 using TensorVector=std::vector<Tensor>;
@@ -166,10 +167,10 @@ enum class State:char {
 
 enum class Attr:char {
  undefined = 0,
- dim, offset, ptr, ref, storage, weakref,  // long attributes
- device, dtype, gradfn, gradient, layout,  // symbol
- leaf, pinned,                             // boolean
- size, stride                              // longs
+ dim, elementsize, numel,  offset, ptr, ref, storage, weakref,  // long scalars
+ device, dtype, gradfn, gradient, layout,                       // symbol
+ contiguous, leaf, pinned,                                      // boolean
+ size, stride                                                   // long list
 };
  
 struct TORCH_API Ktag {
@@ -316,7 +317,6 @@ B xscalar(K,J,Scalar&);
 
 B xbool(K,B&);
 B xbool(K,J,B&);
-B xlevel(K,I&);
 TypeMeta mtype(S);
 S mtype(TypeMeta);
 ScalarType stype(S);
@@ -393,7 +393,8 @@ K ktenpair(B,Tensor&,Tensor&);
 K kten3(B,Tensor&,Tensor&,Tensor&);
 K tensorattr(const Tensor&t,A,Attr);
 K vectorattr(const TensorVector&,A,Attr);
-K tensordetail(const Tensor&,I);
+K tensorinfo(const Tensor&,B);
+K vectorinfo(const TensorVector&,B);
 V tensorcopy(Tensor&,const Tensor&,B async=false);
 V tensorfn(K);
 
@@ -673,22 +674,25 @@ typedef struct {
   std::make_tuple(cs("nesterov"),   Setting::nesterov)
  }};
 
- std::array<std::tuple<S,Attr>,15> attr = {{            //attributes: map symbol -> enum
-  std::make_tuple(cs("device"),     Attr::device),
-  std::make_tuple(cs("dim"),        Attr::dim),
-  std::make_tuple(cs("dtype"),      Attr::dtype),
-  std::make_tuple(cs("gradfn"),     Attr::gradfn),
-  std::make_tuple(cs("gradient"),   Attr::gradient),
-  std::make_tuple(cs("layout"),     Attr::layout),
-  std::make_tuple(cs("leaf"),       Attr::leaf),
-  std::make_tuple(cs("offset"),     Attr::offset),
-  std::make_tuple(cs("pinned"),     Attr::pinned),
-  std::make_tuple(cs("ptr"),        Attr::ptr),
-  std::make_tuple(cs("ref"),        Attr::ref),
-  std::make_tuple(cs("size"),       Attr::size),
-  std::make_tuple(cs("storage"),    Attr::storage),
-  std::make_tuple(cs("stride"),     Attr::stride),
-  std::make_tuple(cs("weakref"),    Attr::weakref)
+ std::array<std::tuple<S,Attr>,18> attr = {{            //attributes: map symbol -> enum
+  std::make_tuple(cs("contiguous"),  Attr::contiguous),
+  std::make_tuple(cs("device"),      Attr::device),
+  std::make_tuple(cs("dim"),         Attr::dim),
+  std::make_tuple(cs("dtype"),       Attr::dtype),
+  std::make_tuple(cs("elementsize"), Attr::elementsize),
+  std::make_tuple(cs("gradfn"),      Attr::gradfn),
+  std::make_tuple(cs("gradient"),    Attr::gradient),
+  std::make_tuple(cs("layout"),      Attr::layout),
+  std::make_tuple(cs("leaf"),        Attr::leaf),
+  std::make_tuple(cs("numel"),       Attr::numel),
+  std::make_tuple(cs("offset"),      Attr::offset),
+  std::make_tuple(cs("pinned"),      Attr::pinned),
+  std::make_tuple(cs("ptr"),         Attr::ptr),
+  std::make_tuple(cs("ref"),         Attr::ref),
+  std::make_tuple(cs("size"),        Attr::size),
+  std::make_tuple(cs("storage"),     Attr::storage),
+  std::make_tuple(cs("stride"),      Attr::stride),
+  std::make_tuple(cs("weakref"),     Attr::weakref)
  }};
 
  std::array<std::tuple<S,bool,bool>,4> backsym = {{     //map sym to booleans for retain_graph & create_graph

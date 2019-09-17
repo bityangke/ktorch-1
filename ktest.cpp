@@ -278,6 +278,12 @@ KAPI kindex(K x) {
 // -------------------------------------------------------------------------------------------
 V setsize(Tensor &t,int64_t d,int64_t n) {((int64_t*)t.sizes().data())[d]=n;}
 
+std::vector<int64_t> newsize(Tensor& t,int64_t d,int64_t n) {
+ auto v=t.sizes().vec();
+ v.at(d)=n;
+ return v;
+}
+
 int64_t maxsize(Tensor& t,int64_t d) {
  int64_t i,n=1;
  for(i=0; i<t.dim(); ++i) n*=i==d ? 1 : t.size(i);
@@ -301,14 +307,19 @@ int64_t maxsize(TensorVector& v,int64_t d) {
 int64_t resize(Tensor& t,int64_t d) {
  auto m=maxsize(t,d);
  if(t.size(d) != m)
-  setsize(t,d,m), t.set_(t.storage(),0,t.sizes(),t.strides());
+  t.set_(t.storage(), 0, newsize(t,d,m), t.strides());
  return m;
 }
 
-B subset(Tensor& t,int64_t d,int64_t i,int64_t n) {
+V subset(Tensor& t,int64_t d,int64_t i,int64_t n) {
  if(n != t.size(d)) setsize(t,d,n);
  t.set_(t.storage(),i*t.stride(d),t.sizes(),t.strides());
- return true;
+ //if(!d) t.unsafeGetTensorImpl()->refresh_contiguous();
+/*
+ if(!d) t.unsafeGetTensorImpl()->set_sizes_and_strides(t.sizes(),t.strides());
+ //t.set_storage_offset(i);
+ t.unsafeGetTensorImpl()->set_storage_offset(i);
+*/
 }
 
 KAPI sub(K x) {
@@ -326,6 +337,13 @@ KAPI sub(K x) {
  return(K)0;
 }
 
+KAPI narrow_(K x,K d,K i,K n) {
+ Tensor t;
+ xten(x,t);
+ subset(t,d->j,i->j,n->j);
+ return (K)0;
+}
+
 KAPI narrow(K x) {
  KTRY
   J d,i,n; Tensor t;
@@ -334,6 +352,17 @@ KAPI narrow(K x) {
   else
    return KERR("Unrecognized arg(s) for narrow, expecting (input;dim;offset;size)");
  KCATCH("narrow");
+}
+
+KAPI set_test(K x) {
+ //auto a=torch::arange(84).reshape({7,3,4});
+ Tensor a;
+ xten(x,a);
+ a.set_(a.storage(), 0, {7,3,2}, a.strides());
+ std::cout << a << "\n";
+ std::cout << "numel: " << a.numel() << "\n";
+ std::cout << std::boolalpha << "contiguous: " <<  a.is_contiguous() << "\n";
+ return (K)0;
 }
 
 KAPI opttest(K x) {

@@ -500,7 +500,6 @@ B xscalar(K x,J i,Scalar &s) {return xind(x,i) && xscalar(kK(x)[i],s);}
 
 // ------------------------------------------------------------------------------------------------------
 // xbool - if value is boolean, set value and return true, else false
-// xlevel - if value is short,int,long scalar, set int and return true else false
 // mtype - match sym to/from TypeMeta(newer datatype from Caffe2)
 // stype = match sym to/from ScalarType(older ATen datatypes)
 // xtype - symbol to scalar type or type meta, return true if scalar type/type meta set, else false
@@ -511,17 +510,6 @@ B xscalar(K x,J i,Scalar &s) {return xind(x,i) && xscalar(kK(x)[i],s);}
 // ------------------------------------------------------------------------------------------------------
 B xbool(K x,B &b) {return (x->t == -KB) ? b=x->g,true : false;}
 B xbool(K x,J i,B &b) {return xind(x,i) && xbool(kK(x)[i],b);}
-
-B xlevel(K x,I &n) {
- switch(-x->t) {
-  case KH: return n=x->h, true;
-  case KI: return n=x->i, true;
-  case KJ: return n=x->j, true;
-  default: return false;
- }
-}
-
-B xlevel(K x,J i,I &n) {return xind(x,i) && xlevel(kK(x)[i],n);}
 
 TypeMeta mtype(S s) {
   for(auto &m:env().dtype) if(s==std::get<0>(m)) return std::get<1>(m);
@@ -919,20 +907,19 @@ KAPI to(K x) {
  KCATCH("to");
 }
 
-KAPI kdetail(K x) {
+ZK kinfo(K x,B b,cS e) {
  KTRY
-  I n=0; Ktag *g;
-  if((g=xtag(x)) || ((g=xtag(x,0)) && xlevel(x,1,n) && x->n==2)) {
-   TORCH_CHECK((n>-1 && n<3),"Specify level of detail: 0,1,2");
-   switch(g->a) {
-    case Class::tensor:  return tensordetail(((Kten*)g)->t,n);
-    default:           return KERR("Unrecognized pointer");
-   }
-  } else {
-   return KERR("detail: unrecognized arg(s)");
+  auto* g=xtag(x);
+  TORCH_CHECK(g, e," not implemented for ",kname(x->t));
+  switch(g->a) {
+   case Class::tensor:     return tensorinfo(((Kten*)g)->t,b ? 2 : 0);
+   default: AT_ERROR(e," not implemented for ",mapclass(g->a));
   }
- KCATCH("detail")
+ KCATCH(e);
 }
+
+KAPI info1(K x) {return kinfo(x, false, "info");}
+KAPI info2(K x) {return kinfo(x, true,  "detail");}
 
 KAPI zerograd(K x) {
  KTRY
@@ -1173,24 +1160,25 @@ ZK attr(K x,A k,Attr a) {
  KCATCH("attr");
 }
 
-KAPI      dim(K x) {return attr(x, -KJ, Attr::dim);}
-KAPI   offset(K x) {return attr(x, -KJ, Attr::offset);}
-KAPI      ref(K x) {return attr(x, -KJ, Attr::ref);}
-KAPI  weakref(K x) {return attr(x, -KJ, Attr::weakref);}
-KAPI      ptr(K x) {return attr(x, -KJ, Attr::ptr);}
-KAPI  storage(K x) {return attr(x, -KJ, Attr::storage);}
+KAPI        dim(K x) {return attr(x, -KJ, Attr::dim);}
+KAPI     offset(K x) {return attr(x, -KJ, Attr::offset);}
+KAPI        ref(K x) {return attr(x, -KJ, Attr::ref);}
+KAPI    weakref(K x) {return attr(x, -KJ, Attr::weakref);}
+KAPI        ptr(K x) {return attr(x, -KJ, Attr::ptr);}
+KAPI    storage(K x) {return attr(x, -KJ, Attr::storage);}
 
-KAPI   device(K x) {return attr(x, -KS, Attr::device);}
-KAPI    dtype(K x) {return attr(x, -KS, Attr::dtype);}
-KAPI   layout(K x) {return attr(x, -KS, Attr::layout);}
-KAPI gradient(K x) {return attr(x, -KS, Attr::gradient);}
-KAPI   gradfn(K x) {return attr(x, -KS, Attr::gradfn);}
+KAPI     device(K x) {return attr(x, -KS, Attr::device);}
+KAPI      dtype(K x) {return attr(x, -KS, Attr::dtype);}
+KAPI     layout(K x) {return attr(x, -KS, Attr::layout);}
+KAPI   gradient(K x) {return attr(x, -KS, Attr::gradient);}
+KAPI     gradfn(K x) {return attr(x, -KS, Attr::gradfn);}
 
-KAPI    leaf(K x) {return attr(x, -KB, Attr::leaf);}
-KAPI  pinned(K x) {return attr(x, -KB, Attr::pinned);}
+KAPI contiguous(K x) {return attr(x, -KB, Attr::contiguous);}
+KAPI       leaf(K x) {return attr(x, -KB, Attr::leaf);}
+KAPI     pinned(K x) {return attr(x, -KB, Attr::pinned);}
 
-KAPI    size(K x) {return attr(x,  KJ, Attr::size);}
-KAPI  stride(K x) {return attr(x,  KJ, Attr::stride);}
+KAPI       size(K x) {return attr(x,  KJ, Attr::size);}
+KAPI     stride(K x) {return attr(x,  KJ, Attr::stride);}
 
 // -----------------------------------------------------------------------------------------
 // initialize globals: device counts, device sym-int mapping, etc.
@@ -1224,7 +1212,8 @@ KAPI fns(K x){
  x=xD(ktn(KS,0),ktn(0,0));
  fn(x, "free",        KFN(kfree),       1);
  fn(x, "to",          KFN(to),          1);
- fn(x, "detail",      KFN(kdetail),     1);
+ fn(x, "info",        KFN(info1),       1);
+ fn(x, "detail",      KFN(info2),       1);
  fn(x, "state",       KFN(kstate),      1);
  fn(x, "zerograd",    KFN(zerograd),    1);
  fn(x, "default",     KFN(kdefault),    1);
@@ -1247,6 +1236,7 @@ KAPI fns(K x){
  fn(x, "gradient",    KFN(gradient),    1);
  fn(x, "layout",      KFN(layout),      1);
 
+ fn(x, "contiguous",  KFN(contiguous),  1);
  fn(x, "leaf",        KFN(leaf),        1);
  fn(x, "pinned",      KFN(pinned),      1);
 

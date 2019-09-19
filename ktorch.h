@@ -167,10 +167,11 @@ enum class State:char {
 
 enum class Attr:char {
  undefined = 0,
- dim, elementsize, numel,  offset, ptr, ref, storage, weakref,  // long scalars
- device, dtype, gradfn, gradient, layout,                       // symbol
- contiguous, leaf, pinned,                                      // boolean
- size, stride                                                   // long list
+ dim, elementsize, numel,  offset, ptr, ref, sparsedim, weakref, // long scalars
+ device, dtype, gradfn, gradient, layout,                        // symbol
+ coalesced, contiguous, leaf, pinned,                            // boolean
+ size, stride,                                                   // long list
+ data, storage                                                   // other: list,dict,..
 };
  
 struct TORCH_API Ktag {
@@ -674,8 +675,10 @@ typedef struct {
   std::make_tuple(cs("nesterov"),   Setting::nesterov)
  }};
 
- std::array<std::tuple<S,Attr>,18> attr = {{            //attributes: map symbol -> enum
+ std::array<std::tuple<S,Attr>,21> attr = {{            //attributes: map symbol -> enum
+  std::make_tuple(cs("coalesced"),   Attr::coalesced),
   std::make_tuple(cs("contiguous"),  Attr::contiguous),
+  std::make_tuple(cs("data"),        Attr::data),
   std::make_tuple(cs("device"),      Attr::device),
   std::make_tuple(cs("dim"),         Attr::dim),
   std::make_tuple(cs("dtype"),       Attr::dtype),
@@ -690,6 +693,7 @@ typedef struct {
   std::make_tuple(cs("ptr"),         Attr::ptr),
   std::make_tuple(cs("ref"),         Attr::ref),
   std::make_tuple(cs("size"),        Attr::size),
+  std::make_tuple(cs("sparsedim"),   Attr::sparsedim),
   std::make_tuple(cs("storage"),     Attr::storage),
   std::make_tuple(cs("stride"),      Attr::stride),
   std::make_tuple(cs("weakref"),     Attr::weakref)

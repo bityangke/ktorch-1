@@ -388,7 +388,7 @@ KAPI vector(K x) {
 ZJ storlong(const Storage& s,Attr a) {
  switch(a) {
   case Attr::elementsize: return s.elementSize();
-  case Attr::numel:       return s.size();
+  case Attr::size:        return s.size();
   case Attr::ptr:         return (intptr_t)s.data();
   case Attr::ref:         return s.use_count();
   default: AT_ERROR(mapattr(a),": not implemented for storage");
@@ -404,6 +404,7 @@ ZJ tensorlong(const Tensor& t,Attr a) {
   case Attr::ref:         return t.use_count();
   case Attr::weakref:     return t.weak_use_count();
   case Attr::ptr:         return (intptr_t)t.unsafeGetTensorImpl();
+  case Attr::sparsedim:   return t.is_sparse() ? t.sparse_dim() : 0;
   case Attr::storage:     return t.is_sparse() ? nj : (intptr_t)t.storage().data();
   default: AT_ERROR(mapattr(a),": not implemented for tensors");
  }
@@ -423,7 +424,8 @@ ZS tensorsym(const Tensor& t,Attr a) {
 
 Z B tensorflag(const Tensor &t,Attr a) {
  switch(a) {
-  case Attr::contiguous: return t.is_sparse()  ? false : t.is_contiguous();
+  case Attr::coalesced:  return t.is_sparse() ? t.is_coalesced() : false;
+  case Attr::contiguous: return t.is_sparse() ? false : t.is_contiguous();
   case Attr::leaf:       return torch::autograd::as_variable_ref(t).is_leaf();
   case Attr::pinned:     return t.is_pinned();
   default: AT_ERROR(mapattr(a),": not implemented for tensors");
@@ -489,46 +491,37 @@ KAPI options(K x) {
 // ------------------------------------------------------------------------------------------------
 // diagnostic functions -- check underlying pointers, storage data, reference counts, etc.
 // ------------------------------------------------------------------------------------------------
-// grad = return gradient data or empty, if ptr enlisted, return gradient ptr, which must be free'd
-// tensordata - return CPU tensor/storage data as k list
+// stordata - return CPU storage data as k list
+// storinfo - return storage attributes & data as dictionary
 // tensorinfo - return dictionary of attributes given tensor and detail level 0,1,2
 // ------------------------------------------------------------------------------------------------
-KAPI grad(K x) {
- KTRY
-  B p=false; Tensor t;
-  if(xten(x,t) || (p=(xten(x,0,t) && x->n==1))) {
-   if(p) return t.grad().defined() ? kten(t.grad()) : KERR("No gradient defined");
-   else  return t.grad().defined() ? kget(t.grad()) : (K)0;
- } else {
-  return KERR("Unexpected arg(s) for gradient, expectining tensor (enlist to return gradient ptr)");
- }
- KCATCH("Unable to get gradient");
-}
-
-ZK tensordata(B b,Tensor &t) {  //tensor flag: true-use tensor, false-use storage
- J e,n; V *v;
- if (t.is_cuda())
-  return KERR("CUDA tensor not supported -- no memcpy on CUDA data");
- if(b) {
-  e=t.storage().elementSize(); n=t.numel(); v=t.data_ptr();
- } else {
-   auto s=t.storage(); e=s.elementSize(); n=s.size(); v=s.data();
- }
- K x=ktn(maptype(t.dtype()),n);
- memcpy(kG(x),v,n*e);
+K stordata(const Storage& s) {
+ TORCH_CHECK(s.device().is_cpu(), "Cannot copy CUDA storage via memcpy");
+ std::cerr << "    dtype: " << s.dtype() << "\n";
+ std::cerr << "     size: " << s.size() << "\n";
+ std::cerr << " capacity: " << s.capacity() << "\n";
+ K x=ktn(maptype(s.dtype()),s.size());
+ memcpy(kG(x),s.data(),s.capacity());
  return x;
 }
 
-K storinfo(const Storage& s) {
+K storinfo(const Storage& s,const Storage& c) {
  K x=xD(ktn(KS,0),ktn(0,0)),*a=&kK(x)[0],*b=&kK(x)[1];
- js(a, mapattr(Attr::ptr));         jk(b, kj(storlong(s, Attr::ptr)));
- js(a, mapattr(Attr::numel));       jk(b, kj(storlong(s, Attr::numel)));
+ js(a, mapattr(Attr::size));        jk(b, kj(storlong(s, Attr::size)));
  js(a, mapattr(Attr::elementsize)); jk(b, kj(storlong(s, Attr::elementsize)));
  js(a, mapattr(Attr::ref));         jk(b, kj(storlong(s, Attr::ref)));
+ js(a, mapattr(Attr::ptr));         jk(b, kj(storlong(s, Attr::ptr)));
+ js(a, mapattr(Attr::data));        jk(b, stordata(c));
  return x;
 }
 
 K tensorinfo(const Tensor& t,B d) {
+ if(d && t.is_sparse()) {
+  K x=xD(ktn(KS,0),ktn(0,0)),*a=&kK(x)[0],*b=&kK(x)[1];
+  js(a, cs("indices")); jk(b, tensorinfo(t._indices(),d));
+  js(a, cs("values"));  jk(b, tensorinfo(t._values(),d));
+  return x;
+ }
  K x=xD(ktn(KS,0),ktn(0,0)),*a=&kK(x)[0],*b=&kK(x)[1];
  js(a, mapattr(Attr::device));      jk(b, ks(tensorsym(t,  Attr::device)));
  js(a, mapattr(Attr::dtype));       jk(b, ks(tensorsym(t,  Attr::dtype)));
@@ -537,30 +530,22 @@ K tensorinfo(const Tensor& t,B d) {
  js(a, mapattr(Attr::leaf));        jk(b, kb(tensorflag(t, Attr::leaf)));
  js(a, mapattr(Attr::gradfn));      jk(b, ks(tensorsym(t,  Attr::gradfn)));
  js(a, mapattr(Attr::dim));         jk(b, kj(tensorlong(t, Attr::dim)));
+ js(a, mapattr(Attr::sparsedim));   jk(b, kj(tensorlong(t, Attr::sparsedim)));
  js(a, mapattr(Attr::size));        jk(b, tensorsize(t,    Attr::size));
  js(a, mapattr(Attr::stride));      jk(b, tensorsize(t,    Attr::stride));
  js(a, mapattr(Attr::numel));       jk(b, kj(tensorlong(t, Attr::numel)));
  js(a, mapattr(Attr::elementsize)); jk(b, kj(tensorlong(t, Attr::elementsize)));
  js(a, mapattr(Attr::contiguous));  jk(b, kb(tensorflag(t, Attr::contiguous)));
+ js(a, mapattr(Attr::coalesced));   jk(b, kb(tensorflag(t, Attr::coalesced)));
  js(a, mapattr(Attr::offset));      jk(b, kj(tensorlong(t, Attr::offset)));
  js(a, mapattr(Attr::ptr));         jk(b, kj(tensorlong(t, Attr::ptr)));
  js(a, mapattr(Attr::ref));         jk(b, kj(tensorlong(t, Attr::ref)));
  if(d) {
-  js(a,cs("storageptr"));  jk(b,kj((intptr_t)t.storage().data()));
-  js(a,cs("storagesize")); jk(b,kj(t.storage().size()));
-  js(a,cs("storageref"));  jk(b,kj(t.storage().use_count()));
-  auto c=t.toBackend(torch::Backend::CPU);
-  js(a,cs("storagedata")); jk(b,tensordata(false,c));
-  js(a,cs("data"));        jk(b,tensordata(true, c));
+  js(a, mapattr(Attr::storage));   
+  jk(b, storinfo(t.storage(),
+        t.dtype()==torch::kHalf ? t.cpu().to(torch::kFloat).storage() : t.cpu().storage()));
  }
  return x;
-}
-
-KAPI to_sparse(K x) {
- if(auto* t=xten(x))
-  return kten(t->to_sparse());
- else
-  AT_ERROR("to_sparse not implemented for ",kname(x->t));
 }
 
 // --------------------------------------------------------------------------------------------
@@ -627,7 +612,8 @@ KAPI kshuffle(K x) {
 // tensor utility fns: 
 // ------------------------------------------------------------------------------------------
 // tensorcopy - tgt <- src values, must have same type & device, tgt resized if src larger
-// backward: backprop given tensor, optional tensor and sym for retain/create gradient graph
+// grad = return gradient data or empty, if ptr enlisted, return gradient ptr, which must be free'd
+// backward - backprop given tensor, optional tensor and sym for retain/create gradient graph
 // ------------------------------------------------------------------------------------------
 V tensorcopy(Tensor &tgt,const Tensor &src,B async) {
  if(src.dtype() != tgt.dtype()) {
@@ -637,6 +623,18 @@ V tensorcopy(Tensor &tgt,const Tensor &src,B async) {
  } else {
   tgt.resize_as_(src).copy_(src,async);
  }
+}
+
+KAPI grad(K x) {
+ KTRY
+  B p=false; Tensor t;
+  if(xten(x,t) || (p=(xten(x,0,t) && x->n==1))) {
+   if(p) return t.grad().defined() ? kten(t.grad()) : KERR("No gradient defined");
+   else  return t.grad().defined() ? kget(t.grad()) : (K)0;
+ } else {
+  return KERR("Unexpected arg(s) for gradient, expectining tensor (enlist to return gradient ptr)");
+ }
+ KCATCH("Unable to get gradient");
 }
 
 KAPI backward(K x) {

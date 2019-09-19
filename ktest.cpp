@@ -272,16 +272,12 @@ KAPI kindex(K x) {
 }
 
 // -------------------------------------------------------------------------------------------
-// setsize -
-// maxsize -
-// resize -
+// newsize - return new vector for tensor sizes, replacing size at dimension d
+// maxsize - find the maximum size at given dimension using overall storage size
+// resize -  restore tensor to maximum size at given dimension
 // -------------------------------------------------------------------------------------------
-V setsize(Tensor &t,int64_t d,int64_t n) {((int64_t*)t.sizes().data())[d]=n;}
-
 std::vector<int64_t> newsize(Tensor& t,int64_t d,int64_t n) {
- auto v=t.sizes().vec();
- v.at(d)=n;
- return v;
+ auto v=t.sizes().vec(); v.at(d)=n; return v;
 }
 
 int64_t maxsize(Tensor& t,int64_t d) {
@@ -312,14 +308,10 @@ int64_t resize(Tensor& t,int64_t d) {
 }
 
 V subset(Tensor& t,int64_t d,int64_t i,int64_t n) {
- if(n != t.size(d)) setsize(t,d,n);
- t.set_(t.storage(),i*t.stride(d),t.sizes(),t.strides());
- //if(!d) t.unsafeGetTensorImpl()->refresh_contiguous();
-/*
- if(!d) t.unsafeGetTensorImpl()->set_sizes_and_strides(t.sizes(),t.strides());
- //t.set_storage_offset(i);
- t.unsafeGetTensorImpl()->set_storage_offset(i);
-*/
+ if(n != t.size(d))
+  t.set_(t.storage(), i*t.stride(d), newsize(t,d,n), t.strides());
+ else
+  t.set_(t.storage(), i*t.stride(d), t.sizes(), t.strides());
 }
 
 KAPI sub(K x) {
@@ -421,6 +413,14 @@ KAPI sparse(K x) {
  KCATCH("Sparse tensor error");
 }
 */
+
+KAPI to_sparse(K x) {
+ if(auto* t=xten(x))
+  return kten(t->to_sparse());
+ else
+  AT_ERROR("to_sparse not implemented for ",kname(x->t));
+}
+
 
 KAPI sparse1(K x) {
  auto m=kput(kK(x)[0]),t=kput(kK(x)[1]),v=torch::masked_select(t,m),i=torch::nonzero(m);

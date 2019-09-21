@@ -393,7 +393,7 @@ ZV ctc1(K x,J i,int64_t& b,bool& z,int64_t& r) {
  }
 }
 
-Z B ctc2(K a,J i,Tensor& x,Tensor& y,Tensor& nx,Tensor& ny,JRef& jx,JRef& jy) {
+Z B ctc2(K a,J i,Tensor& x,Tensor& y,Tensor& nx,Tensor& ny,IntArrayRef& jx,IntArrayRef& jy) {
   B p=xtenarg(a,i,x,y);
   if(!(xsize(a,i+2,jx) && xsize(a,i+3,jy))) { // unless both lenghts given as k arrays
     if(!xten(a,i+2,nx)) nx=kput(a,2);  // define input lengths as tensor
@@ -404,7 +404,7 @@ Z B ctc2(K a,J i,Tensor& x,Tensor& y,Tensor& nx,Tensor& ny,JRef& jx,JRef& jy) {
 
 KAPI ctc(K a) {
  KTRY
-  B p,z; JRef jx,jy; Tensor l,x,y,nx,ny; int64_t b,r; 
+  B p,z; IntArrayRef jx,jy; Tensor l,x,y,nx,ny; int64_t b,r; 
   if(a->t) {
    AT_ERROR("CTC loss not implemented for ",kname(a->t));
   } else if(a->n < 4) {
@@ -540,7 +540,7 @@ ZK lossfwd(Cast c,Loss *l,K a) {
   p=xtenarg(a,1,x,y,z);
   r=l->forward(x,y,z);
  } else if(c==Cast::ctc && a->n==5) {
-  JRef jx,jy; Tensor nx,ny; p=ctc2(a,1,x,y,nx,ny,jx,jy);
+  IntArrayRef jx,jy; Tensor nx,ny; p=ctc2(a,1,x,y,nx,ny,jx,jy);
   if(nx.defined())
    r=nx.defined() ? l->forward(x,y,nx,ny) : l->forward(x,y,jx,jy);
  }

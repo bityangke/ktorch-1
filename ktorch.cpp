@@ -304,8 +304,8 @@ B xstate(K x) {return xdict(x) || x->t==98;}
 B xstate(K x,J i) {return xind(x,i) && xstate(kK(x)[i]);}
 
 // retrieve long integers from x -> IntArrayRef (linux clang/gcc require int64_t* from J*)
-B xsize(K x,JRef &s) {J n,*v; return (xlong(x,n,v)) ? s=JRef((int64_t*)v,n),true : false;}
-B xsize(K x,J i,JRef &s) {return xind(x,i) && xsize(kK(x)[i],s);}  //check element of k list
+B xsize(K x,IntArrayRef &s) {J n,*v; return (xlong(x,n,v)) ? s=IntArrayRef((int64_t*)v,n),true : false;}
+B xsize(K x,J i,IntArrayRef &s) {return xind(x,i) && xsize(kK(x)[i],s);}  //check element of k list
 
 // retrieve long integers/doubles from x -> ExpandingArray ptr of longs/floats
 B xsize(K x,J d,int64_t *a) {
@@ -737,7 +737,7 @@ B xnone(K x,J i) {Pairs p; return !(xargc(x,i,p) || p.n);}
 // plong - check for integral scalar, return long int
 // pdouble - check if numeric scalar, return double
 // pnum - check for long/double, set torch scalar
-// psize - check if integral scalar or list, set JRef or ExpandingArray, else error
+// psize - check if integral scalar or list, set IntArrayRef or ExpandingArray, else error
 // pten - attempt to define a tensor from provided scalar or array
 // ------------------------------------------------------------------------------------------
 V perr(const Pairs &p,cS s) {AT_ERROR("Option: ",p.k," is a ",kname(p.t),", expected a ",s);}
@@ -768,9 +768,9 @@ V pnum(const Pairs &p,torch::Scalar &s) {
  }
 }
 
-V psize(const Pairs &p,JRef &s,J n) {
+V psize(const Pairs &p,IntArrayRef &s,J n) {
  if(p.t==-KJ)
-  s=JRef((int64_t*)&p.j,1);  // recast for linux clang/gcc to go from J* -> int64_t*
+  s=IntArrayRef((int64_t*)&p.j,1);  // recast for linux clang/gcc to go from J* -> int64_t*
  else if(!(p.t==KJ && xsize(p.v,s)))
   perr(p,"a long integer scalar or list");
  plen(p,n,s.size());
@@ -1161,6 +1161,7 @@ ZK attr(K x,A k,Attr a) {
 }
 
 KAPI        dim(K x) {return attr(x, -KJ, Attr::dim);}
+KAPI      numel(K x) {return attr(x, -KJ, Attr::numel);}
 KAPI     offset(K x) {return attr(x, -KJ, Attr::offset);}
 KAPI        ref(K x) {return attr(x, -KJ, Attr::ref);}
 KAPI    weakref(K x) {return attr(x, -KJ, Attr::weakref);}
@@ -1224,6 +1225,7 @@ KAPI fns(K x){
  fn(x, "seed",        KFN(kseed),       1);
 
  fn(x, "dim",         KFN(dim),         1);
+ fn(x, "numel",       KFN(numel),       1);
  fn(x, "offset",      KFN(offset),      1);
  fn(x, "ptr",         KFN(ptr),         1);
  fn(x, "ref",         KFN(ref),         1);

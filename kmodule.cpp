@@ -425,7 +425,7 @@ ZV lppool(B a,K x,const M* m) {
 // rpad - reflect/replicate fixed dimension padding
 // ----------------------------------------------------------------------------------
 Z Pad pad(K x,J i) {
- JRef a; Scalar s=PadOptions().value(); Pairs p; J n=xargc(x,i,p); LongVector v;
+ IntArrayRef a; Scalar s=PadOptions().value(); Pairs p; J n=xargc(x,i,p); LongVector v;
  if(!((n==0 && p.n) || (xsize(x,i,a) && (n==1 || (n==2 && xnum(x,i+1,s))))))
   AT_ERROR("Unrecognized arguments for padding module");
  while(xpair(p))

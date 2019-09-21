@@ -174,7 +174,7 @@ KAPI Addcdiv(K x) {return addc(x, torch::addcdiv, torch::addcdiv_out, "addcdiv")
 // --------------------------------------------------------------------------------------------
 ZK prodsum(K x,B b,cS e) { // b:true -> prod, false -> sum
  KTRY
-  B p,k=false; JRef d; Tensor r,t; c10::optional<ScalarType> s=c10::nullopt;
+  B p,k=false; IntArrayRef d; Tensor r,t; c10::optional<ScalarType> s=c10::nullopt;
   J n=xten(x,x->n-1,r) ? x->n-1 : xlen(x); //optional output tensor at end, decrement arg count
   if(xten(x,t) || (r.defined() && n==1 && xten(x,0,t)) || !xmixed(x,4)) { // input as tensor or k array
    if(!(p=t.defined())) t=r.defined() ? kput(x,0) : kput(x);
@@ -352,7 +352,7 @@ KAPI Dist(K x) {
 }
 
 KAPI Fnorm(K x) {
- B b=false; JRef d={}; Tensor r,t;
+ B b=false; IntArrayRef d={}; Tensor r,t;
  KTRY
   if(xten(x,t)) {
    return kten(torch::frobenius_norm(t));
@@ -389,7 +389,7 @@ KAPI Nnorm(K x) {
 }
 
 KAPI Pnorm(K x) {
- B b=false; JRef d={}; Scalar p=2; Tensor r,t;
+ B b=false; IntArrayRef d={}; Scalar p=2; Tensor r,t;
  KTRY
   J n=xten(x,x->n-1,r) ? x->n-1 : xlen(x);
   if(xten(x,t)) {
@@ -460,7 +460,7 @@ KAPI Var(K x) {return variance(x,true);}
 // ----------------------------------------------------------------------------------------------
 KAPI Mean(K x) {
  KTRY
-  B p,k=false; JRef d; Tensor r,t; c10::optional<ScalarType> s=c10::nullopt;
+  B p,k=false; IntArrayRef d; Tensor r,t; c10::optional<ScalarType> s=c10::nullopt;
   J n=xten(x,x->n-1,r) ? x->n-1 : xlen(x); //optional output tensor at end, decrement arg count
   if(xten(x,t) || (r.defined() && n==1 && xten(x,0,t)) || !xmixed(x,4)) { // input as tensor or k array
    if(!(p=t.defined())) t=r.defined() ? kput(x,0) : kput(x);
@@ -824,7 +824,7 @@ KAPI  Hamming_window(K x) {return kwindow(x, 3, "hamming_window");}
 // ---------------------------------------------------------------------------------
 ZK kfft(K x,I m,cS e) {
  KTRY
-  B p,b1=false,b2=true; J d,n=xlen(x); JRef s; Tensor r,t;  // b1-normalized, b2-onesided
+  B p,b1=false,b2=true; J d,n=xlen(x); IntArrayRef s; Tensor r,t;  // b1-normalized, b2-onesided
   if(xlong(x,1,d) &&
     (n==2 ||
     (n==3 && xbool(x,2,b1)) ||
@@ -910,7 +910,7 @@ KAPI Flatten(K x) {
 
 KAPI Flip(K x) {
  KTRY
-  Tensor t; JRef s;
+  Tensor t; IntArrayRef s;
   if(xten(x,0,t) && xsize(x,1,s))
    return kten(torch::flip(t,s));
   else if(xsize(x,1,s))
@@ -1031,7 +1031,7 @@ KAPI Renorm(K x) {
 
 KAPI Roll(K x) {
  KTRY
-  B p; JRef s,d; Tensor r,t;
+  B p; IntArrayRef s,d; Tensor r,t;
   if(xsize(x,1,s) && (x->n==2 || (xsize(x,2,d) && x->n==3))) {
    if(!(p=xten(x,0,t))) t=kput(x,0);
    r=x->n==2 ? torch::roll(t,s) : torch::roll(t,s,d);
@@ -1044,7 +1044,7 @@ KAPI Roll(K x) {
 
 KAPI Tensordot(K x) {
  KTRY
-  J d=2; JRef i,j; Tensor a,b,r;
+  J d=2; IntArrayRef i,j; Tensor a,b,r;
   if(x->t<0) {
    AT_ERROR("tensor dot is not implemented for ",kname(x->t));
   } else if(x->t && (x->n==2 || x->n==3)) {

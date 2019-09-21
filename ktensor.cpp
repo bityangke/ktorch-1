@@ -201,7 +201,7 @@ ZV tensorlike(K x,Tensormode m,Tensor &t,Tensor &r) {  // t:input, r:result tens
 }
 
 ZV tensorout(K x,Tensormode m,Tensor &t,Tensor &r) {  // t:output, r:result tensor
- F e; J i,j; Scalar a,z,n; JRef s;
+ F e; J i,j; Scalar a,z,n; IntArrayRef s;
  B b=xsize(x,1,s);  //true if size is given as 2nd arg (last arg is output tensor)
  switch(m) {
   case Tensormode::empty: if(b && x->n==3) r=torch::empty_out(t,s); break;
@@ -238,7 +238,7 @@ ZV tensorout(K x,Tensormode m,Tensor &t,Tensor &r) {  // t:output, r:result tens
 }
 
 ZV tensoropt(K x,Tensormode m,Tensor &r) {
- F e; J i,j; Scalar a,z,n; JRef s; TensorOptions o;
+ F e; J i,j; Scalar a,z,n; IntArrayRef s; TensorOptions o;
  B b=xopt(x,x->n-1,o); I nx=x->n-b;                        //track if options in last arg
  B sz=xsize(x,1,s) && nx==((m==Tensormode::full) ? 3 : 2); //2nd arg is size & correct arg count
  switch(m) {

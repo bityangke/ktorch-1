@@ -62,7 +62,7 @@ using Scalar=torch::Scalar;
 using TensorVector=std::vector<Tensor>;
 using TensorDeque=std::deque<Tensor>;
 using LongVector=std::vector<int64_t>;
-using JRef=torch::IntArrayRef;
+using IntArrayRef=torch::IntArrayRef;
 template<size_t D,typename T=int64_t> using Expand=torch::ExpandingArray<D,T>;
 using ScalarType=torch::ScalarType;
 using TypeMeta=caffe2::TypeMeta;
@@ -76,6 +76,7 @@ using LossClosureOptimizer=torch::optim::LossClosureOptimizer;
 using TensorDict = torch::OrderedDict<std::string, torch::Tensor>;
 class TORCH_API Loss;
 using Lossptr=std::shared_ptr<Loss>;
+using at::detail::computeStorageSize;
 
 typedef struct {
  A a = 0;  // type: 1-dict, 2-list of pairs, 3-general list, 4-sym list
@@ -270,8 +271,8 @@ B xdict(K,J);
 B xstate(K);
 B xstate(K,J);
 
-B xsize(K,JRef&);
-B xsize(K,J,JRef&);
+B xsize(K,IntArrayRef&);
+B xsize(K,J,IntArrayRef&);
 B xsize(K,J,int64_t*);
 B xsize(K,J,F*);
 B xsize(K,J,J,int64_t*);
@@ -353,7 +354,7 @@ B pbool(const Pairs&);
 J plong(const Pairs&);
 F pdouble(const Pairs&);
 V pnum(const Pairs&,Scalar&);
-V psize(const Pairs&,JRef&,J n=-1);
+V psize(const Pairs&,IntArrayRef&,J n=-1);
 V psize(const Pairs&,J,int64_t*);
 V psize(const Pairs&,J,F*);
 V pten(const Pairs&,Tensor&);

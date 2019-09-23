@@ -1,5 +1,6 @@
 #include "ktorch.h"
 #include "kmodule.h"
+#include "kloss.h"
 
 ZV modelpart(K x,J i,Kseq*& q,Kloss*& l,Kopt*& o) {
  for(;i<x->n;++i) {
@@ -361,44 +362,72 @@ KAPI storsize(K x) {
  if(xten(x,0,t) && xint64(x,1,d) && xint64(x,2,n)) {
   auto v=t.sizes().vec();
   v.at(d)=n;
-  return kj(at::detail::computeStorageSize(v,t.strides()));
+  return kj(computeStorageSize(v,t.strides()));
  } else {
   return KERR("err");
  }
-}
-
-KAPI g(K x) {
- KTRY
- Tensor t;
- xten(x,t);
- t.set_(t.storage(),0,newsize(t,0,3),t.strides());
- std::cerr << t << "\n";
- t.set_(t.storage(),3,t.sizes(),t.strides());
- std::cerr << t << "\n";
- t.set_(t.storage(),6,t.sizes(),t.strides());
- std::cerr << t << "\n";
- return(K)0;
- KCATCH("out-of-bounds");
 }
 
 /*
 fit(m,v,w);
  auto n=resize(v,0);
  if(s) shuffle(v,..
- fitbatch(m,v,w,n);
+ batch(m,v,w,n);
 */
 
-Tensor fitbatch(void *m,TensorVector& v,int64_t w,int64_t n) {
- if(w>n) w=n;
- auto s=n%w ? n/w + 1 : n/w;
- auto r=torch::zeros(s);
- for(int64_t i=0; i<n; i+=n) {
-  if(w>n-1) w=n-i;
-  subset(v,0,i,w);
-  r[i]=i; //train(m,v);
+Tensor mforward(Kmodel *m,TensorVector& v) {
+ return m->q->forward(v[0]);
+}
+
+Tensor mloss(Kmodel *m,TensorVector &v) {
+ auto x=mforward(m,v);
+ if(v.size()==2)
+  return m->l->forward(x,v[2]);
+ else if(v.size()==3)
+  return m->l->forward(x,v[2],v[3]);
+ else
+  AT_ERROR("model: ", v.size()," inputs, expecting 2-3");
+}
+
+Tensor batch(Kmodel *m,TensorVector& v,int64_t w,int64_t n) {
+ Optimizer *o=nullptr; LossClosureOptimizer *c=nullptr;
+ if(m->oc == Cast::lbfgs) c=(LossClosureOptimizer*)m->o.get();
+ else                     o=(Optimizer*)m->o.get();
+
+ if(w>n) w=n;                          // reduce batch size if exceeds total size
+ auto s=n%w ? n/w + 1 : n/w;           // no. of subsets to process
+ auto r=torch::empty(s);               // tensor for batch losses
+ auto* p=r.data<float>();              // ptr for quicker assignment
+
+ auto loss=[&]() {                     // define closure for
+  m->o->zero_grad();                   // resetting gradients
+  auto r=mloss(m,v);                   // calculating model output & loss
+  r.backward();                        // calculating gradients
+  return r;                            // return loss tensor
+ };
+
+ for(int64_t i=0,j=0; i<n; i+=w,++j) {
+  if(w>n-i) w=n-i;                     // final batch may be smaller
+  subset(v,0,i,w);                     // narrow tensors to current batch
+  if(o)
+   p[j]=loss().item().toFloat(), o->step(); // single loss evaluation
+  else
+   p[j]=c->step(loss).item().toFloat();     // using closures, e.g. LBFGS
  }
- subset(v,0,0,n);
- return r;
+ subset(v,0,0,n);                      // reset tensors to full length
+ return r;                             // return losses
+}
+
+KAPI kbatch(K x) {
+ KTRY
+  Kmodel *m; TensorVector *v; int64_t w;
+  if((m=xmodel(x,0)) && (v=xvec(x,1)) && xint64(x,2,w)) {
+   TORCH_CHECK(v->size(), "model: vector of inputs is empty");
+   return kget(batch(m,*v,w,maxsize(*v,0)));
+  } else {
+   return KERR("batch: unrecognized arg(s)");
+  }
+ KCATCH("batch");
 }
 
 KAPI narrow_(K x,K d,K i,K n) {

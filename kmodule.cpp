@@ -65,7 +65,7 @@ ZS mset(Setting o) {
 
 Z Setting mset(S s) {
  for(auto& m:env().mset) if(s==std::get<0>(m)) return std::get<1>(m);
- AT_ERROR("Unrecognized module option: ",s);
+ AT_ERROR("Unrecognized option: ",s);
 }
 
 // ------------------------------------------------------------------------------------------
@@ -722,6 +722,41 @@ KAPI kprelu(K x) {
 }
 
 // ----------------------------------------------------------------------------------------------------
+// flatten - process arg(s) from k and return options
+//         - return options used given a flatten module used
+//         - call flatten as function given input/tensor and optional start & end dimensions
+// ----------------------------------------------------------------------------------------------------
+Z FlattenOptions flatten(K x,J i) {
+ FlattenOptions o; int64_t s=o.start_dim(),e=o.end_dim(); Pairs p; J n=xargc(x,i,p);
+ if(!(n==0 || (xint64(x,i,s) && (n==1 || (n==2 && xint64(x,i+1,e))))))
+  AT_ERROR("flatten: unrecognized arg(s)");
+ while(xpair(p))
+  switch(mset(p.k)) {
+   case Setting::start: s=plong(p); break;
+   case Setting::end:   e=plong(p); break;
+   default: AT_ERROR("flatten option: ",p.k," not recognized");
+  }
+ return o.start_dim(s).end_dim(e);
+}
+
+ZV flatten(B a,K x,const FlattenImpl* m) {
+ FlattenOptions d,o=m->options;
+ if(a || d.start_dim() != o.start_dim()) OPTION(x, start, kj(o.start_dim()));
+ if(a || d.end_dim()   != o.end_dim())   OPTION(x, end,   kj(o.end_dim()));
+}
+
+KAPI kflatten(K x) {
+ KTRY
+  B m=false; Tensor t;
+  auto o=flatten((xten(x,t) || xten(x,0,t) || (m=xmixed(x,3))) ? x : nullptr, 1);
+  if(t.defined())
+   return kten(torch::flatten(t, o.start_dim(), o.end_dim()));
+  else
+   return kget(torch::flatten(m ? kput(x,0) : kput(x), o.start_dim(), o.end_dim()));
+ KCATCH("flatten");
+}
+
+// ----------------------------------------------------------------------------------------------------
 // mparms - set parameters/buffers in a defined module from k values in dictionary with matching names
 // mdefine - define module and add to a sequence, reading options (and sometimes parms/buffers) from k
 // ----------------------------------------------------------------------------------------------------
@@ -820,6 +855,7 @@ V mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) {
   case Cast::softmax:      PUSH(q,n,(soft<Softmax>   (s,x,i))); break;
   case Cast::softmin:      PUSH(q,n,(soft<Softmin>   (s,x,i))); break;
   case Cast::logsoftmax:   PUSH(q,n,(soft<LogSoftmax>(s,x,i))); break;
+  case Cast::flatten:      PUSH(q,n,Flatten(flatten(x,i))); break;
 
   case Cast::glu:          arg1(c,s,x,i,v); PUSH(q,n,GLU(v.toLong())); break;
   case Cast::elu:          arg1(c,s,x,i,v); PUSH(q,n,ELU(v)); break;
@@ -919,6 +955,7 @@ V mopt(Module &g,B a,K &v,J i) { //g:generic module, a:true if all options, v:k 
  } else if(auto* m=g.as<Softmax>())    { c=Cast::softmax;    soft(a,x,m);
  } else if(auto* m=g.as<Softmin>())    { c=Cast::softmin;    soft(a,x,m);
  } else if(auto* m=g.as<LogSoftmax>()) { c=Cast::logsoftmax; soft(a,x,m);
+ } else if(auto* m=g.as<Flatten>())    { c=Cast::flatten;    flatten(a,x,m);
 
  } else if(auto* m=g.as<GLU>())        { c=Cast::glu;        setting1(a,c,x,m->options.dim());
  } else if(auto* m=g.as<ELU>())        { c=Cast::elu;        setting1(a,c,x,m->options.alpha());
@@ -1104,8 +1141,9 @@ V modfn(K x) {
  fn(x, "forward",    KFN(forward),2);
  fn(x, "train",      KFN(train),1);
 
- fn(x, "celu",       KFN(kcelu),1);         // activation functions
+ fn(x, "celu",       KFN(kcelu),1);         // functional form of modules/activations
  fn(x, "elu",        KFN(kelu),1);
+ fn(x, "flatten",    KFN(kflatten),1);
  fn(x, "glu",        KFN(kglu),1);
  fn(x, "hardshrink", KFN(khardshrink),1);
  fn(x, "hardtanh",   KFN(khardtanh),1);
@@ -1193,6 +1231,9 @@ KAPI anytest(K x) {
   Softshrink(.5),
   Tanh(),
   Tanhshrink(),
-  Threshold(.1,20));
+  Threshold(.1,20),
+  Flatten(),
+  Flatten(1),
+  Flatten(1,-1));
  return kseq(q);
 }

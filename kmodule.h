@@ -5,7 +5,7 @@
 // options for max & avg pooling 1,2,3d
 // ------------------------------------------
 template <size_t D>
-struct PoolOptions {
+struct TORCH_API PoolOptions {
  using Ex=torch::ExpandingArray<D>;
  PoolOptions(Ex s) : size_(std::move(s)) {stride_=size_;}
  PoolOptions() {}
@@ -133,7 +133,7 @@ TORCH_MODULE(AvgPool3d);
 // adaptive max pool 1,2,3d
 // ------------------------------------------
 template <size_t D>
-struct AdaptivePoolOptions {
+struct TORCH_API AdaptivePoolOptions {
  using Ex=torch::ExpandingArray<D>;
  AdaptivePoolOptions(Ex s) : size_(std::move(s)) {}
  AdaptivePoolOptions() {}
@@ -232,7 +232,7 @@ TORCH_MODULE(AdaptiveAvgPool3d);
 // fractional max pool 2,3d
 // ------------------------------------------
 template <size_t D>
-struct FractionalMaxPoolOptions {
+struct TORCH_API FractionalMaxPoolOptions {
  using Ex=torch::ExpandingArray<D>;
  using Ef=torch::ExpandingArray<D,double>;
  FractionalMaxPoolOptions(Ex s) : size_(std::move(s)) {}
@@ -306,7 +306,7 @@ TORCH_MODULE(FractionalMaxPool3d);
 // lp pool 1d & 2d 
 // ------------------------------------------
 template <size_t D>
-struct LPPoolOptions {
+struct TORCH_API LPPoolOptions {
  using Ex=torch::ExpandingArray<D>;
  LPPoolOptions(double p,Ex s) : power_(p),size_(std::move(s)) {stride_=size_;}
  LPPoolOptions() {}
@@ -353,7 +353,7 @@ TORCH_MODULE(LPPool2d);
 // -------------------------------------------------------------------------------
 // flexible/fixed-dim padding options for constant/reflect/replicate padding
 // -------------------------------------------------------------------------------
-struct PadOptions {
+struct TORCH_API PadOptions {
  PadOptions(std::vector<int64_t> p) : pad_(std::move(p)) {}
  PadOptions() {}
  TORCH_ARG(std::vector<int64_t>, pad);
@@ -361,7 +361,7 @@ struct PadOptions {
 };
 
 template <size_t D>
-struct RPadOptions {
+struct TORCH_API RPadOptions {
  using Ex=torch::ExpandingArray<D>;
  RPadOptions(Ex p) : pad_(std::move(p)) {}
  RPadOptions() {}
@@ -535,7 +535,7 @@ TORCH_MODULE(ReLU6);
 // -------------------------------------------------------------
 // softmax, softmin & logsoftmax activation layers
 // -------------------------------------------------------------
-struct SoftOptions {
+struct TORCH_API SoftOptions {
  SoftOptions(int64_t d) : dim_(d) {}
  SoftOptions(int64_t d,c10::optional<torch::ScalarType> t) : dim_(d),dtype_(t) {}
  SoftOptions() {}
@@ -583,7 +583,7 @@ TORCH_MODULE(LogSoftmax);
 // -------------------------------------------------------------
 //  prelu - parametric rectified linear unit
 // -------------------------------------------------------------
-struct PReLUOptions {
+struct TORCH_API PReLUOptions {
  PReLUOptions(int64_t n) : in_(n) {}
  PReLUOptions(int64_t n,double w) : in_(n),init_(w) {}
  PReLUOptions() {}
@@ -610,7 +610,7 @@ TORCH_MODULE(PReLU);
 // -----------------------------------------------------------------
 //  elu,celu - exponential & continuously differentiable linear unit
 // -----------------------------------------------------------------
-struct ExpOptions {
+struct TORCH_API ExpOptions {
  ExpOptions(torch::Scalar a) : alpha_(a) {}
  ExpOptions() {}
  TORCH_ARG(torch::Scalar, alpha)=1.0;
@@ -647,7 +647,7 @@ TORCH_MODULE(CELU);
 // -----------------------------------------------------------------
 // leakyrelu - allow a small positive gradient(slope) when x<0
 // -----------------------------------------------------------------
-struct LeakyOptions {
+struct TORCH_API LeakyOptions {
  LeakyOptions(torch::Scalar s) : slope_(s) {}
  LeakyOptions() {}
  TORCH_ARG(torch::Scalar, slope)=0.01;
@@ -668,7 +668,7 @@ TORCH_MODULE(LeakyReLU);
 // -----------------------------------------------------------------------------
 // rrelu - randomized leakyrelu w'uniform random slope within given lo,hi bounds
 // -----------------------------------------------------------------------------
-struct RReLUOptions {
+struct TORCH_API RReLUOptions {
  RReLUOptions(torch::Scalar l,torch::Scalar u) : lower_(l),upper_(u) {}
  RReLUOptions() {}
  TORCH_ARG(torch::Scalar, lower)=1.0 / 8.0;
@@ -690,7 +690,7 @@ TORCH_MODULE(RReLU);
 // -----------------------------------------------------------------------------
 // glu - gated linear unit (splitting input along selected dimension)
 // -----------------------------------------------------------------------------
-struct GLUOptions {
+struct TORCH_API GLUOptions {
  GLUOptions(int64_t d) : dim_(d) {}
  GLUOptions() {}
  TORCH_ARG(int64_t, dim)=-1;
@@ -710,7 +710,7 @@ TORCH_MODULE(GLU);
 // -----------------------------------------------------------------------------
 // threshold - thresholds each element of input tensor
 // -----------------------------------------------------------------------------
-struct ThresholdOptions {
+struct TORCH_API ThresholdOptions {
  ThresholdOptions(torch::Scalar t,torch::Scalar v) : threshold_(t),value_(v) {}
  ThresholdOptions() {}
  TORCH_ARG(torch::Scalar, threshold)=0;
@@ -732,7 +732,7 @@ TORCH_MODULE(Threshold);
 // -----------------------------------------------------------------------------
 // softplus - smooth approximation to relu, can constrain to always be positive
 // -----------------------------------------------------------------------------
-struct SoftplusOptions {
+struct TORCH_API SoftplusOptions {
  SoftplusOptions(torch::Scalar b) : beta_(b) {}
  SoftplusOptions(torch::Scalar b,torch::Scalar t) : beta_(b),threshold_(t) {}
  SoftplusOptions() {}
@@ -756,7 +756,7 @@ TORCH_MODULE(Softplus);
 // -----------------------------------------------------------------------------
 // hardtanh - computationally cheaper version of tanh, straight line at min,max
 // -----------------------------------------------------------------------------
-struct HardtanhOptions {
+struct TORCH_API HardtanhOptions {
  HardtanhOptions(torch::Scalar a,torch::Scalar b) : min_(a),max_(b) {}
  HardtanhOptions() {}
  TORCH_ARG(torch::Scalar, min)=-1;
@@ -778,7 +778,7 @@ TORCH_MODULE(Hardtanh);
 // -------------------------------------------------------------
 //  hardshrink, softshrink
 // -------------------------------------------------------------
-struct ShrinkOptions {
+struct TORCH_API ShrinkOptions {
  ShrinkOptions(torch::Scalar a) : lambda_(a) {}
  ShrinkOptions() {}
  TORCH_ARG(torch::Scalar, lambda)=0.5;
@@ -815,8 +815,8 @@ template <typename Derived> class DropoutImplBase : public torch::nn::Cloneable<
  public:
   DropoutImplBase() {}
   explicit DropoutImplBase(torch::nn::DropoutOptions o) : options(o) {
-   TORCH_CHECK(options.rate_ >= 0, "Dropout rate must not be less than zero");
-   TORCH_CHECK(options.rate_ <= 1, "Dropout rate must not be greater than one");
+   TORCH_CHECK(options.rate() >= 0, "Dropout rate must not be less than zero");
+   TORCH_CHECK(options.rate() <= 1, "Dropout rate must not be greater than one");
   }
   void reset() {}
   torch::nn::DropoutOptions options;
@@ -835,3 +835,24 @@ class TORCH_API FeatureAlphaDropoutImpl : public DropoutImplBase<FeatureAlphaDro
   torch::Tensor forward(const torch::Tensor& t) {return torch::feature_alpha_dropout(t,options.rate_,this->is_training());}
 };
 TORCH_MODULE(FeatureAlphaDropout);
+
+// -------------------------------------------------------------
+//  flatten - typically from 2nd dimension on
+// -------------------------------------------------------------
+struct TORCH_API FlattenOptions {
+ FlattenOptions(int64_t s=1,int64_t e=-1) : start_dim_(s),end_dim_(e) {}
+ TORCH_ARG(int64_t, start_dim);
+ TORCH_ARG(int64_t,   end_dim);
+};
+
+class FlattenImpl : public torch::nn::Cloneable<FlattenImpl> {
+ public:
+  FlattenImpl(int64_t s=1,int64_t e=-1) : FlattenImpl(FlattenOptions(s,e)) {}
+  explicit FlattenImpl(const FlattenOptions& o) : options(o) {reset();}
+  void reset() override {}
+  torch::Tensor forward(const torch::Tensor& t) {
+   return torch::flatten(t,options.start_dim(),options.end_dim());
+  };
+  FlattenOptions options;
+};
+TORCH_MODULE(Flatten);

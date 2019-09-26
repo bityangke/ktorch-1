@@ -575,16 +575,16 @@ ZV vcheck(const TensorVector& v,int64_t d) {
 
 Z Tensor vperm(const TensorVector& v,int64_t d) {vcheck(v,d); return v.size() ? perm(v[0],d) : Tensor();}
 
-Z Tensor shuffle(const Tensor &t,int64_t d) {return t.index_select(d,perm(t,d));}
-ZV shuffle_(Tensor &t,int64_t d) {t=shuffle(t,d);}
+Tensor shuffle(const Tensor &t,int64_t d) {return t.index_select(d,perm(t,d));}
+V shuffle_(Tensor &t,int64_t d) {t=shuffle(t,d);}
 
-Z TensorVector shuffle(const TensorVector& v,int64_t d) {
+TensorVector shuffle(const TensorVector& v,int64_t d) {
  auto p=vperm(v,d); TensorVector r;
  for(auto& t:v) r.emplace_back(t.index_select(d,p));
  return r;
 }
  
-ZV shuffle_(TensorVector& v,int64_t d) {
+V shuffle_(TensorVector& v,int64_t d) {
  auto p=vperm(v,d);
  for(auto& t:v) t=t.index_select(d,p);
 }
@@ -606,6 +606,48 @@ KAPI kshuffle(K x) {
   else
    AT_ERROR("unrecognized arg(s) for shuffle");
  KCATCH("shuffle");
+}
+
+// -------------------------------------------------------------------------------------------
+// newsize - return new vector for tensor sizes, replacing size at dimension d with new value
+// maxsize - find the maximum size at given dimension using underlying storage size
+// fullsize -  restore tensor(s) to maximum size at given dimension
+// -------------------------------------------------------------------------------------------
+std::vector<int64_t> newsize(const Tensor& t,int64_t d,int64_t n) {
+ auto v=t.sizes().vec(); v.at(d)=n; return v;
+}
+
+int64_t maxsize(const Tensor& t,int64_t d) {
+ int64_t n=1;
+ for(auto i:t.sizes()) n*=i;
+ return t.size(d)*t.storage().size()/n;
+}
+
+int64_t maxsize(const TensorVector& v,int64_t d) {
+ int64_t i=0,m=-1;
+ for(auto&t:v) {
+  if(i) {
+   auto n=maxsize(t,d);
+   TORCH_CHECK(m==n, "tensor[",i,"] size=",n,", but previous tensor(s) have size=",m," for dim ",d);
+  } else {
+   m=maxsize(t,d);
+  }
+  ++i;
+ }
+ return m;
+}
+
+int64_t fullsize(Tensor& t,int64_t d) {
+ auto m=maxsize(t,d);
+ if(t.size(d) != m)
+  t.set_(t.storage(), 0, newsize(t,d,m), t.strides());
+ return m;
+}
+
+int64_t fullsize(TensorVector& v,int64_t d) {
+ auto m=maxsize(v,d);
+ for(auto& t:v) if(t.size(d) != m) fullsize(t,d);
+ return m;
 }
 
 // ------------------------------------------------------------------------------------------

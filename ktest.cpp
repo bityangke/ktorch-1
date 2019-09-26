@@ -272,57 +272,6 @@ KAPI kindex(K x) {
  KCATCH("index");
 }
 
-// -------------------------------------------------------------------------------------------
-// newsize - return new vector for tensor sizes, replacing size at dimension d with new value
-// maxsize - find the maximum size at given dimension using underlying storage size
-// resize -  restore tensor to maximum size at given dimension
-// -------------------------------------------------------------------------------------------
-std::vector<int64_t> newsize(Tensor& t,int64_t d,int64_t n) {
- auto v=t.sizes().vec(); v.at(d)=n; return v;
-}
-
-int64_t maxsize(Tensor& t,int64_t d) {
- if(!d)
-  return t.storage().size()/t.stride(d);
- int64_t i,n=1;
- for(i=0; i<t.dim(); ++i) n*=i==d ? 1 : t.size(i);
- return t.storage().size()/n;
-}
-
-int64_t maxsize2(Tensor& t,int64_t d) {
- return 1 + (t.storage().size()-computeStorageSize(newsize(t,d,1),t.strides())) / t.stride(d);
-}
-
-KAPI timemax(K x) {
- Tensor *t; int64_t d,r;
- if((t=xten(x,0)) && xint64(x,1,d)) {
-  for(size_t i=0;i<1000000;++i)
-   r=maxsize2(*t,d);
- }
- return (K)0;
-}
-
-int64_t maxsize(TensorVector& v,int64_t d) {
- int64_t i=0,m=-1;
- for(auto&t:v) {
-  if(i) {
-   auto n=maxsize(t,d);
-   TORCH_CHECK(m==n, "tensor[",i,"] size=",n,", but previous tensor(s) have size=",m," for dim ",d);
-  } else {
-   m=maxsize(t,d);
-  }
-  ++i;
- } 
- return m;
-}
-
-int64_t resize(Tensor& t,int64_t d) {
- auto m=maxsize(t,d);
- if(t.size(d) != m)
-  t.set_(t.storage(), 0, newsize(t,d,m), t.strides());
- return m;
-}
-
 V subset(Tensor& t,int64_t d,int64_t i,int64_t n) {
  t.set_(t.storage(), i*t.stride(d), n==t.size(d) ? t.sizes() : newsize(t,d,n), t.strides());
 }
@@ -344,14 +293,14 @@ KAPI sub(K x) {
  KTRY
  Tensor t; int64_t d=0,n;
  if(xten(x,0,t) && xint64(x,1,d) && xint64(x,2,n)) {
-  auto m=resize(t,d);
+  auto m=fullsize(t,d);
   if(n>m) n=m;
   for(int64_t i=0; i<m; i+=n) {
    //if(n>m-i) n=m-i;
    subset_safe(t,d,i,n);
    std::cerr << t << "\n";
   }
-  resize(t,d);
+  fullsize(t,d);
  }
  return(K)0;
  KCATCH("subset test");
@@ -368,13 +317,6 @@ KAPI storsize(K x) {
  }
 }
 
-/*
-fit(m,v,w);
- auto n=resize(v,0);
- if(s) shuffle(v,..
- batch(m,v,w,n);
-*/
-
 Tensor mforward(Kmodel *m,TensorVector& v) {
  return m->q->forward(v[0]);
 }
@@ -382,9 +324,9 @@ Tensor mforward(Kmodel *m,TensorVector& v) {
 Tensor mloss(Kmodel *m,TensorVector &v) {
  auto x=mforward(m,v);
  if(v.size()==2)
-  return m->l->forward(x,v[2]);
+  return m->l->forward(x,v[1]);
  else if(v.size()==3)
-  return m->l->forward(x,v[2],v[3]);
+  return m->l->forward(x,v[1],v[2]);
  else
   AT_ERROR("model: ", v.size()," inputs, expecting 2-3");
 }
@@ -408,26 +350,50 @@ Tensor batch(Kmodel *m,TensorVector& v,int64_t w,int64_t n) {
 
  for(int64_t i=0,j=0; i<n; i+=w,++j) {
   if(w>n-i) w=n-i;                     // final batch may be smaller
+  //std::cerr << "subset " << j+1 << ", from row " << i << " using " << w << " row(s)\n";
   subset(v,0,i,w);                     // narrow tensors to current batch
   if(o)
-   p[j]=loss().item().toFloat(), o->step(); // single loss evaluation
+   p[j]=loss().item<float>(), o->step(); // single loss evaluation
   else
-   p[j]=c->step(loss).item().toFloat();     // using closures, e.g. LBFGS
+   p[j]=c->step(loss).item<float>();     // pass closure, e.g. LBFGS
  }
  subset(v,0,0,n);                      // reset tensors to full length
  return r;                             // return losses
 }
 
+Tensor fit(Kmodel *m,TensorVector& v,int64_t w,int64_t e,B s) {
+ TensorVector r;
+ auto n=fullsize(v);
+ for(size_t i=0; i<e; ++i) {
+  if(s) shuffle(v);
+  r.emplace_back(batch(m,v,w,n));
+ }
+ return torch::stack(r); //.reshape({e,-1});
+}
+
 KAPI kbatch(K x) {
  KTRY
   Kmodel *m; TensorVector *v; int64_t w;
-  if((m=xmodel(x,0)) && (v=xvec(x,1)) && xint64(x,2,w)) {
+  if((m=xmodel(x,0)) && (v=xvec(x,1)) && xint64(x,2,w) && x->n==3) {
    TORCH_CHECK(v->size(), "model: vector of inputs is empty");
-   return kget(batch(m,*v,w,maxsize(*v,0)));
+   return kget(batch(m,*v,w,maxsize(*v)));
   } else {
    return KERR("batch: unrecognized arg(s)");
   }
  KCATCH("batch");
+}
+
+KAPI kfit(K x) {
+ KTRY
+  Kmodel *m; TensorVector *v; B s=true; int64_t w,e;
+  if((m=xmodel(x,0)) && (v=xvec(x,1)) && xint64(x,2,w) && xint64(x,3,e) && 
+      (x->n==4 || (x->n==5 && xbool(x,4,s)))) {
+   TORCH_CHECK(v->size(), "model: vector of inputs is empty");
+   return kget(fit(m,*v,w,e,s));
+  } else {
+   return KERR("fit: unrecognized arg(s)");
+  }
+ KCATCH("fit");
 }
 
 KAPI narrow_(K x,K d,K i,K n) {

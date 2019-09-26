@@ -129,6 +129,7 @@ enum class Cast:char {
  sigmoid,     softmax,     softmin,
  softplus,    softshrink,  softsign,
  tanh,        tanhshrink,  threshold,
+ flatten,
 
  bce,         bcelogits,   bcelogitw,      //loss fns
  ce,          cosineloss,  ctc,
@@ -152,14 +153,14 @@ enum class Setting:char {
  undefined,
  affine,     alpha,      amsgrad,    batchfirst, beta,       beta1,      beta2,
  bi,         bias,       blank,      ceiling,    centered,   changetol,  cols,
- countpad,   dampening,  decay,      dilate,     dim,        drop,       eps,
- eval,       fn,         full,       gradtol,    groups,     hidden,     history,
- ignore,     in,         indices,    init,       inplace,    iter,       lambda,
- layers,     log,        lower,      lr,         lrdecay,    margin,     max,
- min,        momentum,   nesterov,   out,        outpad,     outsize,    p,
- pad,        power,      ratio,      reduce,     rows,       size,       slope,
- stride,     swap,       threshold,  track,      train,      transpose,  type,
- upper,      value,      weight,     zeroinf
+ countpad,   dampening,  decay,      dilate,     dim,        drop,       end,
+ eps,        eval,       fn,         full,       gradtol,    groups,     hidden,
+ history,    ignore,     in,         indices,    init,       inplace,    iter,
+ lambda,     layers,     log,        lower,      lr,         lrdecay,    margin,
+ max,        min,        momentum,   nesterov,   out,        outpad,     outsize,
+ p,          pad,        power,      ratio,      reduce,     rows,       size,
+ slope,      start,      stride,     swap,       threshold,  track,      train,
+ transpose,  type,       upper,      value,      weight,     zeroinf
 };
 
 enum class State:char {
@@ -398,6 +399,15 @@ K vectorattr(const TensorVector&,A,Attr);
 K tensorinfo(const Tensor&,B);
 K vectorinfo(const TensorVector&,B);
 V tensorcopy(Tensor&,const Tensor&,B async=false);
+Tensor       shuffle(const Tensor &t,      int64_t d=0);
+TensorVector shuffle(const TensorVector& v,int64_t d=0);
+V shuffle_(Tensor &t,      int64_t d=0);
+V shuffle_(TensorVector& v,int64_t d=0);
+std::vector<int64_t> newsize(const Tensor&,int64_t,int64_t);
+int64_t maxsize(const Tensor& t,      int64_t d=0);
+int64_t maxsize(const TensorVector& v,int64_t d=0);
+int64_t fullsize(Tensor& t,      int64_t d=0);
+int64_t fullsize(TensorVector& v,int64_t d=0);
 V tensorfn(K);
 
 // module routines:
@@ -495,7 +505,7 @@ typedef struct {
   std::make_tuple(cs("tanh"),torch::nn::RNNActivation::Tanh)
  }};
 
- std::array<std::tuple<S,Cast>,59> module = {{  // module sym -> enum
+ std::array<std::tuple<S,Cast>,60> module = {{  // module sym -> enum
   std::make_tuple(cs("adaptavg1d"),      Cast::adaptavg1d),
   std::make_tuple(cs("adaptavg2d"),      Cast::adaptavg2d),
   std::make_tuple(cs("adaptavg3d"),      Cast::adaptavg3d),
@@ -516,6 +526,7 @@ typedef struct {
   std::make_tuple(cs("embed"),           Cast::embed),
   std::make_tuple(cs("fdropout"),        Cast::fdropout),
   std::make_tuple(cs("fadrop"),          Cast::fadropout),
+  std::make_tuple(cs("flatten"),         Cast::flatten),
   std::make_tuple(cs("fmaxpool2d"),      Cast::fmaxpool2d),
   std::make_tuple(cs("fmaxpool3d"),      Cast::fmaxpool3d),
   std::make_tuple(cs("gelu"),            Cast::gelu),
@@ -557,7 +568,7 @@ typedef struct {
   std::make_tuple(cs("threshold"),       Cast::threshold)
  }};
 
- std::array<std::tuple<S,Setting>,43> mset = {{      // module option sym -> enum
+ std::array<std::tuple<S,Setting>,45> mset = {{      // module option sym -> enum
   std::make_tuple(cs("affine"),     Setting::affine),
   std::make_tuple(cs("alpha"),      Setting::alpha),
   std::make_tuple(cs("batchfirst"), Setting::batchfirst),
@@ -570,6 +581,7 @@ typedef struct {
   std::make_tuple(cs("dilate"),     Setting::dilate),
   std::make_tuple(cs("dim"),        Setting::dim),
   std::make_tuple(cs("drop"),       Setting::drop),
+  std::make_tuple(cs("end"),        Setting::end),
   std::make_tuple(cs("eps"),        Setting::eps),
   std::make_tuple(cs("fn"),         Setting::fn),
   std::make_tuple(cs("groups"),     Setting::groups),
@@ -593,6 +605,7 @@ typedef struct {
   std::make_tuple(cs("rows"),       Setting::rows),
   std::make_tuple(cs("size"),       Setting::size),
   std::make_tuple(cs("slope"),      Setting::slope),
+  std::make_tuple(cs("start"),      Setting::start),
   std::make_tuple(cs("stride"),     Setting::stride),
   std::make_tuple(cs("threshold"),  Setting::threshold),
   std::make_tuple(cs("track"),      Setting::track),

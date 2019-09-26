@@ -15,9 +15,9 @@ class TORCH_API Loss {
   virtual torch::Tensor forward(const torch::Tensor& x,const torch::Tensor& y,torch::IntArrayRef nx,torch::IntArrayRef ny) {
    AT_ERROR("Loss function of 4 args, e.g. input,target,array ref of input lengths,target lengths, is not implemented");
   }
-  virtual void to(torch::Device device,torch::Dtype dtype,bool non_blocking = false) {}
-  virtual void to(torch::Dtype dtype, bool non_blocking = false) {}
-  virtual void to(torch::Device device, bool non_blocking = false) {}
+  virtual void to(torch::Device d,torch::Dtype t,bool a=false) {}
+  virtual void to(torch::Dtype  t,               bool a=false) {}
+  virtual void to(torch::Device d,               bool a=false) {}
 };
 
 static inline void Reduce(int64_t r) {
@@ -113,9 +113,9 @@ class TORCH_API WeightedLoss : public Loss {
   WeightedLoss(int64_t r) : WeightedLoss(WeightedLossOptions(r)) {}
   WeightedLoss(const torch::Tensor& w,int64_t r) : WeightedLoss(WeightedLossOptions(w,r)) {}
   WeightedLossOptions options;
-  void to(torch::Device device,torch::Dtype dtype,bool non_blocking = false) {options.weight_.to(device,dtype,non_blocking);}
-  void to(torch::Dtype dtype, bool non_blocking = false) {options.weight_.to(dtype,non_blocking);}
-  void to(torch::Device device, bool non_blocking = false) {options.weight_.to(device,non_blocking);}
+  void to(torch::Device d,torch::Dtype t,bool a=false) {if(options.weight_.defined()) options.weight_.to(d,t,a);}
+  void to(torch::Dtype  t,               bool a=false) {if(options.weight_.defined()) options.weight_.to(t,a);}
+  void to(torch::Device d,               bool a=false) {if(options.weight_.defined()) options.weight_.to(d,a);}
 };
 
 class TORCH_API BCEWithLogitsLoss : public WeightedLoss {
@@ -154,9 +154,9 @@ class TORCH_API LogLoss : public Loss {
   LogLoss(int64_t r) : LogLoss(LogLossOptions(r)) {}
   LogLoss(const torch::Tensor& w,int64_t i,int64_t r) : LogLoss(LogLossOptions(w,i,r)) {}
   LogLossOptions options;
-  void to(torch::Device device,torch::Dtype dtype,bool non_blocking = false) {options.weight_.to(device,dtype,non_blocking);}
-  void to(torch::Dtype dtype, bool non_blocking = false) {options.weight_.to(dtype,non_blocking);}
-  void to(torch::Device device, bool non_blocking = false) {options.weight_.to(device,non_blocking);}
+  void to(torch::Device d,torch::Dtype t,bool a=false) {if(options.weight_.defined()) options.weight_.to(d,t,a);}
+  void to(torch::Dtype  t,               bool a=false) {if(options.weight_.defined()) options.weight_.to(t,a);}
+  void to(torch::Device d,               bool a=false) {if(options.weight_.defined()) options.weight_.to(d,a);}
 };
 
 class TORCH_API NLLLoss : public LogLoss {
@@ -241,9 +241,9 @@ class TORCH_API MultiMarginLoss : public Loss {
   torch::Tensor forward(const torch::Tensor& x,const torch::Tensor& y) {
    return torch::multi_margin_loss(x,y,options.p_,options.margin_,options.weight_,options.reduce_);
   }
-  void to(torch::Device device,torch::Dtype dtype,bool non_blocking = false) {options.weight_.to(device,dtype,non_blocking);}
-  void to(torch::Dtype dtype, bool non_blocking = false) {options.weight_.to(dtype,non_blocking);}
-  void to(torch::Device device, bool non_blocking = false) {options.weight_.to(device,non_blocking);}
+  void to(torch::Device d,torch::Dtype t,bool a=false) {if(options.weight_.defined()) options.weight_.to(d,t,a);}
+  void to(torch::Dtype  t,               bool a=false) {if(options.weight_.defined()) options.weight_.to(t,a);}
+  void to(torch::Device d,               bool a=false) {if(options.weight_.defined()) options.weight_.to(d,a);}
 };
 
 // ------------------------------------------------------------------------------------

@@ -576,7 +576,7 @@ B xto(K x,TensorOptions &o) {
   for(i=0; i<n; ++i) {
    S s=a ? x->s : kS(x)[i];
    if (!xto(s,o))
-    AT_ERROR("Unrecognized option: `",s,", expecting device and/or datatype, e.g. `cuda or `cuda:0`float");
+    AT_ERROR("Unrecognized option: `",s,", expecting valid device and/or datatype, e.g. `cpu or `cuda`float");
   }
   return true;
  } else {

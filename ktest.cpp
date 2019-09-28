@@ -2,6 +2,11 @@
 #include "kmodule.h"
 #include "kloss.h"
 
+KAPI cudamem(K x) {
+ //auto n=c10::cuda::CUDACachingAllocator::currentMemoryAllocated(0);
+ return (K)0;
+}
+
 ZV modelpart(K x,J i,Kseq*& q,Kloss*& l,Kopt*& o) {
  for(;i<x->n;++i) {
   auto* g=xtag(x,i);

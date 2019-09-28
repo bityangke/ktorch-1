@@ -1049,7 +1049,7 @@ ZK mchild(B a,S s1,S s2,const Sequential &q) {
 //  main api functions defined in k
 // ------------------------------------------------------------------------------------------
 // margs - helper function used to parse module creation args (if not table/dictionary)
-// module - create/append sequential module
+// seq - create/append sequential module
 // mstate - class,module,name,options,parms,buffers for module(s) or selected parm/buffer
 // forward - given module pointer and tensor, run forward calculations sequentially
 // train - query or set training flag for a module
@@ -1078,7 +1078,7 @@ ZV margs(B p,Sequential q,K x) {
  }
 }
 
-KAPI module(K x) {
+KAPI seq(K x) {
  KTRY
   Sequential q,u; B a=env().alloptions,p=xseq(x,0,q);
   if(xempty(x)) {
@@ -1092,7 +1092,7 @@ KAPI module(K x) {
   } else {
    return margs(p,q,x), p ? (K)0 : kseq(q);
   }
- KCATCH("Sequential module(s)");
+ KCATCH("Sequential module");
 }
 
 K mstate(K x) {
@@ -1137,7 +1137,7 @@ KAPI train(K x) {
 // module fns defined in k namespace
 // ----------------------------------
 V modfn(K x) {
- fn(x, "module",     KFN(module),1);        // api functions for modules
+ fn(x, "seq",        KFN(seq),1);           // api functions for modules
  fn(x, "forward",    KFN(forward),2);
  fn(x, "train",      KFN(train),1);
 

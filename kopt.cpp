@@ -388,7 +388,7 @@ Z TensorVector optparms(K x,J i) {
   return *a;
  else if(auto *a=xten(x,i))
   return {*a};
- else if(xempty(x,i))
+ else if(x->t==-KS || xempty(x,i))
   return {};
  else if(xptr(x,i))
   AT_ERROR("Unrecognized pointer, expecting tensor(s) or module(s)");
@@ -448,6 +448,11 @@ K optstate(Ktag *g,K x) {
   AT_ERROR("Optimizer state requires 1-2 args: previously allocated ptr or (ptr;options flag)");
 }
 
+// ---------------------------------------------------------------------------------------
+// opt - main optimizer interface function for q
+// step
+// lr - query or set learning rate from k given pre-allocated optimizer ptr, or ptr & rate
+// ---------------------------------------------------------------------------------------
 KAPI opt(K x) {
  KTRY
   B a=env().alloptions; S s; Kopt *o;
@@ -481,7 +486,31 @@ KAPI kstep(K x) {
  return (K)0;
 }
 
+KAPI lr(K x) {
+ KTRY
+  B b=false; F r; Ktag *g;
+  TORCH_CHECK((g=xtag(x)) || ((g=xtag(x,0)) && (b=x->n==2) && xdouble(x,1,r)),
+   "lr: unrecognized arg(s), expecting model/optimizer and optional learning rate");
+  Cast c; OptimizerBase *o; Kmodel *m;
+  switch(g->a) {
+   case Class::optimizer: c=g->c; o=((Kopt*)g)->o.get(); break;
+   case Class::model: m=(Kmodel*)g; c=m->oc; o=m->o.get(); break;
+   default: AT_ERROR("lr not implemented for ",mapclass(g->a));
+  }
+  switch(c) {
+   case Cast::adagrad: {auto& p=((Adagrad*)o)->options; if(b) p.learning_rate(r); else r=p.learning_rate(); break;}
+   case Cast::adam:    {auto& p=((Adam*)o)->options;    if(b) p.learning_rate(r); else r=p.learning_rate(); break;}
+   case Cast::lbfgs:   {auto& p=((LBFGS*)o)->options;   if(b) p.learning_rate(r); else r=p.learning_rate(); break;}
+   case Cast::rmsprop: {auto& p=((RMSprop*)o)->options; if(b) p.learning_rate(r); else r=p.learning_rate(); break;}
+   case Cast::sgd:     {auto& p=((SGD*)o)->options;     if(b) p.learning_rate(r); else r=p.learning_rate(); break;}
+   default: AT_ERROR("Unrecognized optimizer; ",(I)c); break;
+  }
+  return b ? (K)0 : kf(r);
+ KCATCH("lr");
+}
+
 V optfn(K x) {
  fn(x, "opt",  KFN(opt),1);
  fn(x, "step", KFN(kstep),1);
+ fn(x, "lr",   KFN(lr),1);
 }

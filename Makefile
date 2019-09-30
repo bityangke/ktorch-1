@@ -14,12 +14,12 @@ ifeq ($(OS),Darwin)
 endif
 
 lib := ktorch.so
-src := ktorch.cpp ktensor.cpp kmath.cpp kmodule.cpp kloss.cpp kopt.cpp ktest.cpp
+src := ktorch.cpp ktensor.cpp kmath.cpp knn.cpp kloss.cpp kopt.cpp kmodel.cpp ktest.cpp
 
 all: $(lib)
 *.o: k.h ktorch.h
 kloss.o: kloss.h
-kmodule.o ktest.o: kmodule.h
+knn.o kmodel.o ktest.o: knn.h
 
 $(lib): $(subst .cpp,.o,$(src))
 	$(CXX) -o $@ $^ $(LDFLAGS) $(LDLIBS)

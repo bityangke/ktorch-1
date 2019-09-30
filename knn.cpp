@@ -1,5 +1,5 @@
 #include "ktorch.h"
-#include "kmodule.h"
+#include "knn.h"
 
 // PDIM/XDIM fill expanding array from k pairs/dict or kth element of general list
 #define PDIM(p,d,a) psize(p,d,(*a).data())

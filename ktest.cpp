@@ -1,5 +1,5 @@
 #include "ktorch.h"
-#include "kmodule.h"
+#include "knn.h"
 #include "kloss.h"
 
 KAPI cudamem(K x) {

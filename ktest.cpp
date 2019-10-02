@@ -237,38 +237,6 @@ KAPI kindex(K x) {
  KCATCH("index");
 }
 
-KAPI storsize(K x) {
- Tensor t; int64_t d,n;
- if(xten(x,0,t) && xint64(x,1,d) && xint64(x,2,n)) {
-  auto v=t.sizes().vec();
-  v.at(d)=n;
-  return kj(computeStorageSize(v,t.strides()));
- } else {
-  return KERR("err");
- }
-}
-
-KAPI narrow(K x) {
- KTRY
-  J d,i,n; Tensor t;
-  if(xlong(x,1,d) && xlong(x,2,i) && xlong(x,3,n) && x->n==4)
-   return xten(x,0,t) ? kten(t.narrow(d,i,n)) : kget(kput(x,0).narrow(d,i,n));
-  else
-   return KERR("Unrecognized arg(s) for narrow, expecting (input;dim;offset;size)");
- KCATCH("narrow");
-}
-
-KAPI set_test(K x) {
- //auto a=torch::arange(84).reshape({7,3,4});
- Tensor a;
- xten(x,a);
- a.set_(a.storage(), 0, {7,3,2}, a.strides());
- std::cout << a << "\n";
- std::cout << "numel: " << a.numel() << "\n";
- std::cout << std::boolalpha << "contiguous: " <<  a.is_contiguous() << "\n";
- return (K)0;
-}
-
 KAPI opttest(K x) {
  TensorOptions o;
  //o.is_variable(true);

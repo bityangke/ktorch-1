@@ -43,26 +43,6 @@ KAPI model(K x) {
 }
 
 // -------------------------------------------------------------------------------------------
-//  subset
-// -------------------------------------------------------------------------------------------
-V subset(Tensor& t,int64_t d,int64_t i,int64_t n) {
- t.set_(t.storage(), i*t.stride(d), n==t.size(d) ? t.sizes() : newsize(t,d,n), t.strides());
-}
-
-V subset(TensorVector& v,int64_t d,int64_t i,int64_t n) {
- for(auto& t:v) subset(t,d,i,n);
-}
-
-V setsafe(Tensor& t,const Storage& s,int64_t i,const IntArrayRef& sz,const IntArrayRef& st) {
- TORCH_CHECK(s.size()>=i+computeStorageSize(sz,st), "tensor subset out-of-bounds");
- t.set_(s,i,sz,st);
-}
-
-V subset_safe(Tensor& t,int64_t d,int64_t i,int64_t n) {
- setsafe(t, t.storage(), i*t.stride(d), newsize(t,d,n), t.strides());
-}
-
-// -------------------------------------------------------------------------------------------
 // mforward
 // mloss
 // -------------------------------------------------------------------------------------------
@@ -86,11 +66,13 @@ Tensor mloss(Kmodel *m,TensorVector &v) {
 // kbatch -
 // kfit -
 // -------------------------------------------------------------------------------------------
+Tensor batch(Kmodel *m,TensorVector& v,int64_t w,int64_t n=0);
 Tensor batch(Kmodel *m,TensorVector& v,int64_t w,int64_t n) {
  Optimizer *o=nullptr; LossClosureOptimizer *c=nullptr;
  if(m->oc == Cast::lbfgs) c=(LossClosureOptimizer*)m->o.get();
  else                     o=(Optimizer*)m->o.get();
 
+ if(!n) n=maxsize(v);
  if(w>n) w=n;                          // reduce batch size if exceeds total size
  auto s=n%w ? n/w + 1 : n/w;           // no. of subsets to process
  auto r=torch::empty(s);               // tensor for batch losses
@@ -104,15 +86,14 @@ Tensor batch(Kmodel *m,TensorVector& v,int64_t w,int64_t n) {
  };
 
  for(int64_t i=0,j=0; i<n; i+=w,++j) {
-  if(w>n-i) w=n-i;                     // final batch may be smaller
   //std::cerr << "subset " << j+1 << ", from row " << i << " using " << w << " row(s)\n";
-  subset(v,0,i,w);                     // narrow tensors to current batch
+  subset(v,0,i,w,n);                   // narrow tensors to current batch
   if(o)
    p[j]=loss().item<float>(), o->step(); // single loss evaluation
   else
    p[j]=c->step(loss).item<float>();     // pass closure, e.g. LBFGS
  }
- subset(v,0,0,n);                      // reset tensors to full length
+ subset(v,0,0,n,n);                    // reset tensors to full length
  return r;                             // return losses
 }
 
@@ -131,7 +112,7 @@ KAPI kbatch(K x) {
   Kmodel *m; TensorVector *v; int64_t w;
   if((m=xmodel(x,0)) && (v=xvec(x,1)) && xint64(x,2,w) && x->n==3) {
    TORCH_CHECK(v->size(), "model: vector of inputs is empty");
-   return kget(batch(m,*v,w,maxsize(*v)));
+   return kget(batch(m,*v,w));
   } else {
    return KERR("batch: unrecognized arg(s)");
   }
@@ -151,3 +132,22 @@ KAPI kfit(K x) {
  KCATCH("fit");
 }
 
+Sequential& xseq(Ktag *g) {
+ switch(g->a) {
+  case Class::sequential: return ((Kseq*)g)->q;
+  case Class::model:      return ((Kmodel*)g)->q;
+  default: AT_ERROR("Unable to retrieve sequential model from ",mapclass(g->a));
+ }
+}
+
+// training - query/set flag for module to perform forward calc as part of training(true) or inference(false)
+KAPI training(K x) {
+ KTRY
+  B b; Ktag *g;
+  TORCH_CHECK((g=xtag(x)) || ((g=xtag(x,0)) && x->n==2 && xbool(x,1,b)),
+              "training: unrecognized arg(s), expects sequential module or model pointer and optional flag");
+  auto& q=xseq(g);
+  std::cerr << "seq ref count: " << q.ptr().use_count() << "\n";
+  return (x->n==2) ? q->train(b),(K)0 : kb(q->is_training());
+ KCATCH("training");
+}

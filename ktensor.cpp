@@ -609,6 +609,32 @@ KAPI kshuffle(K x) {
 }
 
 // -------------------------------------------------------------------------------------------
+// narrow - narrow a tensor/vector along given dimension, according to offset,size
+//          in-place flag defaults to false
+// -------------------------------------------------------------------------------------------
+KAPI narrow(K x) {
+ KTRY
+  B b=false; int64_t d,i,w;
+  TORCH_CHECK(xint64(x,1,d) && xint64(x,2,i) && xint64(x,3,w) && (x->n==4 || (x->n==5 && xbool(x,4,b))),
+             "narrow: unrecognized arg(s), expecting (array/tensor/vector; dim; offset; size; optional in-place flag)");
+  if(auto *v=xvec(x,0)) {
+   if(b) {
+    subset(*v,d,i,w);
+    return (K)0;
+   } else {
+    TensorVector r;
+    for(auto &t:*v) r.emplace_back(t.narrow(d,i,w));
+    return kvec(r);
+   }
+  } else if(auto *t=xten(x,0)) {
+   return b ? subset(*t,d,i,w), (K)0 : kten(t->narrow(d,i,w));
+  } else {
+   return kget(kput(x,0).narrow(d,i,w));
+  }
+ KCATCH("narrow");
+}
+
+// -------------------------------------------------------------------------------------------
 // newsize - return new vector for tensor sizes, replacing size at dimension d with new value
 // maxsize - find the maximum size at given dimension using underlying storage size
 // fullsize -  restore tensor(s) to maximum size at given dimension
@@ -648,6 +674,38 @@ int64_t fullsize(TensorVector& v,int64_t d) {
  auto m=maxsize(v,d);
  for(auto& t:v) if(t.size(d) != m) fullsize(t,d);
  return m;
+}
+
+// -------------------------------------------------------------------------------------------
+//  subset - take a subset of a particular tensor dimension, given offset & width
+//           operate on vector of tensors if same size on given dimension
+//           requires tensor, dim, offset, width
+//           optional max size of given dim can be supplied, else calculated from storage size
+// setsafe - calls set_() after checking that the length implied by sizes & strides will fit
+// subsetsafe - alternate form of subset using setsafe rather than maximum size dimension
+// -------------------------------------------------------------------------------------------
+V subset(Tensor& t,int64_t d,int64_t i,int64_t w,int64_t n) {
+ if(!n) n=maxsize(t,d);  // if not given, get max size of dimension d from overall storage size
+ TORCH_CHECK(i<n,"subset offset of ",i," must be from 0-",n-1," the maximum size for dimension ",d);
+ if(w>n) w=n;            // reduce subset window if greater than max size
+ if(w>n-i) w=n-i;        // final subset may be a fraction of window
+ t.set_(t.storage(), i*t.stride(d), w==t.size(d) ? t.sizes() : newsize(t,d,w), t.strides());
+}
+
+V subset(TensorVector& v,int64_t d,int64_t i,int64_t w,int64_t n) {
+ if(!n) n=maxsize(v,d);
+ for(auto& t:v) subset(t,d,i,w,n);
+}
+
+V setsafe(Tensor& t,const Storage& s,int64_t i,const IntArrayRef& sz,const IntArrayRef& st) {
+ TORCH_CHECK(s.size()>=i+computeStorageSize(sz,st), 
+            "size ",sz," and stride ",st," require total of ",computeStorageSize(sz,st),
+            " plus offset of ",i," exceeds storage size of ",s.size());
+ t.set_(s,i,sz,st);
+}
+
+V subsetsafe(Tensor& t,int64_t d,int64_t i,int64_t w) {
+ setsafe(t, t.storage(), i*t.stride(d), newsize(t,d,w), t.strides());
 }
 
 // ------------------------------------------------------------------------------------------
@@ -714,4 +772,5 @@ V tensorfn(K x) {
  fn(x, "vector",    KFN(vector),1);
  fn(x, "options",   KFN(options),1);
  fn(x, "shuffle",   KFN(kshuffle),1);
+ fn(x, "narrow",    KFN(narrow),1);
 }

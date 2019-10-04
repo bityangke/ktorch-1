@@ -35,7 +35,7 @@ struct TORCH_API LossOptions {
 
 class TORCH_API BasicLoss : public Loss {
  public:
-  BasicLoss(LossOptions o=LossOptions()) : options(o) {Reduce(options.reduce_);} 
+  BasicLoss(LossOptions o=LossOptions()) : options(o) {Reduce(options.reduce());} 
   BasicLoss(int64_t r) : BasicLoss(LossOptions(r)) {}
   LossOptions options;
 };
@@ -44,7 +44,7 @@ class TORCH_API BCELoss : public BasicLoss {
  public:
  using BasicLoss::BasicLoss;
  torch::Tensor forward(const torch::Tensor& x,const torch::Tensor& y,const torch::Tensor& w={}) {
-  return torch::binary_cross_entropy(x,y,w,options.reduce_);
+  return torch::binary_cross_entropy(x,y,w,options.reduce());
  }
 };
 
@@ -52,7 +52,7 @@ class TORCH_API KLDivLoss : public BasicLoss {
  public:
  using BasicLoss::BasicLoss;
  torch::Tensor forward(const torch::Tensor& x,const torch::Tensor& y) {
-  return torch::kl_div(x,y,options.reduce_);
+  return torch::kl_div(x,y,options.reduce());
  }
 };
 
@@ -60,7 +60,7 @@ class TORCH_API L1Loss : public BasicLoss {
  public:
  using BasicLoss::BasicLoss;
  torch::Tensor forward(const torch::Tensor& x,const torch::Tensor& y) {
-  return torch::l1_loss(x,y,options.reduce_);
+  return torch::l1_loss(x,y,options.reduce());
  }
 };
 
@@ -68,7 +68,7 @@ class TORCH_API MSELoss : public BasicLoss {
  public:
  using BasicLoss::BasicLoss;
  torch::Tensor forward(const torch::Tensor& x,const torch::Tensor& y) {
-  return torch::mse_loss(x,y,options.reduce_);
+  return torch::mse_loss(x,y,options.reduce());
  }
 };
 
@@ -76,7 +76,7 @@ class TORCH_API MultiLabelMarginLoss : public BasicLoss {
  public:
  using BasicLoss::BasicLoss;
  torch::Tensor forward(const torch::Tensor& x,const torch::Tensor& y) {
-  return torch::multilabel_margin_loss(x,y,options.reduce_);
+  return torch::multilabel_margin_loss(x,y,options.reduce());
  }
 };
 
@@ -84,7 +84,7 @@ class TORCH_API SmoothL1Loss : public BasicLoss {
  public:
  using BasicLoss::BasicLoss;
  torch::Tensor forward(const torch::Tensor& x,const torch::Tensor& y) {
-  return torch::smooth_l1_loss(x,y,options.reduce_);
+  return torch::smooth_l1_loss(x,y,options.reduce());
  }
 };
 
@@ -92,7 +92,7 @@ class TORCH_API SoftMarginLoss : public BasicLoss {
  public:
  using BasicLoss::BasicLoss;
  torch::Tensor forward(const torch::Tensor& x,const torch::Tensor& y) {
-  return torch::soft_margin_loss(x,y,options.reduce_);
+  return torch::soft_margin_loss(x,y,options.reduce());
  }
 };
 
@@ -109,20 +109,20 @@ struct TORCH_API WeightedLossOptions {
 
 class TORCH_API WeightedLoss : public Loss {
  public:
-  WeightedLoss(WeightedLossOptions o=WeightedLossOptions()) : options(std::move(o)) {Reduce(options.reduce_);} 
+  WeightedLoss(WeightedLossOptions o=WeightedLossOptions()) : options(std::move(o)) {Reduce(options.reduce());} 
   WeightedLoss(int64_t r) : WeightedLoss(WeightedLossOptions(r)) {}
   WeightedLoss(const torch::Tensor& w,int64_t r) : WeightedLoss(WeightedLossOptions(w,r)) {}
   WeightedLossOptions options;
-  void to(torch::Device d,torch::Dtype t,bool a=false) {if(options.weight_.defined()) options.weight_.to(d,t,a);}
-  void to(torch::Dtype  t,               bool a=false) {if(options.weight_.defined()) options.weight_.to(t,a);}
-  void to(torch::Device d,               bool a=false) {if(options.weight_.defined()) options.weight_.to(d,a);}
+  void to(torch::Device d,torch::Dtype t,bool a=false) {if(options.weight().defined()) options.weight().to(d,t,a);}
+  void to(torch::Dtype  t,               bool a=false) {if(options.weight().defined()) options.weight().to(t,a);}
+  void to(torch::Device d,               bool a=false) {if(options.weight().defined()) options.weight().to(d,a);}
 };
 
 class TORCH_API BCEWithLogitsLoss : public WeightedLoss {
  public:
  using WeightedLoss::WeightedLoss;
  torch::Tensor forward(const torch::Tensor& x,const torch::Tensor& y,const torch::Tensor& w={}) {
-  return torch::binary_cross_entropy_with_logits(x,y,w,options.weight_,options.reduce_);
+  return torch::binary_cross_entropy_with_logits(x,y,w,options.weight(),options.reduce());
  }
 };
 
@@ -132,7 +132,7 @@ class TORCH_API MultiLabelSoftMarginLoss : public WeightedLoss {
  public:
  using WeightedLoss::WeightedLoss;
  torch::Tensor forward(const torch::Tensor& x,const torch::Tensor& y) {
-  return multilabel_soft_margin_loss(x,y,options.weight_,options.reduce_);
+  return multilabel_soft_margin_loss(x,y,options.weight(),options.reduce());
  }
 };
 
@@ -150,20 +150,20 @@ struct TORCH_API LogLossOptions {
 
 class TORCH_API LogLoss : public Loss {
  public:
-  LogLoss(LogLossOptions o=LogLossOptions()) : options(std::move(o)) {Reduce(options.reduce_);} 
+  LogLoss(LogLossOptions o=LogLossOptions()) : options(std::move(o)) {Reduce(options.reduce());} 
   LogLoss(int64_t r) : LogLoss(LogLossOptions(r)) {}
   LogLoss(const torch::Tensor& w,int64_t i,int64_t r) : LogLoss(LogLossOptions(w,i,r)) {}
   LogLossOptions options;
-  void to(torch::Device d,torch::Dtype t,bool a=false) {if(options.weight_.defined()) options.weight_.to(d,t,a);}
-  void to(torch::Dtype  t,               bool a=false) {if(options.weight_.defined()) options.weight_.to(t,a);}
-  void to(torch::Device d,               bool a=false) {if(options.weight_.defined()) options.weight_.to(d,a);}
+  void to(torch::Device d,torch::Dtype t,bool a=false) {if(options.weight().defined()) options.weight().to(d,t,a);}
+  void to(torch::Dtype  t,               bool a=false) {if(options.weight().defined()) options.weight().to(t,a);}
+  void to(torch::Device d,               bool a=false) {if(options.weight().defined()) options.weight().to(d,a);}
 };
 
 class TORCH_API NLLLoss : public LogLoss {
  public:
  using LogLoss::LogLoss;
  torch::Tensor forward(const torch::Tensor& x,const torch::Tensor& y) {
-  return torch::nll_loss(x,y,options.weight_,options.reduce_,options.ignore_);
+  return torch::nll_loss(x,y,options.weight(),options.reduce(),options.ignore());
  }
 };
 
@@ -171,7 +171,7 @@ class TORCH_API CrossEntropyLoss : public LogLoss {
  public:
  using LogLoss::LogLoss;
  torch::Tensor forward(const torch::Tensor& x,const torch::Tensor& y) {
-  return torch::nll_loss(torch::log_softmax(x,1),y,options.weight_,options.reduce_,options.ignore_);
+  return torch::nll_loss(torch::log_softmax(x,1),y,options.weight(),options.reduce(),options.ignore());
  }
 };
 
@@ -188,7 +188,7 @@ struct TORCH_API MarginLossOptions {
 
 class TORCH_API MarginLoss : public Loss {
  public:
-  MarginLoss(MarginLossOptions o=MarginLossOptions()) : options(std::move(o)) {Reduce(options.reduce_);} 
+  MarginLoss(MarginLossOptions o=MarginLossOptions()) : options(std::move(o)) {Reduce(options.reduce());} 
   MarginLoss(int64_t r) : MarginLoss(MarginLossOptions(r)) {}
   MarginLoss(double m,int64_t r) : MarginLoss(MarginLossOptions(m,r)) {}
   MarginLossOptions options;
@@ -198,7 +198,7 @@ class TORCH_API HingeEmbeddingLoss : public MarginLoss {
  public:
  using MarginLoss::MarginLoss;
  torch::Tensor forward(const torch::Tensor& x,const torch::Tensor& y) {
-  return torch::hinge_embedding_loss(x,y,options.margin_,options.reduce_);
+  return torch::hinge_embedding_loss(x,y,options.margin(),options.reduce());
  }
 };
 
@@ -206,7 +206,7 @@ class TORCH_API CosineEmbeddingLoss : public MarginLoss {
  public:
  using MarginLoss::MarginLoss;
  torch::Tensor forward(const torch::Tensor& x1,const torch::Tensor& x2,const torch::Tensor& y) {
-  return torch::cosine_embedding_loss(x1,x2,y,options.margin_,options.reduce_);
+  return torch::cosine_embedding_loss(x1,x2,y,options.margin(),options.reduce());
  }
 };
 
@@ -214,7 +214,7 @@ class TORCH_API MarginRankingLoss : public MarginLoss {
  public:
  using MarginLoss::MarginLoss;
  torch::Tensor forward(const torch::Tensor& x1,const torch::Tensor& x2,const torch::Tensor& y) {
-  return torch::margin_ranking_loss(x1,x2,y,options.margin_,options.reduce_);
+  return torch::margin_ranking_loss(x1,x2,y,options.margin(),options.reduce());
  }
 };
 
@@ -233,17 +233,17 @@ struct TORCH_API MultiMarginLossOptions {
 
 class TORCH_API MultiMarginLoss : public Loss {
  public:
-  MultiMarginLoss(MultiMarginLossOptions o=MultiMarginLossOptions()) : options(std::move(o)) {Reduce(options.reduce_);} 
+  MultiMarginLoss(MultiMarginLossOptions o=MultiMarginLossOptions()) : options(std::move(o)) {Reduce(options.reduce());} 
   MultiMarginLoss(int64_t r) : MultiMarginLoss(MultiMarginLossOptions(r)) {}
   MultiMarginLoss(const torch::Tensor& w,int64_t r) : MultiMarginLoss(MultiMarginLossOptions(w,r)) {}
   MultiMarginLoss(Scalar p,Scalar m,const torch::Tensor& w,int64_t r) : MultiMarginLoss(MultiMarginLossOptions(p,m,w,r)) {}
   MultiMarginLossOptions options;
   torch::Tensor forward(const torch::Tensor& x,const torch::Tensor& y) {
-   return torch::multi_margin_loss(x,y,options.p_,options.margin_,options.weight_,options.reduce_);
+   return torch::multi_margin_loss(x,y,options.p(),options.margin(),options.weight(),options.reduce());
   }
-  void to(torch::Device d,torch::Dtype t,bool a=false) {if(options.weight_.defined()) options.weight_.to(d,t,a);}
-  void to(torch::Dtype  t,               bool a=false) {if(options.weight_.defined()) options.weight_.to(t,a);}
-  void to(torch::Device d,               bool a=false) {if(options.weight_.defined()) options.weight_.to(d,a);}
+  void to(torch::Device d,torch::Dtype t,bool a=false) {if(options.weight().defined()) options.weight().to(d,t,a);}
+  void to(torch::Dtype  t,               bool a=false) {if(options.weight().defined()) options.weight().to(t,a);}
+  void to(torch::Device d,               bool a=false) {if(options.weight().defined()) options.weight().to(d,a);}
 };
 
 // ------------------------------------------------------------------------------------
@@ -261,12 +261,12 @@ struct TORCH_API TripletLossOptions {
 
 class TORCH_API TripletMarginLoss : public Loss {
  public:
-  TripletMarginLoss(TripletLossOptions o=TripletLossOptions()) : options(std::move(o)) {Reduce(options.reduce_);} 
+  TripletMarginLoss(TripletLossOptions o=TripletLossOptions()) : options(std::move(o)) {Reduce(options.reduce());} 
   TripletMarginLoss(int64_t r) : TripletMarginLoss(TripletLossOptions(r)) {}
   TripletMarginLoss(double m,double p,double e,bool s,int64_t r) : TripletMarginLoss(TripletLossOptions(m,p,e,s,r)) {}
   TripletLossOptions options;
   torch::Tensor forward(const torch::Tensor& x,const torch::Tensor& y,const torch::Tensor& z) {
-   return torch::triplet_margin_loss(x,y,z,options.margin_,options.p_,options.eps_,options.swap_,options.reduce_);
+   return torch::triplet_margin_loss(x,y,z,options.margin(),options.p(),options.eps(),options.swap(),options.reduce());
   }
 };
 
@@ -285,12 +285,12 @@ struct TORCH_API PoissonLossOptions {
 
 class TORCH_API PoissonNLLLoss : public Loss {
  public:
-  PoissonNLLLoss(PoissonLossOptions o=PoissonLossOptions()) : options(std::move(o)) {Reduce(options.reduce_);} 
+  PoissonNLLLoss(PoissonLossOptions o=PoissonLossOptions()) : options(std::move(o)) {Reduce(options.reduce());} 
   PoissonNLLLoss(int64_t r) : PoissonNLLLoss(PoissonLossOptions(r)) {}
   PoissonNLLLoss(bool l,bool f,double e,int64_t r) : PoissonNLLLoss(PoissonLossOptions(l,f,e,r)) {}
   PoissonLossOptions options;
   torch::Tensor forward(const torch::Tensor& x,const torch::Tensor& y) {
-   return torch::poisson_nll_loss(x,y,options.log_,options.full_,options.eps_,options.reduce_);
+   return torch::poisson_nll_loss(x,y,options.log(),options.full(),options.eps(),options.reduce());
   }
 };
 
@@ -306,13 +306,13 @@ struct TORCH_API CTCLossOptions {
 
 class TORCH_API CTCLoss : public Loss {
  public:
-  CTCLoss(CTCLossOptions o=CTCLossOptions()) : options(std::move(o)) {Reduce(options.reduce_);} 
+  CTCLoss(CTCLossOptions o=CTCLossOptions()) : options(std::move(o)) {Reduce(options.reduce());} 
   CTCLoss(int64_t b,bool z,int64_t r) : CTCLoss(CTCLossOptions(b,z,r)) {}
   CTCLossOptions options;
   torch::Tensor forward(const torch::Tensor& x,const torch::Tensor& y,const torch::Tensor& nx,const torch::Tensor& ny) {
-   return torch::ctc_loss(x,y,nx,ny,options.blank_,options.reduce_,options.zeroinf_);
+   return torch::ctc_loss(x,y,nx,ny,options.blank(),options.reduce(),options.zeroinf());
   }
   torch::Tensor forward(const torch::Tensor& x,const torch::Tensor& y,torch::IntArrayRef nx,torch::IntArrayRef ny) {
-   return torch::ctc_loss(x,y,nx,ny,options.blank_,options.reduce_,options.zeroinf_);
+   return torch::ctc_loss(x,y,nx,ny,options.blank(),options.reduce(),options.zeroinf());
   }
 };

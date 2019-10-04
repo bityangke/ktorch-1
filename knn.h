@@ -28,9 +28,9 @@ class MaxPoolImpl : public torch::nn::Cloneable<Derived> {
   explicit MaxPoolImpl(PoolOptions<D> o) : options(std::move(o)) {reset();}
   void reset() override {
     bool z=true;
-    for(auto i:*options.stride_) if(i){z=false; break;}
-    if(z) *options.stride_ = *options.size_;
-    if(options.indices_) indices=torch::nn::Module::register_buffer("indices",indices);
+    for(auto i:*options.stride()) if(i){z=false; break;}
+    //PATCH if(z) *options.stride_ = *options.size_;
+    if(options.indices()) indices=torch::nn::Module::register_buffer("indices",indices);
   }
   PoolOptions<D> options;
   torch::Tensor indices;
@@ -40,13 +40,13 @@ class TORCH_API MaxPool1dImpl : public MaxPoolImpl<1, MaxPool1dImpl> {
  public:
   using MaxPoolImpl<1, MaxPool1dImpl>::MaxPoolImpl;
   torch::Tensor forward(const torch::Tensor& t) {
-   if(options.indices_) {
+   if(options.indices()) {
     torch::Tensor t,i;
-    std::tie(t,i)=torch::max_pool1d_with_indices(t,options.size_,options.stride_,options.pad_,options.dilate_,options.ceiling_);
+    std::tie(t,i)=torch::max_pool1d_with_indices(t,options.size(),options.stride(),options.pad(),options.dilate(),options.ceiling());
     indices=i;
     return t;
    } else {
-    return torch::max_pool1d(t,options.size_,options.stride_,options.pad_,options.dilate_,options.ceiling_);
+    return torch::max_pool1d(t,options.size(),options.stride(),options.pad(),options.dilate(),options.ceiling());
    }
   }
 };
@@ -55,13 +55,13 @@ class TORCH_API MaxPool2dImpl : public MaxPoolImpl<2, MaxPool2dImpl> {
  public:
   using MaxPoolImpl<2, MaxPool2dImpl>::MaxPoolImpl;
   torch::Tensor forward(const torch::Tensor& t) {
-   if(options.indices_) {
+   if(options.indices()) {
     torch::Tensor t,i;
-    std::tie(t,i)=torch::max_pool2d_with_indices(t,options.size_,options.stride_,options.pad_,options.dilate_,options.ceiling_);
+    std::tie(t,i)=torch::max_pool2d_with_indices(t,options.size(),options.stride(),options.pad(),options.dilate(),options.ceiling());
     indices=i;
     return t;
    } else {
-    return torch::max_pool2d(t,options.size_,options.stride_,options.pad_,options.dilate_,options.ceiling_);
+    return torch::max_pool2d(t,options.size(),options.stride(),options.pad(),options.dilate(),options.ceiling());
    }
   }
 };
@@ -70,13 +70,13 @@ class TORCH_API MaxPool3dImpl : public MaxPoolImpl<3, MaxPool3dImpl> {
  public:
   using MaxPoolImpl<3, MaxPool3dImpl>::MaxPoolImpl;
   torch::Tensor forward(const torch::Tensor& t) {
-   if(options.indices_) {
+   if(options.indices()) {
     torch::Tensor t,i;
-    std::tie(t,i)=torch::max_pool3d_with_indices(t,options.size_,options.stride_,options.pad_,options.dilate_,options.ceiling_);
+    std::tie(t,i)=torch::max_pool3d_with_indices(t,options.size(),options.stride(),options.pad(),options.dilate(),options.ceiling());
     indices=i;
     return t;
    } else {
-    return torch::max_pool3d(t,options.size_,options.stride_,options.pad_,options.dilate_,options.ceiling_);
+    return torch::max_pool3d(t,options.size(),options.stride(),options.pad(),options.dilate(),options.ceiling());
    }
   }
 };
@@ -95,8 +95,8 @@ class AvgPoolImpl : public torch::nn::Cloneable<Derived> {
   explicit AvgPoolImpl(PoolOptions<D> o) : options(std::move(o)) {reset();}
   void reset() override {
     bool z=true;
-    for(auto i:*options.stride_) if(i){z=false; break;}
-    if(z) *options.stride_ = *options.size_;
+    for(auto i:*options.stride()) if(i){z=false; break;}
+    //PATCH if(z) *options.stride_ = *options.size_;
   }
   PoolOptions<D> options;
 };
@@ -105,7 +105,7 @@ class TORCH_API AvgPool1dImpl : public AvgPoolImpl<1, AvgPool1dImpl> {
  public:
   using AvgPoolImpl<1, AvgPool1dImpl>::AvgPoolImpl;
   torch::Tensor forward(const torch::Tensor& t) {
-   return torch::avg_pool1d(t,options.size_,options.stride_,options.pad_,options.ceiling_,options.countpad_);
+   return torch::avg_pool1d(t,options.size(),options.stride(),options.pad(),options.ceiling(),options.countpad());
   }
 };
 
@@ -113,7 +113,7 @@ class TORCH_API AvgPool2dImpl : public AvgPoolImpl<2, AvgPool2dImpl> {
  public:
   using AvgPoolImpl<2, AvgPool2dImpl>::AvgPoolImpl;
   torch::Tensor forward(const torch::Tensor& t) {
-   return torch::avg_pool2d(t,options.size_,options.stride_,options.pad_,options.ceiling_,options.countpad_);
+   return torch::avg_pool2d(t,options.size(),options.stride(),options.pad(),options.ceiling(),options.countpad());
   }
 };
 
@@ -121,7 +121,7 @@ class TORCH_API AvgPool3dImpl : public AvgPoolImpl<3, AvgPool3dImpl> {
  public:
   using AvgPoolImpl<3, AvgPool3dImpl>::AvgPoolImpl;
   torch::Tensor forward(const torch::Tensor& t) {
-   return torch::avg_pool3d(t,options.size_,options.stride_,options.pad_,options.ceiling_,options.countpad_);
+   return torch::avg_pool3d(t,options.size(),options.stride(),options.pad(),options.ceiling(),options.countpad());
   }
 };
 
@@ -146,7 +146,7 @@ class AdaptiveMaxPoolImpl : public torch::nn::Cloneable<Derived> {
  public:
   AdaptiveMaxPoolImpl(torch::ExpandingArray<D> s) : AdaptiveMaxPoolImpl(AdaptivePoolOptions<D>(s)) {}
   explicit AdaptiveMaxPoolImpl(AdaptivePoolOptions<D> o) : options(std::move(o)) {reset();}
-  void reset() override {if(options.indices_) indices=torch::nn::Module::register_buffer("indices",indices);}
+  void reset() override {if(options.indices()) indices=torch::nn::Module::register_buffer("indices",indices);}
   AdaptivePoolOptions<D> options;
   torch::Tensor indices;
 };
@@ -156,8 +156,8 @@ class TORCH_API AdaptiveMaxPool1dImpl : public AdaptiveMaxPoolImpl<1, AdaptiveMa
   using AdaptiveMaxPoolImpl<1, AdaptiveMaxPool1dImpl>::AdaptiveMaxPoolImpl;
   torch::Tensor forward(const torch::Tensor& input) {
   torch::Tensor t,i;
-  std::tie(t,i)=torch::adaptive_max_pool1d(input,options.size_);
-  if(options.indices_) indices=i;
+  std::tie(t,i)=torch::adaptive_max_pool1d(input,options.size());
+  if(options.indices()) indices=i;
   return t;
  }
 };
@@ -167,8 +167,8 @@ class TORCH_API AdaptiveMaxPool2dImpl : public AdaptiveMaxPoolImpl<2, AdaptiveMa
   using AdaptiveMaxPoolImpl<2, AdaptiveMaxPool2dImpl>::AdaptiveMaxPoolImpl;
   torch::Tensor forward(const torch::Tensor& input) {
   torch::Tensor t,i;
-  std::tie(t,i)=torch::adaptive_max_pool2d(input,options.size_);
-  if(options.indices_) indices=i;
+  std::tie(t,i)=torch::adaptive_max_pool2d(input,options.size());
+  if(options.indices()) indices=i;
   return t;
  }
 };
@@ -178,8 +178,8 @@ class TORCH_API AdaptiveMaxPool3dImpl : public AdaptiveMaxPoolImpl<3, AdaptiveMa
   using AdaptiveMaxPoolImpl<3, AdaptiveMaxPool3dImpl>::AdaptiveMaxPoolImpl;
   torch::Tensor forward(const torch::Tensor& input) {
   torch::Tensor t,i;
-  std::tie(t,i)=torch::adaptive_max_pool3d(input,options.size_);
-  if(options.indices_) indices=i;
+  std::tie(t,i)=torch::adaptive_max_pool3d(input,options.size());
+  if(options.indices()) indices=i;
   return t;
  }
 };
@@ -204,7 +204,7 @@ class TORCH_API AdaptiveAvgPool1dImpl : public AdaptiveAvgPoolImpl<1, AdaptiveAv
  public:
   using AdaptiveAvgPoolImpl<1, AdaptiveAvgPool1dImpl>::AdaptiveAvgPoolImpl;
   torch::Tensor forward(const torch::Tensor& input) {
-   return torch::adaptive_avg_pool1d(input,options.size_);
+   return torch::adaptive_avg_pool1d(input,options.size());
   }
 };
 
@@ -212,7 +212,7 @@ class TORCH_API AdaptiveAvgPool2dImpl : public AdaptiveAvgPoolImpl<2, AdaptiveAv
  public:
   using AdaptiveAvgPoolImpl<2, AdaptiveAvgPool2dImpl>::AdaptiveAvgPoolImpl;
   torch::Tensor forward(const torch::Tensor& input) {
-   return torch::adaptive_avg_pool2d(input,options.size_);
+   return torch::adaptive_avg_pool2d(input,options.size());
   }
 };
 
@@ -220,7 +220,7 @@ class TORCH_API AdaptiveAvgPool3dImpl : public AdaptiveAvgPoolImpl<3, AdaptiveAv
  public:
   using AdaptiveAvgPoolImpl<3, AdaptiveAvgPool3dImpl>::AdaptiveAvgPoolImpl;
   torch::Tensor forward(const torch::Tensor& input) {
-   return torch::adaptive_avg_pool3d(input,options.size_);
+   return torch::adaptive_avg_pool3d(input,options.size());
   }
 };
 
@@ -251,15 +251,15 @@ class FractionalMaxPoolImpl : public torch::nn::Cloneable<Derived> {
 
   void reset() override {
    bool z1=true,z2=true;  //true if ratios/output sizes all zero
-   for(auto i:*options.ratio_)   if(i){z1=false; break;}
-   for(auto i:*options.outsize_) if(i){z2=false; break;}
+   for(auto i:*options.ratio())   if(i){z1=false; break;}
+   for(auto i:*options.outsize()) if(i){z2=false; break;}
    if(z1 && z2) {
     AT_ERROR("Define output size or ratio of output to input size, not both");
    } else if(z2) {
-    for(auto i:*options.ratio_)
+    for(auto i:*options.ratio())
      if(!(0<i && i<1)) AT_ERROR("Ratios must be between 0 and 1");
    }
-   if(options.indices_) indices=torch::nn::Module::register_buffer("indices",indices);
+   if(options.indices()) indices=torch::nn::Module::register_buffer("indices",indices);
   }
 
   void setup(const torch::Tensor& t,torch::Tensor &s) {
@@ -267,10 +267,12 @@ class FractionalMaxPoolImpl : public torch::nn::Cloneable<Derived> {
     AT_ERROR(D+2,"-dimensional input expected, ",t.dim()," dimension(s) supplied");
    s=torch::rand({t.size(0),t.size(1),D}, torch::dtype(t.dtype()).device(t.device()));
    bool b=false;
-   for(auto r:*options.ratio_) if(r>0) {b=true;break;}
+   for(auto r:*options.ratio()) if(r>0) {b=true;break;}
+/* PATCH
    if(b)
     for(size_t i=0;i<D;++i)
-     (*options.outsize_)[i]=t.size(i+2)*(*options.ratio_)[i];
+     (*options.outsize_)[i]=t.size(i+2)*(*options.ratio())[i];
+*/
   }
 
   FractionalMaxPoolOptions<D> options;
@@ -282,8 +284,8 @@ class TORCH_API FractionalMaxPool2dImpl : public FractionalMaxPoolImpl<2, Fracti
   using FractionalMaxPoolImpl<2, FractionalMaxPool2dImpl>::FractionalMaxPoolImpl;
   torch::Tensor forward(const torch::Tensor& t) {
    torch::Tensor i,r,s; setup(t,s);
-   std::tie(r,i)=torch::fractional_max_pool2d(t,options.size_,options.outsize_, s);
-   if(options.indices_) indices=i;
+   std::tie(r,i)=torch::fractional_max_pool2d(t,options.size(),options.outsize(), s);
+   if(options.indices()) indices=i;
    return r;
  }
 };
@@ -293,8 +295,8 @@ class TORCH_API FractionalMaxPool3dImpl : public FractionalMaxPoolImpl<3, Fracti
   using FractionalMaxPoolImpl<3, FractionalMaxPool3dImpl>::FractionalMaxPoolImpl;
   torch::Tensor forward(const torch::Tensor& t) {
    torch::Tensor i,r,s; setup(t,s);
-   std::tie(r,i)=torch::fractional_max_pool3d(t,options.size_,options.outsize_, s);
-   if(options.indices_) indices=i;
+   std::tie(r,i)=torch::fractional_max_pool3d(t,options.size(),options.outsize(), s);
+   if(options.indices()) indices=i;
    return r;
  }
 };
@@ -323,8 +325,8 @@ class LPPoolImpl : public torch::nn::Cloneable<Derived> {
   explicit LPPoolImpl(LPPoolOptions<D> o) : options(std::move(o)) {reset();}
   void reset() override {
    bool z=true;
-   for(auto i:*options.stride_) if(i){z=false; break;}
-   if(z) *options.stride_ = *options.size_;
+   for(auto i:*options.stride()) if(i){z=false; break;}
+   //PATCH if(z) *options.stride_ = *options.size_;
   }
   LPPoolOptions<D> options;
 };
@@ -333,8 +335,8 @@ class TORCH_API LPPool1dImpl : public LPPoolImpl<1, LPPool1dImpl> {
  public:
   using LPPoolImpl<1, LPPool1dImpl>::LPPoolImpl;
   torch::Tensor forward(const torch::Tensor& t) {
-   auto r=torch::avg_pool1d(t.pow(options.power_),options.size_,options.stride_,0,options.ceiling_);
-   return r.mul((*options.size_)[0]).pow(1.0/options.power_);
+   auto r=torch::avg_pool1d(t.pow(options.power()),options.size(),options.stride(),0,options.ceiling());
+   return r.mul((*options.size())[0]).pow(1.0/options.power());
   }
 };
 
@@ -342,8 +344,8 @@ class TORCH_API LPPool2dImpl : public LPPoolImpl<2, LPPool2dImpl> {
  public:
   using LPPoolImpl<2, LPPool2dImpl>::LPPoolImpl;
   torch::Tensor forward(const torch::Tensor& t) {
-   auto r=torch::avg_pool2d(t.pow(options.power_),options.size_,options.stride_,0,options.ceiling_);
-   return (torch::sign(r) * torch::relu(torch::abs(r))).mul((*options.size_)[0]*(*options.size_)[1]).pow(1.0/options.power_);
+   auto r=torch::avg_pool2d(t.pow(options.power()),options.size(),options.stride(),0,options.ceiling());
+   return (torch::sign(r) * torch::relu(torch::abs(r))).mul((*options.size())[0]*(*options.size())[1]).pow(1.0/options.power());
   }
 };
 
@@ -377,7 +379,7 @@ class TORCH_API PadImpl : public torch::nn::Cloneable<PadImpl> {
   explicit PadImpl(PadOptions o) : options(std::move(o)) {reset();}
   void reset() override {}
   torch::Tensor forward(const torch::Tensor& input) {
-   return torch::constant_pad_nd(input,options.pad_,options.value_);
+   return torch::constant_pad_nd(input,options.pad(),options.value());
   }
   PadOptions options;
 };
@@ -400,7 +402,7 @@ class TORCH_API ReflectionPad1dImpl : public ReflectionPadImpl<2, ReflectionPad1
  public:
   using ReflectionPadImpl<2, ReflectionPad1dImpl>::ReflectionPadImpl;
   torch::Tensor forward(const torch::Tensor& input) {
-   return torch::reflection_pad1d(input,options.pad_);
+   return torch::reflection_pad1d(input,options.pad());
   }
 };
 
@@ -408,7 +410,7 @@ class TORCH_API ReflectionPad2dImpl : public ReflectionPadImpl<4, ReflectionPad2
  public:
   using ReflectionPadImpl<4, ReflectionPad2dImpl>::ReflectionPadImpl;
   torch::Tensor forward(const torch::Tensor& input) {
-   return torch::reflection_pad2d(input,options.pad_);
+   return torch::reflection_pad2d(input,options.pad());
   }
 };
 
@@ -431,7 +433,7 @@ class TORCH_API ReplicationPad1dImpl : public ReplicationPadImpl<2, ReplicationP
  public:
   using ReplicationPadImpl<2, ReplicationPad1dImpl>::ReplicationPadImpl;
   torch::Tensor forward(const torch::Tensor& input) {
-   return torch::replication_pad1d(input,options.pad_);
+   return torch::replication_pad1d(input,options.pad());
   }
 };
 
@@ -439,7 +441,7 @@ class TORCH_API ReplicationPad2dImpl : public ReplicationPadImpl<4, ReplicationP
  public:
   using ReplicationPadImpl<4, ReplicationPad2dImpl>::ReplicationPadImpl;
   torch::Tensor forward(const torch::Tensor& input) {
-   return torch::replication_pad2d(input,options.pad_);
+   return torch::replication_pad2d(input,options.pad());
   }
 };
 
@@ -447,7 +449,7 @@ class TORCH_API ReplicationPad3dImpl : public ReplicationPadImpl<6, ReplicationP
  public:
   using ReplicationPadImpl<6, ReplicationPad3dImpl>::ReplicationPadImpl;
   torch::Tensor forward(const torch::Tensor& input) {
-   return torch::replication_pad3d(input,options.pad_);
+   return torch::replication_pad3d(input,options.pad());
   }
 };
 
@@ -557,7 +559,7 @@ class TORCH_API SoftmaxImpl : public SoftImpl<SoftmaxImpl> {
  public:
   using SoftImpl<SoftmaxImpl>::SoftImpl;
   torch::Tensor forward(const torch::Tensor& input) {
-   return input.softmax(options.dim_,options.dtype_);
+   return input.softmax(options.dim(),options.dtype());
   }
 };
 TORCH_MODULE(Softmax);
@@ -566,7 +568,7 @@ class TORCH_API SoftminImpl : public SoftImpl<SoftminImpl> {
  public:
   using SoftImpl<SoftminImpl>::SoftImpl;
   torch::Tensor forward(const torch::Tensor& input) {
-   return (-input).softmax(options.dim_,options.dtype_);
+   return (-input).softmax(options.dim(),options.dtype());
   }
 };
 TORCH_MODULE(Softmin);
@@ -575,7 +577,7 @@ class TORCH_API LogSoftmaxImpl : public SoftImpl<LogSoftmaxImpl> {
  public:
   using SoftImpl<LogSoftmaxImpl>::SoftImpl;
   torch::Tensor forward(const torch::Tensor& input) {
-   return input.log_softmax(options.dim_,options.dtype_);
+   return input.log_softmax(options.dim(),options.dtype());
   }
 };
 TORCH_MODULE(LogSoftmax);
@@ -597,7 +599,7 @@ class TORCH_API PReLUImpl : public torch::nn::Cloneable<PReLUImpl> {
   PReLUImpl(int64_t n,double w) : PReLUImpl(PReLUOptions(n,w)) {}
   explicit PReLUImpl(PReLUOptions o) : options(std::move(o)) {reset();}
   void reset() override {
-   weight=torch::nn::Module::register_parameter("weight",torch::empty({options.in_}).fill_(options.init_));
+   weight=torch::nn::Module::register_parameter("weight",torch::empty({options.in()}).fill_(options.init()));
   }
   torch::Tensor forward(const torch::Tensor& t) {
    return torch::prelu(t,weight.to(t.dtype()));
@@ -630,7 +632,7 @@ class TORCH_API ELUImpl : public ExpImpl<ELUImpl> {
  public:
   using ExpImpl<ELUImpl>::ExpImpl;
   torch::Tensor forward(const torch::Tensor& t) {
-   return torch::elu(t,options.alpha_);
+   return torch::elu(t,options.alpha());
   }
 };
 TORCH_MODULE(ELU);
@@ -639,7 +641,7 @@ class TORCH_API CELUImpl : public ExpImpl<CELUImpl> {
  public:
   using ExpImpl<CELUImpl>::ExpImpl;
   torch::Tensor forward(const torch::Tensor& t) {
-   return torch::celu(t,options.alpha_);
+   return torch::celu(t,options.alpha());
   }
 };
 TORCH_MODULE(CELU);
@@ -659,7 +661,7 @@ class TORCH_API LeakyReLUImpl : public torch::nn::Cloneable<LeakyReLUImpl> {
   explicit LeakyReLUImpl(LeakyOptions o) : options(std::move(o)) {reset();}
   void reset() override {}
   torch::Tensor forward(const torch::Tensor& t) {
-   return torch::leaky_relu(t,options.slope_);
+   return torch::leaky_relu(t,options.slope());
   }
  LeakyOptions options;
 };
@@ -681,7 +683,7 @@ class TORCH_API RReLUImpl : public torch::nn::Cloneable<RReLUImpl> {
   explicit RReLUImpl(RReLUOptions o) : options(std::move(o)) {reset();}
   void reset() override {}
   torch::Tensor forward(const torch::Tensor& t) {
-   return torch::rrelu(t,options.lower_,options.upper_,this->is_training());
+   return torch::rrelu(t,options.lower(),options.upper(),this->is_training());
   }
  RReLUOptions options;
 };
@@ -702,7 +704,7 @@ class TORCH_API GLUImpl : public torch::nn::Cloneable<GLUImpl> {
   GLUImpl(int64_t d) : GLUImpl(GLUOptions(d)) {}
   explicit GLUImpl(GLUOptions o) : options(std::move(o)) {reset();}
   void reset() override {}
-  torch::Tensor forward(const torch::Tensor& t) {return torch::glu(t,options.dim_);}
+  torch::Tensor forward(const torch::Tensor& t) {return torch::glu(t,options.dim());}
   GLUOptions options;
 };
 TORCH_MODULE(GLU);
@@ -723,7 +725,7 @@ class TORCH_API ThresholdImpl : public torch::nn::Cloneable<ThresholdImpl> {
   explicit ThresholdImpl(ThresholdOptions o) : options(std::move(o)) {reset();}
   void reset() override {}
   torch::Tensor forward(const torch::Tensor& t) {
-   return torch::threshold(t,options.threshold_,options.value_);
+   return torch::threshold(t,options.threshold(),options.value());
   }
   ThresholdOptions options;
 };
@@ -747,7 +749,7 @@ class TORCH_API SoftplusImpl : public torch::nn::Cloneable<SoftplusImpl> {
   explicit SoftplusImpl(SoftplusOptions o) : options(std::move(o)) {reset();}
   void reset() override {}
   torch::Tensor forward(const torch::Tensor& t) {
-   return torch::softplus(t,options.beta_,options.threshold_);
+   return torch::softplus(t,options.beta(),options.threshold());
   }
   SoftplusOptions options;
 };
@@ -769,7 +771,7 @@ class TORCH_API HardtanhImpl : public torch::nn::Cloneable<HardtanhImpl> {
   explicit HardtanhImpl(HardtanhOptions o) : options(std::move(o)) {reset();}
   void reset() override {}
   torch::Tensor forward(const torch::Tensor& t) {
-   return torch::hardtanh(t,options.min_,options.max_);
+   return torch::hardtanh(t,options.min(),options.max());
   }
   HardtanhOptions options;
 };
@@ -796,14 +798,14 @@ class ShrinkImpl : public torch::nn::Cloneable<Derived> {
 class TORCH_API HardshrinkImpl : public ShrinkImpl<HardshrinkImpl> {
  public:
   using ShrinkImpl<HardshrinkImpl>::ShrinkImpl;
-  torch::Tensor forward(const torch::Tensor& t) {return t.hardshrink(options.lambda_);}
+  torch::Tensor forward(const torch::Tensor& t) {return t.hardshrink(options.lambda());}
 };
 TORCH_MODULE(Hardshrink);
 
 class TORCH_API SoftshrinkImpl : public ShrinkImpl<SoftshrinkImpl> {
  public:
   using ShrinkImpl<SoftshrinkImpl>::ShrinkImpl;
-  torch::Tensor forward(const torch::Tensor& t) {return torch::softshrink(t,options.lambda_);}
+  torch::Tensor forward(const torch::Tensor& t) {return torch::softshrink(t,options.lambda());}
 };
 TORCH_MODULE(Softshrink);
 
@@ -825,14 +827,14 @@ template <typename Derived> class DropoutImplBase : public torch::nn::Cloneable<
 class TORCH_API AlphaDropoutImpl : public DropoutImplBase<AlphaDropoutImpl> {
  public:
   using DropoutImplBase<AlphaDropoutImpl>::DropoutImplBase;
-  torch::Tensor forward(const torch::Tensor& t) {return torch::alpha_dropout(t,options.rate_,this->is_training());}
+  torch::Tensor forward(const torch::Tensor& t) {return torch::alpha_dropout(t,options.rate(),this->is_training());}
 };
 TORCH_MODULE(AlphaDropout);
 
 class TORCH_API FeatureAlphaDropoutImpl : public DropoutImplBase<FeatureAlphaDropoutImpl> {
  public:
   using DropoutImplBase<FeatureAlphaDropoutImpl>::DropoutImplBase;
-  torch::Tensor forward(const torch::Tensor& t) {return torch::feature_alpha_dropout(t,options.rate_,this->is_training());}
+  torch::Tensor forward(const torch::Tensor& t) {return torch::feature_alpha_dropout(t,options.rate(),this->is_training());}
 };
 TORCH_MODULE(FeatureAlphaDropout);
 

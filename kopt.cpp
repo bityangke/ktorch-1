@@ -22,30 +22,30 @@ using SGDOptions     = torch::optim::SGDOptions;
 // --------------------------------------------------------------------------------------
 K kopt(Cast x,const std::shared_ptr<OptimizerBase>& y) {return kptr(new Kopt(x,y));}
 
-ZV omap(S s,Cast &c,double &r) {
+static void omap(S s,Cast &c,double &r) {
  for(auto& m:env().opt)
    if(s==std::get<0>(m)) {c=std::get<1>(m); r=std::get<2>(m); return;}
  AT_ERROR("Unrecognized optimizer: ",s);
 }
 
-ZV omap(Cast c,S &s,double &r) {
+static void omap(Cast c,S &s,double &r) {
  for(auto& m:env().opt)
    if(c==std::get<1>(m)) {s=std::get<0>(m); r=std::get<2>(m); return;}
  AT_ERROR("Unrecognized optimizer: ",(I)c);
 }
 
-Z Setting oset(S s) {
+static Setting oset(S s) {
  for(auto& m:env().oset)
   if(s==std::get<0>(m)) return std::get<1>(m);
  AT_ERROR("Unrecognized optimizer setting: ",s);
 }
 
-ZS oset(Setting e) {
+static S oset(Setting e) {
  for(auto& m:env().oset) if(e==std::get<1>(m)) return std::get<0>(m);
  AT_ERROR("Unrecognized optimizer setting: ",(I)e);
 }
 
-Z size_t osize(const TensorVector& p) {
+static size_t osize(const TensorVector& p) {
  size_t i,n=0;
  for(i=0; i<p.size(); ++i) 
   if(p.at(i).grad().defined()) n=i+1;
@@ -60,12 +60,12 @@ Z size_t osize(const TensorVector& p) {
 //      - deque of tensors (LBFGS)
 //      - single tensor (LBFGS)
 // --------------------------------------------------------------------------------------
-ZK bget(K x,cS s) {
+static K bget(K x,cS s) {
  auto i=xdict(x) ? kfind(kK(x)[0],s) : -1;
  return (i<0 || kK(x)[1]->t) ? nullptr : kK(kK(x)[1])[i];
 }
 
-ZV bset(size_t n,cS s,const TensorVector& p,LongVector& v,const K x) {
+static void bset(size_t n,cS s,const TensorVector& p,LongVector& v,const K x) {
  // restore vector of longs (parameter vector not referenced, included for uniform call)
  K y=bget(x,s);
  if(!y || !y->n) return;
@@ -75,7 +75,7 @@ ZV bset(size_t n,cS s,const TensorVector& p,LongVector& v,const K x) {
  for(size_t i=0; i<n; ++i) v.emplace_back(kJ(y)[i]);
 }
 
-ZV bset(size_t n,cS s,const TensorVector& p,TensorVector& v,const K x) {
+static void bset(size_t n,cS s,const TensorVector& p,TensorVector& v,const K x) {
  K y=bget(x,s);
  if(!y || !y->n) return;
  if(y->t) AT_ERROR("type error: ",s,", expecting general list, input is ",kname(y->t));
@@ -96,7 +96,7 @@ ZV bset(size_t n,cS s,const TensorVector& p,TensorVector& v,const K x) {
  }
 }
 
-ZV bset(size_t n,cS s,const TensorVector& p,TensorDeque& v,const K x) {
+static void bset(size_t n,cS s,const TensorVector& p,TensorDeque& v,const K x) {
  // used w'LBFGS, not sure if parameter count/type/device relevant
  K y=bget(x,s);
  if(!y || !y->n) return;
@@ -106,7 +106,7 @@ ZV bset(size_t n,cS s,const TensorVector& p,TensorDeque& v,const K x) {
   v[i]=kput(kK(y)[i]);
 }
 
-ZV bset(size_t n,cS s,const TensorVector& p,Tensor& t,const K x) {
+static void bset(size_t n,cS s,const TensorVector& p,Tensor& t,const K x) {
  // used w'LBFGS, not sure if parameter count/type/device relevant
  K y=bget(x,s);
  if(!y || !y->n) return;
@@ -118,7 +118,7 @@ ZV bset(size_t n,cS s,const TensorVector& p,Tensor& t,const K x) {
 //         - if given options,buffers, allocate new optimizer and return ptr
 //         - if given previously allocated ptr, return dictionary of options & buffers
 // ----------------------------------------------------------------------------------------
-ZV adagrad(K x,J i,AdagradOptions& o) {
+static void adagrad(K x,J i,AdagradOptions& o) {
  Pairs p; J n=xargc(x,i,p); F f;
  if(n && xnum(x,i,f)) {i++; n--; if(f==f) o.learning_rate(f);}
  if(n && xnum(x,i,f)) {i++; n--; if(f==f) o.lr_decay(f);}
@@ -133,7 +133,7 @@ ZV adagrad(K x,J i,AdagradOptions& o) {
   }
 }
 
-Z Optptr adagrad(const TensorVector& w,const AdagradOptions& a,K y) {
+static Optptr adagrad(const TensorVector& w,const AdagradOptions& a,K y) {
  auto o=std::make_shared<Adagrad>(w,a);
  auto n=osize(o->parameters());
  if(y && n) {
@@ -143,7 +143,7 @@ Z Optptr adagrad(const TensorVector& w,const AdagradOptions& a,K y) {
  return o;
 }
 
-ZK adagrad(B a,F r,Adagrad* v) { //return all or non-default options as k dictionary
+static K adagrad(B a,F r,Adagrad* v) { //return all or non-default options as k dictionary
  K x=xD(ktn(KS,0),ktn(0,0)); AdagradOptions d(r),o=v->options;
  if(a || d.learning_rate() != o.learning_rate()) OPTSET(x, lr,      kf(o.learning_rate()));
  if(a || d.lr_decay()      != o.lr_decay())      OPTSET(x, lrdecay, kf(o.lr_decay()));
@@ -151,7 +151,7 @@ ZK adagrad(B a,F r,Adagrad* v) { //return all or non-default options as k dictio
  return x;
 }
 
-ZK adagrad(Adagrad* v) {  //return internal buffer state as k dictionary
+static K adagrad(Adagrad* v) {  //return internal buffer state as k dictionary
  K x=xD(ktn(KS,0),ktn(0,0));
  OPTBUFFER(x,v,step_buffers);
  OPTBUFFER(x,v,sum_buffers);
@@ -161,7 +161,7 @@ ZK adagrad(Adagrad* v) {  //return internal buffer state as k dictionary
 // ----------------------------------------------------------------------------------------
 // adam - parse args (lr;beta1;beta2;eps;wtdecay;amsgrad) or (..;name-value pairs/dict)
 // ----------------------------------------------------------------------------------------
-ZV adam(K x,J i,AdamOptions& o) {
+static void adam(K x,J i,AdamOptions& o) {
  Pairs p; J n=xargc(x,i,p); B b; F f;
  if(n && xnum(x,i,f)) {i++; n--; if(f==f) o.learning_rate(f);}
  if(n && xnum(x,i,f)) {i++; n--; if(f==f) o.beta1(f);}
@@ -182,7 +182,7 @@ ZV adam(K x,J i,AdamOptions& o) {
   }
 }
 
-Z Optptr adam(const TensorVector& w,const AdamOptions& a,K y) {
+static Optptr adam(const TensorVector& w,const AdamOptions& a,K y) {
  auto o=std::make_shared<Adam>(w,a);
  auto n=osize(o->parameters());
  if(y && n) {
@@ -194,7 +194,7 @@ Z Optptr adam(const TensorVector& w,const AdamOptions& a,K y) {
  return o;
 }
 
-ZK adam(B a,F r,Adam* v) { //return all or non-default options as k dictionary
+static K adam(B a,F r,Adam* v) { //return all or non-default options as k dictionary
  K x=xD(ktn(KS,0),ktn(0,0)); AdamOptions d(r),o=v->options;
  if(a || d.learning_rate() != o.learning_rate()) OPTSET(x, lr,      kf(o.learning_rate()));
  if(a || d.beta1()         != o.beta1())         OPTSET(x, beta1,   kf(o.beta1()));
@@ -205,7 +205,7 @@ ZK adam(B a,F r,Adam* v) { //return all or non-default options as k dictionary
  return x;
 }
 
-ZK adam(Adam* v) {  //return internal buffer state as k dictionary
+static K adam(Adam* v) {  //return internal buffer state as k dictionary
  K x=xD(ktn(KS,0),ktn(0,0));
  OPTBUFFER(x,v,step_buffers);
  OPTBUFFER(x,v,exp_average_buffers);
@@ -217,7 +217,7 @@ ZK adam(Adam* v) {  //return internal buffer state as k dictionary
 // ---------------------------------------------------------------------------------------
 // lbfgs - (lr;max iter;max eval;tolerance grad;tolerance change;history size)
 // ---------------------------------------------------------------------------------------
-ZV lbfgs(K x,J i,LBFGSOptions& o) {
+static void lbfgs(K x,J i,LBFGSOptions& o) {
  Pairs p; J j,n=xargc(x,i,p); F f;
  if(n && xnum(x,i,f))  {i++; n--; if(f==f)  o.learning_rate(f);}
  if(n && xlong(x,i,j)) {i++; n--; if(j!=nj) o.max_iter(j);}
@@ -238,7 +238,7 @@ ZV lbfgs(K x,J i,LBFGSOptions& o) {
   }
 }
 
-Z Optptr lbfgs(const TensorVector& w,const LBFGSOptions& a,K y) {
+static Optptr lbfgs(const TensorVector& w,const LBFGSOptions& a,K y) {
  auto o=std::make_shared<LBFGS>(w,a); auto n=osize(o->parameters());
  if(y) {
   bset(n, "d",              o->parameters(), o->d, y);
@@ -252,7 +252,7 @@ Z Optptr lbfgs(const TensorVector& w,const LBFGSOptions& a,K y) {
  return o;
 }
 
-ZK lbfgs(B a,F r,LBFGS* v) { //return all or non-default options as k dictionary
+static K lbfgs(B a,F r,LBFGS* v) { //return all or non-default options as k dictionary
  K x=xD(ktn(KS,0),ktn(0,0)); LBFGSOptions d(r),o=v->options;
  if(a || d.learning_rate()    != o.learning_rate())    OPTSET(x, lr,        kf(o.learning_rate()));
  if(a || d.max_iter()         != o.max_iter())         OPTSET(x, iter,      kj(o.max_iter()));
@@ -263,7 +263,7 @@ ZK lbfgs(B a,F r,LBFGS* v) { //return all or non-default options as k dictionary
  return x;
 }
 
-ZK lbfgs(LBFGS* v) {  //return internal buffer state as k dictionary
+static K lbfgs(LBFGS* v) {  //return internal buffer state as k dictionary
  K x=xD(ktn(KS,0),ktn(0,0));
  OPTBUFFER(x,v,d);
  OPTBUFFER(x,v,t);
@@ -278,7 +278,7 @@ ZK lbfgs(LBFGS* v) {  //return internal buffer state as k dictionary
 // ----------------------------------------------------------------------------------------
 // rmsprop - parse arg(s) (lr;alpha;eps;decay;momentum;centered) or (..;nm-val pairs/dict)
 // ----------------------------------------------------------------------------------------
-ZV rmsprop(K x,J i,RMSpropOptions& o) {
+static void rmsprop(K x,J i,RMSpropOptions& o) {
  Pairs p; J n=xargc(x,i,p); B b; F f;
  if(n && xnum(x,i,f)) {i++; n--; if(f==f) o.learning_rate(f);}
  if(n && xnum(x,i,f)) {i++; n--; if(f==f) o.alpha(f);}
@@ -299,7 +299,7 @@ ZV rmsprop(K x,J i,RMSpropOptions& o) {
   }
 }
 
-Z Optptr rmsprop(const TensorVector& w,const RMSpropOptions& a,K y) {
+static Optptr rmsprop(const TensorVector& w,const RMSpropOptions& a,K y) {
  auto o=std::make_shared<RMSprop>(w,a);
  auto n=osize(o->parameters());
  if(y && n) {
@@ -310,7 +310,7 @@ Z Optptr rmsprop(const TensorVector& w,const RMSpropOptions& a,K y) {
  return o;
 }
 
-ZK rmsprop(B a,F r,RMSprop* v) { //return all or non-default options as k dictionary
+static K rmsprop(B a,F r,RMSprop* v) { //return all or non-default options as k dictionary
  K x=xD(ktn(KS,0),ktn(0,0)); RMSpropOptions d(r),o=v->options;
  if(a || d.learning_rate() != o.learning_rate()) OPTSET(x, lr,       kf(o.learning_rate()));
  if(a || d.alpha()         != o.alpha())         OPTSET(x, alpha,    kf(o.alpha()));
@@ -321,7 +321,7 @@ ZK rmsprop(B a,F r,RMSprop* v) { //return all or non-default options as k dictio
  return x;
 }
 
-ZK rmsprop(RMSprop* v) {  //return internal buffer state as k dictionary
+static K rmsprop(RMSprop* v) {  //return internal buffer state as k dictionary
  K x=xD(ktn(KS,0),ktn(0,0));
  OPTBUFFER(x,v,square_average_buffers);
  OPTBUFFER(x,v,momentum_buffers);
@@ -332,7 +332,7 @@ ZK rmsprop(RMSprop* v) {  //return internal buffer state as k dictionary
 // ----------------------------------------------------------------------------------------
 // SGD parse args (lr;momentum;dampening;wtdecay;nesterov) or (..;name-value pairs/dict)
 // ----------------------------------------------------------------------------------------
-ZV sgd(K x,J i,SGDOptions& o) {
+static void sgd(K x,J i,SGDOptions& o) {
  Pairs p; J n=xargc(x,i,p); B b; F f;
  if(n && xnum(x,i,f)) {i++; n--; if(f==f) o.learning_rate(f);}
  if(n && xnum(x,i,f)) {i++; n--; if(f==f) o.momentum(f);}
@@ -351,7 +351,7 @@ ZV sgd(K x,J i,SGDOptions& o) {
   }
 }
 
-Z Optptr sgd(const TensorVector& w,const SGDOptions& a,K y) {
+static Optptr sgd(const TensorVector& w,const SGDOptions& a,K y) {
  auto o=std::make_shared<SGD>(w,a);
  auto n=osize(o->parameters());
  if(y && n)
@@ -359,7 +359,7 @@ Z Optptr sgd(const TensorVector& w,const SGDOptions& a,K y) {
  return o;
 }
 
-ZK sgd(B a,F r,SGD* v) { //return all or non-default options as k dictionary
+static K sgd(B a,F r,SGD* v) { //return all or non-default options as k dictionary
  K x=xD(ktn(KS,0),ktn(0,0)); SGDOptions d(r),o=v->options;
  if(a || d.learning_rate() != o.learning_rate()) OPTSET(x, lr,        kf(o.learning_rate()));
  if(a || d.momentum()      != o.momentum())      OPTSET(x, momentum,  kf(o.momentum()));
@@ -369,7 +369,7 @@ ZK sgd(B a,F r,SGD* v) { //return all or non-default options as k dictionary
  return x;
 }
 
-ZK sgd(SGD* v) {  //return internal buffer state as k dictionary
+static K sgd(SGD* v) {  //return internal buffer state as k dictionary
  K x=xD(ktn(KS,0),ktn(0,0));
  OPTBUFFER(x,v,momentum_buffers);
  return x;
@@ -381,7 +381,7 @@ ZK sgd(SGD* v) {  //return internal buffer state as k dictionary
 // optstate - return optimizer name & options and optionally, internal buffer values
 // opt - main optimizer interface function for q
 // ---------------------------------------------------------------------------------------
-Z TensorVector optparms(K x,J i) {
+static TensorVector optparms(K x,J i) {
  if(auto *a=xseq(x,i))
   return (*a)->parameters();
  else if(auto *a=xvec(x,i))
@@ -396,8 +396,8 @@ Z TensorVector optparms(K x,J i) {
   AT_ERROR("Unrecognized argument, ",kname(x->t ? x->t : kK(x)[i]->t),", expecting tensor(s) or module(s)");
 }
 
-ZK optinit(S s,K x,K y=nullptr);  //s:optimizer name, x:options, y:buffers
-ZK optinit(S s,K x,K y) {
+static K optinit(S s,K x,K y=nullptr);  //s:optimizer name, x:options, y:buffers
+static K optinit(S s,K x,K y) {
  J i=xdict(x) ? -1 : 2; Cast c; F r; omap(s,c,r);
  if(!(x->t==-KS || xdict(x) || xempty(x,1) || xptr(x,1)))
   AT_ERROR("Optimizer ",s," expects args of form:\n",
@@ -414,7 +414,7 @@ ZK optinit(S s,K x,K y) {
  return kptr(new Kopt(c,o));
 }
 
-ZK optstate(B a,B b,Cast c,OptimizerBase *o) {
+static K optstate(B a,B b,Cast c,OptimizerBase *o) {
  F r; S s; omap(c,s,r); K k,v,x,y;
  switch(c) {
   case Cast::adagrad: {auto m=(Adagrad*)o; x=adagrad(a,r,m); if(b) y=adagrad(m); break;}
@@ -509,7 +509,7 @@ KAPI lr(K x) {
  KCATCH("lr");
 }
 
-V optfn(K x) {
+void optfn(K x) {
  fn(x, "opt",  KFN(opt),1);
  fn(x, "step", KFN(kstep),1);
  fn(x, "lr",   KFN(lr),1);

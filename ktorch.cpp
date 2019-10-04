@@ -10,15 +10,15 @@
 // xhelp - check for single argument: `help, or 2 symbols, e.g. `help`conv2d
 // --------------------------------------------------------------------------------------------------
 S krrbuf(const char *s) {
- ZC thread_local b[4096]; b[0]=0; 
+ static C thread_local b[4096]; b[0]=0; 
  return strncat(b, s, sizeof(b)-1);
 }
 
-V dictadd(K x, S s,K v){K *k=kK(x); js(&k[0],cs(s)); jk(&k[1],v);}
-V dictadd(K x,cS s,K v){K *k=kK(x); js(&k[0],cs(s)); jk(&k[1],v);}
+void dictadd(K x, S s,K v){K *k=kK(x); js(&k[0],cs(s)); jk(&k[1],v);}
+void dictadd(K x,cS s,K v){K *k=kK(x); js(&k[0],cs(s)); jk(&k[1],v);}
 
 B xind(K x,J i) {return !x->t && -1<i && i<x->n;}
-K kptr(V *v){return knk(1,kj((intptr_t)v));}
+K kptr(void *v){return knk(1,kj((intptr_t)v));}
 B xptr(K x) {return !x->t && x->n==1 && kK(x)[0]->t==-KJ;}
 B xptr(K x,J i) {return xind(x,i) && xptr(kK(x)[i]);}
 Ktag* xtag(K x) {return xptr(x) ? (Ktag*)kK(x)[0]->j : nullptr;}
@@ -646,7 +646,7 @@ B xpairs(K x,Pairs &p) {   // initialize Pairs structure from k value
 
 B xpairs(K x,J i,Pairs &p) {return xind(x,i) && xpairs(kK(x)[i],p);}
 
-ZV xpair(Pairs& p,K x,J i) {
+static void xpair(Pairs& p,K x,J i) {
  if(x->t<0) {
   switch(x->t) {
    case -KS: p.s=x->s; p.t=-KS; break;
@@ -740,9 +740,9 @@ B xnone(K x,J i) {Pairs p; return !(xargc(x,i,p) || p.n);}
 // psize - check if integral scalar or list, set IntArrayRef or ExpandingArray, else error
 // pten - attempt to define a tensor from provided scalar or array
 // ------------------------------------------------------------------------------------------
-V perr(const Pairs &p,cS s) {AT_ERROR("Option: ",p.k," is a ",kname(p.t),", expected a ",s);}
+void perr(const Pairs &p,cS s) {AT_ERROR("Option: ",p.k," is a ",kname(p.t),", expected a ",s);}
 
-ZV plen(const Pairs &p,J n,J m) {
+static void plen(const Pairs &p,J n,J m) {
  if(n==0 && (p.t<0 || m)) {
    AT_ERROR("Option: ",p.k," requires zero elements, but single scalar value supplied");
  } else if(n>0 && (p.t>=0 && m!=n)) {
@@ -760,7 +760,7 @@ F pdouble(const Pairs &p) {
  return p.t==-KJ ? p.j : p.f;
 }
 
-V pnum(const Pairs &p,torch::Scalar &s) {
+void pnum(const Pairs &p,torch::Scalar &s) {
  switch(p.t){
   case -KJ: s=(int64_t)p.j; break;
   case -KF: s=p.f; break;
@@ -768,7 +768,7 @@ V pnum(const Pairs &p,torch::Scalar &s) {
  }
 }
 
-V psize(const Pairs &p,IntArrayRef &s,J n) {
+void psize(const Pairs &p,IntArrayRef &s,J n) {
  if(p.t==-KJ)
   s=IntArrayRef((int64_t*)&p.j,1);  // recast for linux clang/gcc to go from J* -> int64_t*
  else if(!(p.t==KJ && xsize(p.v,s)))
@@ -776,7 +776,7 @@ V psize(const Pairs &p,IntArrayRef &s,J n) {
  plen(p,n,s.size());
 }
 
-V psize(const Pairs &p,J d,int64_t *a) {
+void psize(const Pairs &p,J d,int64_t *a) {
  if(p.t == -KJ) {
    for(J i=0;i<d;++i) a[i]=p.j;
  } else if(p.t == KJ) {
@@ -789,7 +789,7 @@ V psize(const Pairs &p,J d,int64_t *a) {
  }
 }
 
-V psize(const Pairs &p,J d,F *a) {
+void psize(const Pairs &p,J d,F *a) {
  if(p.t == -KF) {
    for(J i=0;i<d;++i) a[i]=p.f;
  } else if(p.t == KF) {
@@ -802,7 +802,7 @@ V psize(const Pairs &p,J d,F *a) {
  }
 }
 
-V pten(const Pairs &p,Tensor &t) {
+void pten(const Pairs &p,Tensor &t) {
  switch(p.t) {
   case 0: if(!(xten(p.v,t))) t=kput(p.v); break;
   case -KB: t=torch::full({},Scalar(p.b)).to(maptype(KB)); break;
@@ -845,7 +845,7 @@ J kfind(K k,const std::string &s) {
 K klist(J n,const int64_t *j) {K x=ktn(KJ,n); memcpy(kG(x),j,n*sizeof(int64_t)); return x;}
 K klist(J n,const F       *f) {K x=ktn(KF,n); memcpy(kG(x),f,n*sizeof(F));       return x;}
 
-template<typename T>Z B kex(J n,const T *e) {
+template<typename T>static B kex(J n,const T *e) {
  B b=n>0; for(I i=1;i<n;++i) if(e[i-1]!=e[i]) return false; return b;
 }
 
@@ -907,7 +907,7 @@ KAPI to(K x) {
  KCATCH("to");
 }
 
-ZK kinfo(K x,B b,cS e) {
+static K kinfo(K x,B b,cS e) {
  KTRY
   auto* g=xtag(x);
   TORCH_CHECK(g, e," not implemented for ",kname(x->t));
@@ -1118,7 +1118,7 @@ J deviceseed(torch::Device &d, B b=false,J s=0) { // d:device, b:set flag, s:see
  return g.current_seed();
 }
 
-ZK seedmap(V) {
+static K seedmap() {
  auto a=env().device; auto n=a.size(); I i=0; K k=ktn(KS,n),v=ktn(KJ,n);
  for(auto& m:a)
   kS(k)[i]=std::get<0>(m),kJ(v)[i++]=deviceseed(std::get<1>(m));
@@ -1148,7 +1148,7 @@ KAPI kseed(K x) {
 // -----------------------------------------------------------------------------------------
 // query object attributes, e.g. tensor/vector and other object attributes
 // -----------------------------------------------------------------------------------------
-ZK attr(K x,A k,Attr a) {
+static K attr(K x,A k,Attr a) {
  KTRY
   auto* g=xtag(x);
   TORCH_CHECK(g, mapattr(a),": unrecognized arg(s) - ",kname(x->t));
@@ -1187,9 +1187,9 @@ KAPI     stride(K x) {return attr(x,  KJ, Attr::stride);}
 // -----------------------------------------------------------------------------------------
 Env& env() {static Env e; return e;}
 
-ZV kinit() __attribute__((constructor));
+static void kinit() __attribute__((constructor));
 
-ZV kinit() {
+static void kinit() {
  C c[16]; auto &e=env(); auto &d=e.device;
  e.frame = false;                                                     //no stack frame on error msg
  e.cuda = torch::cuda::device_count();                                //count of available CUDA devices
@@ -1207,7 +1207,7 @@ ZV kinit() {
 // fn - given dictionary, along with name, fn & arg count, adds function to dictionary
 // fns - returns K dictionary with function names and code
 // -----------------------------------------------------------------------------------------
-V fn(K x,cS s,V *f,I n){dictadd(x,s,dl(f,n));}
+void fn(K x,cS s,void *f,I n){dictadd(x,s,dl(f,n));}
 
 KAPI fns(K x){
  x=xD(ktn(KS,0),ktn(0,0));

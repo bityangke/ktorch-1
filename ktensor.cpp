@@ -31,7 +31,7 @@ K kgetscalar(const Tensor &t){
  }
 }
 
-ZK kgets(I i,I j,A k,J b,const int64_t *s,S &p) { //i:depth, j:max depth, k:k type, b:bytes to copy, s:sizes, p:data ptr
+static K kgets(I i,I j,A k,J b,const int64_t *s,S &p) { //i:depth, j:max depth, k:k type, b:bytes to copy, s:sizes, p:data ptr
  K x=ktn((i<j) ? 0 : k,s[i]);                     //create k list
  if(x->t) {                                       //if base type
   if(x->n) {                                      //   and non-zero length
@@ -113,7 +113,7 @@ K kten3(B p,Tensor& a,Tensor& b,Tensor& c) {  // p:true if returning tensor poin
 // kputs - descend depth of k array, determining dim & sizes, copying data types to tensor
 // kput - controlling function to read k array, create tensor and copy data at depth
 // ---------------------------------------------------------------------------------------
-V kputscalar(K x,Tensor &t) {
+void kputscalar(K x,Tensor &t) {
  Scalar s;
  if(xscalar(x,s))
   t=torch::full({},s).to(maptype(x->t));
@@ -121,7 +121,7 @@ V kputscalar(K x,Tensor &t) {
   AT_ERROR("Unable to translate k ",kname(x->t)," to scalar tensor");
 }
 
-ZV kdepth(K x,I i,A k,Ksize &s){
+static void kdepth(K x,I i,A k,Ksize &s){
  if(x->t < 0) {
   AT_ERROR("Unable to map mixed array to tensor: ",kname(x->t)," encountered at depth ",i);
 // } else if(i && x->n==0) {
@@ -138,7 +138,7 @@ ZV kdepth(K x,I i,A k,Ksize &s){
  }
 }
 
-ZV kputs(K x,I i,A &k,Ksize &s,J &b,S &p,Tensor &t) {
+static void kputs(K x,I i,A &k,Ksize &s,J &b,S &p,Tensor &t) {
  kdepth(x,i,k,s);
  if(x->t) {  // if base data type
   if(!k)  {  // if first encounter w'base data type
@@ -180,7 +180,7 @@ Tensor kput(K x,J i) {
 // tensorput - put k value(s) -> tensor, return new tensor ptr unless output tensor given
 // tensor - high level function to create/retrieve/move/recast tensor from k
 // --------------------------------------------------------------------------------------
-ZV tensorlike(K x,Tensormode m,Tensor &t,Tensor &r) {  // t:input, r:result tensor
+static void tensorlike(K x,Tensormode m,Tensor &t,Tensor &r) {  // t:input, r:result tensor
  //use tensor options from input tensor, override if any supplied in final arg
  using Tensormode=Tensormode; J i,j; Scalar s; TensorOptions o=t.options();
  B b=xopt(x,x->n-1,o); I nx=x->n-b;  //set flag if options given, count non-option args
@@ -200,7 +200,7 @@ ZV tensorlike(K x,Tensormode m,Tensor &t,Tensor &r) {  // t:input, r:result tens
  }
 }
 
-ZV tensorout(K x,Tensormode m,Tensor &t,Tensor &r) {  // t:output, r:result tensor
+static void tensorout(K x,Tensormode m,Tensor &t,Tensor &r) {  // t:output, r:result tensor
  F e; J i,j; Scalar a,z,n; IntArrayRef s;
  B b=xsize(x,1,s);  //true if size is given as 2nd arg (last arg is output tensor)
  switch(m) {
@@ -237,7 +237,7 @@ ZV tensorout(K x,Tensormode m,Tensor &t,Tensor &r) {  // t:output, r:result tens
  }
 }
 
-ZV tensoropt(K x,Tensormode m,Tensor &r) {
+static void tensoropt(K x,Tensormode m,Tensor &r) {
  F e; J i,j; Scalar a,z,n; IntArrayRef s; TensorOptions o;
  B b=xopt(x,x->n-1,o); I nx=x->n-b;                        //track if options in last arg
  B sz=xsize(x,1,s) && nx==((m==Tensormode::full) ? 3 : 2); //2nd arg is size & correct arg count
@@ -288,7 +288,7 @@ ZV tensoropt(K x,Tensormode m,Tensor &r) {
  }
 }
 
-ZK tensormode(K x,S s,Tensormode m) {
+static K tensormode(K x,S s,Tensormode m) {
  Tensor t,r; B in=false,out=false;
  if((in=xten(x,1,t)))            tensorlike(x,m,t,r); // input tensor is 2nd arg
  else if((out=xten(x,x->n-1,t))) tensorout(x,m,t,r);  // output tensor is final arg
@@ -298,7 +298,7 @@ ZK tensormode(K x,S s,Tensormode m) {
  return out ? (K)0 : kten(r);
 }
 
-ZK tensorput(K x) {
+static K tensorput(K x) {
  Tensor r,t; TensorOptions o;
  if(xempty(x))
   t=torch::empty({0});
@@ -385,7 +385,7 @@ KAPI vector(K x) {
 // vectorattr - handle tensor vector attribute queries according to k datatype returned
 // options - return dictionary/table of tensor/vector attributes
 // ----------------------------------------------------------------------------------------------
-ZJ storlong(const Storage& s,Attr a) {
+static J storlong(const Storage& s,Attr a) {
  switch(a) {
   case Attr::elementsize: return s.elementSize();
   case Attr::size:        return s.size();
@@ -395,7 +395,7 @@ ZJ storlong(const Storage& s,Attr a) {
  }
 }
 
-ZJ tensorlong(const Tensor& t,Attr a) {
+static J tensorlong(const Tensor& t,Attr a) {
  switch(a) {
   case Attr::dim:         return t.dim();
   case Attr::elementsize: return t.is_sparse() ? tensorlong(t.values(),a) : storlong(t.storage(),a);
@@ -410,7 +410,7 @@ ZJ tensorlong(const Tensor& t,Attr a) {
  }
 }
 
-ZS tensorsym(const Tensor& t,Attr a) {
+static S tensorsym(const Tensor& t,Attr a) {
  switch(a) {
   case Attr::device:   return optsym(t.device());
   case Attr::dtype:    return optsym(t.dtype());
@@ -422,7 +422,7 @@ ZS tensorsym(const Tensor& t,Attr a) {
  }
 }
 
-Z B tensorflag(const Tensor &t,Attr a) {
+static B tensorflag(const Tensor &t,Attr a) {
  switch(a) {
   case Attr::coalesced:  return t.is_sparse() ? t.is_coalesced() : false;
   case Attr::contiguous: return t.is_sparse() ? false : t.is_contiguous();
@@ -432,7 +432,7 @@ Z B tensorflag(const Tensor &t,Attr a) {
  }
 }
 
-ZK tensorsize(const Tensor &t,Attr a) {
+static K tensorsize(const Tensor &t,Attr a) {
  switch(a) {
   case Attr::size:    return klist(t.dim(),t.sizes().data());
   case Attr::stride:  return t.is_sparse() ? ktn(0,0) : klist(t.dim(),t.strides().data());
@@ -556,11 +556,11 @@ K tensorinfo(const Tensor& t,B d) {
 // shuffle_ - in-place version of tensor/vector shuffle
 // kshuffle,1,2 - k api functions, expects tensor/vector input or (input;dim;inplace flag)
 // --------------------------------------------------------------------------------------------
-Z Tensor perm(const Tensor& t,int64_t d) {
+static Tensor perm(const Tensor& t,int64_t d) {
  return torch::randperm(t.size(d),torch::dtype(torch::kLong).device(t.device()));
 }
 
-ZV vcheck(const TensorVector& v,int64_t d) {
+static void vcheck(const TensorVector& v,int64_t d) {
  int64_t i=0,n; torch::Device c=torch::kCPU;
  for(auto& t:v) {
   if(!i)
@@ -573,10 +573,10 @@ ZV vcheck(const TensorVector& v,int64_t d) {
  }
 }
 
-Z Tensor vperm(const TensorVector& v,int64_t d) {vcheck(v,d); return v.size() ? perm(v[0],d) : Tensor();}
+static Tensor vperm(const TensorVector& v,int64_t d) {vcheck(v,d); return v.size() ? perm(v[0],d) : Tensor();}
 
 Tensor shuffle(const Tensor &t,int64_t d) {return t.index_select(d,perm(t,d));}
-V shuffle_(Tensor &t,int64_t d) {t=shuffle(t,d);}
+void shuffle_(Tensor &t,int64_t d) {t=shuffle(t,d);}
 
 TensorVector shuffle(const TensorVector& v,int64_t d) {
  auto p=vperm(v,d); TensorVector r;
@@ -584,13 +584,13 @@ TensorVector shuffle(const TensorVector& v,int64_t d) {
  return r;
 }
  
-V shuffle_(TensorVector& v,int64_t d) {
+void shuffle_(TensorVector& v,int64_t d) {
  auto p=vperm(v,d);
  for(auto& t:v) t=t.index_select(d,p);
 }
 
-ZK kshuffle1(Tensor &t,int64_t d,B b) {return b ? shuffle_(t,d),(K)0 : kten(shuffle(t,d));}
-ZK kshuffle2(TensorVector& v,int64_t d,B b) {return b ? shuffle_(v,d),(K)0 : kvec(shuffle(v,d));}
+static K kshuffle1(Tensor &t,int64_t d,B b) {return b ? shuffle_(t,d),(K)0 : kten(shuffle(t,d));}
+static K kshuffle2(TensorVector& v,int64_t d,B b) {return b ? shuffle_(v,d),(K)0 : kvec(shuffle(v,d));}
 
 KAPI kshuffle(K x) {
  KTRY
@@ -684,7 +684,7 @@ int64_t fullsize(TensorVector& v,int64_t d) {
 // setsafe - calls set_() after checking that the length implied by sizes & strides will fit
 // subsetsafe - alternate form of subset using setsafe rather than maximum size dimension
 // -------------------------------------------------------------------------------------------
-V subset(Tensor& t,int64_t d,int64_t i,int64_t w,int64_t n) {
+void subset(Tensor& t,int64_t d,int64_t i,int64_t w,int64_t n) {
  if(!n) n=maxsize(t,d);  // if not given, get max size of dimension d from overall storage size
  TORCH_CHECK(i<n,"subset offset of ",i," must be from 0-",n-1," the maximum size for dimension ",d);
  if(w>n) w=n;            // reduce subset window if greater than max size
@@ -692,19 +692,19 @@ V subset(Tensor& t,int64_t d,int64_t i,int64_t w,int64_t n) {
  t.set_(t.storage(), i*t.stride(d), w==t.size(d) ? t.sizes() : newsize(t,d,w), t.strides());
 }
 
-V subset(TensorVector& v,int64_t d,int64_t i,int64_t w,int64_t n) {
+void subset(TensorVector& v,int64_t d,int64_t i,int64_t w,int64_t n) {
  if(!n) n=maxsize(v,d);
  for(auto& t:v) subset(t,d,i,w,n);
 }
 
-V setsafe(Tensor& t,const Storage& s,int64_t i,const IntArrayRef& sz,const IntArrayRef& st) {
+void setsafe(Tensor& t,const Storage& s,int64_t i,const IntArrayRef& sz,const IntArrayRef& st) {
  TORCH_CHECK(s.size()>=i+computeStorageSize(sz,st), 
             "size ",sz," and stride ",st," require total of ",computeStorageSize(sz,st),
             " plus offset of ",i," exceeds storage size of ",s.size());
  t.set_(s,i,sz,st);
 }
 
-V subsetsafe(Tensor& t,int64_t d,int64_t i,int64_t w) {
+void subsetsafe(Tensor& t,int64_t d,int64_t i,int64_t w) {
  setsafe(t, t.storage(), i*t.stride(d), newsize(t,d,w), t.strides());
 }
 
@@ -715,7 +715,7 @@ V subsetsafe(Tensor& t,int64_t d,int64_t i,int64_t w) {
 // grad = return gradient data or empty, if ptr enlisted, return gradient ptr, which must be free'd
 // backward - backprop given tensor, optional tensor and sym for retain/create gradient graph
 // ------------------------------------------------------------------------------------------
-V tensorcopy(Tensor &tgt,const Tensor &src,B async) {
+void tensorcopy(Tensor &tgt,const Tensor &src,B async) {
  if(src.dtype() != tgt.dtype()) {
   AT_ERROR("Unable to copy values from ",src.dtype()," tensor to ",tgt.dtype()," tensor");
  } else if(src.device() != tgt.device()) {
@@ -765,7 +765,7 @@ KAPI backward(K x) {
 // ----------------------------------
 // tensor fns defined in k namespace
 // ----------------------------------
-V tensorfn(K x) {
+void tensorfn(K x) {
  fn(x, "tensor",    KFN(tensor),1);
  fn(x, "backward",  KFN(backward),1);
  fn(x, "grad",      KFN(grad),1);

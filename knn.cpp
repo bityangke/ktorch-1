@@ -30,40 +30,40 @@ K seqto(Kseq* q,const TensorOptions& o,B a) {
 // sym<-rnnfn(options) return symbol matching activation fn, else null (e.g. for gru/lstm)
 // rnnfn(options,sym)  set activation function if rnn options, else no-op
 // --------------------------------------------------------------------------------------------
-Z torch::nn::RNNActivation rnnfn(S s) {
+static torch::nn::RNNActivation rnnfn(S s) {
  for(auto& m:env().rnnfn) if (s==std::get<0>(m)) return std::get<1>(m);
  AT_ERROR("Unrecognized rnn activiation function: ",s);
 }
 
-template<typename O> ZS rnnfn(O& o) {return nullptr;}
+template<typename O> static S rnnfn(O& o) {return nullptr;}
 template<> S rnnfn<torch::nn::RNNOptions>(torch::nn::RNNOptions& o) {
  for(auto& m:env().rnnfn) if (o.activation()==std::get<1>(m)) return std::get<0>(m);
  AT_ERROR("Unrecognized rnn activiation function: ",(I)o.activation());
 }
 
-template<typename O> ZV rnnfn(O& o,torch::nn::RNNActivation f) {}
-template<> V rnnfn<torch::nn::RNNOptions>(torch::nn::RNNOptions& o,torch::nn::RNNActivation f) {o.activation(f);}
+template<typename O> static void rnnfn(O& o,torch::nn::RNNActivation f) {}
+template<> void rnnfn<torch::nn::RNNOptions>(torch::nn::RNNOptions& o,torch::nn::RNNActivation f) {o.activation(f);}
 
 // -----------------------------------------------------------------------------------
 // msym - map to/from sym & enum for module, e.g. `conv3d <-> Cast::conv3d
 // mset - map to/from sym & enum for module options, e.g. `bias <-> Setting::bias
 // -----------------------------------------------------------------------------------
-ZS msym(Cast c) {
+static S msym(Cast c) {
  for(auto& m:env().module) if(c==std::get<1>(m)) return std::get<0>(m);
  AT_ERROR("Unrecognized module: ",(I)c);
 }
 
-Z Cast msym(S s) {
+static Cast msym(S s) {
  for(auto& m:env().module) if(s==std::get<0>(m)) return std::get<1>(m);
  AT_ERROR("Unrecognized module: ",s);
 }
 
-ZS mset(Setting o) {
+static S mset(Setting o) {
  for(auto& m:env().mset) if(o==std::get<1>(m)) return std::get<0>(m);
  AT_ERROR("Unrecognized module option: ",(I)o);
 }
 
-Z Setting mset(S s) {
+static Setting mset(S s) {
  for(auto& m:env().mset) if(s==std::get<0>(m)) return std::get<1>(m);
  AT_ERROR("Unrecognized option: ",s);
 }
@@ -72,7 +72,7 @@ Z Setting mset(S s) {
 // mkeys - initialize keys for dict/table of module state: `module`name`options`parms`buffers
 // mvals - initialize corresponding k values for state dictionary or table
 // ------------------------------------------------------------------------------------------
-ZK mkeys(B b) { // b:true if including class, parms & buffers
+static K mkeys(B b) { // b:true if including class, parms & buffers
  if(b) return statekeys();
  K x=ktn(KS,3);
  for(auto &m:env().state) {
@@ -83,7 +83,7 @@ ZK mkeys(B b) { // b:true if including class, parms & buffers
  return x;
 }
 
-ZK mvals(B b,J n) {
+static K mvals(B b,J n) {
  K x=ktn(0,b ? 6 : 3);
  if(n<0) {
   if(b) kK(x)[0]=kc('m');
@@ -119,7 +119,7 @@ torch::nn::BatchNorm bnorm(K x,J k) {
  return torch::nn::BatchNorm(torch::nn::BatchNormOptions(i).affine(a).stateful(t).eps(e).momentum(m));
 }
 
-ZV bnorm(B a,K x,const torch::nn::BatchNormImpl* m) {
+static void bnorm(B a,K x,const torch::nn::BatchNormImpl* m) {
  torch::nn::BatchNormOptions o=m->options, d(o.features());
  OPTION(x, in, kj(o.features()));
  if(a || (o.eps()      != d.eps()))      OPTION(x, eps,       kf(o.eps()));
@@ -129,7 +129,7 @@ ZV bnorm(B a,K x,const torch::nn::BatchNormImpl* m) {
 }
 
 template<size_t D,typename M>
-Z M conv(K x,J k) {
+static M conv(K x,J k) {
  B b=true,t=false; Pairs p; size_t d; J i=-1,j=-1,g=1,n=xargc(x,k,p);
  Expand<D> sz(-1),st(1),pd(0),po(0),dl(1);
  if(!((!n && p.n) || (xlong(x,k,i) && (n==1 || (xlong(x,k+1,j) && (n==2 || (n==3 && XDIM(x,k+2,D,sz))))))))
@@ -161,7 +161,7 @@ Z M conv(K x,J k) {
 }
 
 template<size_t D,typename M>
-ZV conv(B a,K x,const M* m) {
+static void conv(B a,K x,const M* m) {
  torch::nn::ConvOptions<D> o=m->options, d(o.input_channels(),o.output_channels(),o.kernel_size());
  OPTION(x, in,   kj(o.input_channels()));
  OPTION(x, out,  kj(o.output_channels()));
@@ -175,7 +175,7 @@ ZV conv(B a,K x,const M* m) {
  if(a || (*o.dilation()       != *d.dilation()))       OPTION(x, dilate,    KEX(o.dilation()));
 }
 
-ZF drop(S s,K x,J i) {
+static F drop(S s,K x,J i) {
  F f=torch::nn::DropoutOptions().rate(); Pairs p; J n=xargc(x,i,p);
  if(!(n==0 || (n==1 && xdouble(x,i,f))))
   AT_ERROR("Unrecognized arguments for dropout module: ",s);
@@ -187,7 +187,7 @@ ZF drop(S s,K x,J i) {
  return f;
 }
 
-ZV drop(B a,K x,F f) {
+static void drop(B a,K x,F f) {
  F d=torch::nn::DropoutOptions().rate();
  if(a || d != f) OPTION(x, drop, kf(f));
 }
@@ -208,7 +208,7 @@ torch::nn::Embedding embed(K x,J k) {
  return torch::nn::Embedding(i,j);
 }
 
-ZV embed(K x,const torch::nn::EmbeddingImpl* m) {
+static void embed(K x,const torch::nn::EmbeddingImpl* m) {
  auto o=m->options;
  OPTION(x, rows, kj(o.count()));
  OPTION(x, cols, kj(o.dimension()));
@@ -232,7 +232,7 @@ torch::nn::Linear linear(K x,J k) {
  return torch::nn::Linear(torch::nn::LinearOptions(i,j).with_bias(b));
 }
 
-ZV linear(B a,K x,const torch::nn::LinearImpl *m) {
+static void linear(B a,K x,const torch::nn::LinearImpl *m) {
  torch::nn::LinearOptions o=m->options, d(o.in(),o.out());
  OPTION(x, in,  kj(o.in()));
  OPTION(x, out, kj(o.out()));
@@ -240,7 +240,7 @@ ZV linear(B a,K x,const torch::nn::LinearImpl *m) {
 }
 
 template<typename M,typename O>
-Z M rnn(S s,K x,J k) {
+static M rnn(S s,K x,J k) {
  auto f=torch::nn::RNNActivation::ReLU;
  B b=true,bi=false,ba=false; Pairs p; J i=-1,h=-1,l=1,n=xargc(x,k,p); F d=0.0;
  if(!((n==0 && p.n) || (xlong(x,k,i) && (n==1 || (n==2 && xlong(x,k+1,h))))))
@@ -264,7 +264,7 @@ Z M rnn(S s,K x,J k) {
 }
 
 template<typename M,typename O>
-ZV rnn(B a,K x,const M* m) {
+static void rnn(B a,K x,const M* m) {
  O o=m->options, d(o.input_size(),o.hidden_size()); S f=rnnfn(o);
  OPTION(x, in,     kj(o.input_size()));
  OPTION(x, hidden, kj(o.hidden_size()));
@@ -285,7 +285,7 @@ ZV rnn(B a,K x,const M* m) {
 // lppool - power-average pooling
 // ----------------------------------------------------------------------------------
 template<size_t D,typename M>
-Z M pool(K x,J i,B b) { // x:arg(s), i:offset into x, b:true/false for max/avg
+static M pool(K x,J i,B b) { // x:arg(s), i:offset into x, b:true/false for max/avg
  B k=false; Pairs p; J n=xargc(x,i,p);
  PoolOptions<D> o; Expand<D> a(0); cS s=b ? "max" : "avg";
  if(!((!n && p.n) || (k=(n==1 && XDIM(x,i,D,a)))))
@@ -314,7 +314,7 @@ Z M pool(K x,J i,B b) { // x:arg(s), i:offset into x, b:true/false for max/avg
 }
 
 template<size_t D,typename M>
-ZV pool(B a,B b,K x,const M* m) {
+static void pool(B a,B b,K x,const M* m) {
  PoolOptions<D> o=m->options, d(o.size());
  OPTION(x, size, KEX(o.size()));
  if( a       || *o.stride() != *d.stride()) OPTION(x, stride,  KEX(o.stride()));
@@ -326,7 +326,7 @@ ZV pool(B a,B b,K x,const M* m) {
 }
 
 template<size_t D,typename M>
-Z M apool(K x,J i,B b) { //x:arg(s), i:offset, b:true/false for max/avg
+static M apool(K x,J i,B b) { //x:arg(s), i:offset, b:true/false for max/avg
  B k=false; Pairs p; J n=xargc(x,i,p);
  AdaptivePoolOptions<D> o; Expand<D> a(0); cS s=b ? "max" : "avg";
  if(!((!n && p.n) || (k=(n==1 && XDIM(x,i,D,a)))))
@@ -347,14 +347,14 @@ Z M apool(K x,J i,B b) { //x:arg(s), i:offset, b:true/false for max/avg
 }
 
 template<size_t D,typename M>
-ZV apool(B a,B b,K x,const M* m) {  //a:true to return all options, b:true/false for max/avg
+static void apool(B a,B b,K x,const M* m) {  //a:true to return all options, b:true/false for max/avg
  AdaptivePoolOptions<D> o=m->options, d(o.size());
  OPTION(x, size, KEX(o.size()));
  if((a && b) || o.indices() != d.indices()) OPTION(x, indices, kb(o.indices()));
 }
 
 template<size_t D,typename M>
-Z M fpool(K x,J i) {
+static M fpool(K x,J i) {
  Pairs p; J n=xargc(x,i,p);
  FractionalMaxPoolOptions<D> o; Expand<D> a(0),b(0); Expand<D,double> r(0);
  if(n==1 && XDIM(x,i,D,a))                         o.size(a);
@@ -373,7 +373,7 @@ Z M fpool(K x,J i) {
 }
 
 template<size_t D,typename M>
-ZV fpool(B a,K x,const M* m) {
+static void fpool(B a,K x,const M* m) {
  FractionalMaxPoolOptions<D> o=m->options, d(o.size());
  OPTION(x, size, KEX(o.size()));
  B b=false; for(auto r:*o.ratio()) if(r) {b=true; break;}
@@ -383,7 +383,7 @@ ZV fpool(B a,K x,const M* m) {
 }
 
 template<size_t D,typename M>
-Z M lppool(K x,J i) {
+static M lppool(K x,J i) {
  B b0=false,b1=false; Pairs p; J n=xargc(x,i,p);
  LPPoolOptions<D> o; torch::Scalar s; Expand<D> a(0);
  if(n==1 && xnum(x,i,s)) {                            // single numeric exponent
@@ -410,7 +410,7 @@ Z M lppool(K x,J i) {
 }
 
 template<size_t D,typename M>
-ZV lppool(B a,K x,const M* m) {
+static void lppool(B a,K x,const M* m) {
  LPPoolOptions<D> o=m->options, d(o.power(),o.size());
  OPTION(x, power, kf(o.power()));
  OPTION(x, size,  KEX(o.size()));
@@ -424,7 +424,7 @@ ZV lppool(B a,K x,const M* m) {
 // pad - n-dimensional padding, specify even number of sizes and optional pad value
 // rpad - reflect/replicate fixed dimension padding
 // ----------------------------------------------------------------------------------
-Z Pad pad(K x,J i) {
+static Pad pad(K x,J i) {
  IntArrayRef a; Scalar s=PadOptions().value(); Pairs p; J n=xargc(x,i,p); LongVector v;
  if(!((n==0 && p.n) || (xsize(x,i,a) && (n==1 || (n==2 && xnum(x,i+1,s))))))
   AT_ERROR("Unrecognized arguments for padding module");
@@ -442,7 +442,7 @@ Z Pad pad(K x,J i) {
  return Pad(PadOptions(v).value(s));
 }
 
-ZV pad(B a,K x,const PadImpl* m) {
+static void pad(B a,K x,const PadImpl* m) {
  auto& p=m->options.pad(); 
  OPTION(x, pad, klist(p.size(),p.data()));
  if(a || !match(PadOptions().value(),m->options.value()))
@@ -450,7 +450,7 @@ ZV pad(B a,K x,const PadImpl* m) {
 }
 
 template<size_t D,typename M>
-Z M rpad(K x,J k,S s) {
+static M rpad(K x,J k,S s) {
  B z=true; Expand<D> a(0); Pairs p; J n=xargc(x,k,p);
  if(!((n==0 && p.n) || (n==1 && XDIM(x,k,D,a))))
   AT_ERROR("Unrecognized arguments for ",s," padding module");
@@ -465,14 +465,14 @@ Z M rpad(K x,J k,S s) {
  return M(a);
 }
 
-template<typename M> ZV rpad(K x,const M* m) {OPTION(x, pad, KEX(m->options.pad()));}
+template<typename M> static void rpad(K x,const M* m) {OPTION(x, pad, KEX(m->options.pad()));}
 
 // ----------------------------------------------------------------------------------
 //  softmax, softmin, logsoftmax layers
 // ----------------------------------------------------------------------------------
-ZJ softdim(size_t d) {return !(d==0 || d==1 || d==3);}
+static J softdim(size_t d) {return !(d==0 || d==1 || d==3);}
 
-ZV softargs(cS s,K x,J i,J &d,c10::optional<ScalarType>& t) { 
+static void softargs(cS s,K x,J i,J &d,c10::optional<ScalarType>& t) { 
  t=c10::nullopt; Pairs p; J n=xargc(x,i,p);
  if(!((n==0 && p.n) || (xlong(x,i,d) && (n==1 || (n==2 && xtype(x,i+1,t))))))
   AT_ERROR("Unrecognized arguments for ",s,", expecting dim or (dim;type)");
@@ -487,10 +487,10 @@ ZV softargs(cS s,K x,J i,J &d,c10::optional<ScalarType>& t) {
 }
 
 template<typename M>
-Z M soft(S s,K x,J i) {J d=nj; c10::optional<ScalarType> t; softargs(s,x,i,d,t); return M(d,t);}
+static M soft(S s,K x,J i) {J d=nj; c10::optional<ScalarType> t; softargs(s,x,i,d,t); return M(d,t);}
 
 template<typename M>
-ZV soft(B a,K x,const M *m) {
+static void soft(B a,K x,const M *m) {
  SoftOptions o=m->options, d(o.dim());
  OPTION(x, dim, kj(o.dim()));
  if((a || o.dtype() != d.dtype()) && o.dtype())
@@ -499,11 +499,11 @@ ZV soft(B a,K x,const M *m) {
 
 using SoftFn = Tensor (*)(const Tensor&, int64_t, c10::optional<ScalarType>);
 
-Z Tensor softmin(const Tensor& a,int64_t d,c10::optional<ScalarType> t) {
+static Tensor softmin(const Tensor& a,int64_t d,c10::optional<ScalarType> t) {
  return torch::softmax(-a,d,t);
 }
 
-ZK soft(K x,cS s,SoftFn f) {
+static K soft(K x,cS s,SoftFn f) {
  KTRY
   J d; c10::optional<ScalarType> t=c10::nullopt; Tensor a;
   if(xten(x,a)) {
@@ -529,20 +529,20 @@ KAPI klogsoftmax(K x) {return soft(x, "logsoftmax", torch::log_softmax);}
 // noarg:  activation functions without arguments or only inplace=true/false
 //         logsigmoid,sigmoid,softsign,tanh,tanhshrink,relu,relu6,selu
 // ------------------------------------------------------------------------------------
-ZV noarg(S s,K x,J i) {if(!xnone(x,i))AT_ERROR("No arguments expected for ",s," module");}
+static void noarg(S s,K x,J i) {if(!xnone(x,i))AT_ERROR("No arguments expected for ",s," module");}
 
 using Ft = Tensor (*)(const Tensor&);
 
-ZK noarg(cS s,Ft f, K x) {
+static K noarg(cS s,Ft f, K x) {
  KTRY
   Tensor t;
   return xten(x,t) ? kten(f(t)) : kget(f(kput(x)));
  KCATCH(s);
 }
 
-Z Tensor relu6(     const Tensor &t) {return torch::hardtanh(t,0.0,6.0);}
-Z Tensor softsign(  const Tensor &t) {return t/(t.abs()+1);}
-Z Tensor tanhshrink(const Tensor &t) {return t-t.tanh();}
+static Tensor relu6(     const Tensor &t) {return torch::hardtanh(t,0.0,6.0);}
+static Tensor softsign(  const Tensor &t) {return t/(t.abs()+1);}
+static Tensor tanhshrink(const Tensor &t) {return t-t.tanh();}
 
 KAPI kgelu(K x)       {return noarg("gelu",       torch::gelu,        x);}
 KAPI krelu(K x)       {return noarg("relu",       torch::relu,        x);}
@@ -560,7 +560,7 @@ KAPI ktanhshrink(K x) {return noarg("tanhshrink", tanhshrink,         x);}
 // setting1 - given scalar, compare with default and set entry in k dictionary
 // fn1      - call activation directly (no module)
 // ------------------------------------------------------------------------------------
-ZV default1(Cast c,Setting &k,Scalar &v) {  // given module type, get setting & default value
+static void default1(Cast c,Setting &k,Scalar &v) {  // given module type, get setting & default value
  switch(c) {
   case Cast::glu:        k=Setting::dim;    v=GLUOptions().dim(); break;
   case Cast::elu:
@@ -572,7 +572,7 @@ ZV default1(Cast c,Setting &k,Scalar &v) {  // given module type, get setting & 
  }
 }
 
-ZV arg1(Cast c,cS s,K x,J i,Scalar& v) { // check argument(s) for single numeric scalar or named, e.g. (`alpha;.01)
+static void arg1(Cast c,cS s,K x,J i,Scalar& v) { // check argument(s) for single numeric scalar or named, e.g. (`alpha;.01)
  Pairs p; Setting k; J n=xargc(x,i,p); default1(c,k,v);
  if(!(n || p.n)) return;
  if(!(n==0 || (n==1 && xnum(x,i,v))))
@@ -586,14 +586,14 @@ ZV arg1(Cast c,cS s,K x,J i,Scalar& v) { // check argument(s) for single numeric
   AT_ERROR("Dimension for gated linear unit must be given as an integer");
 }
 
-ZV setting1(B a,Cast c,K x,const Scalar &w) {
+static void setting1(B a,Cast c,K x,const Scalar &w) {
  Setting k; Scalar v; default1(c,k,v);
  if(a || !match(v,w)) dictadd(x,mset(k),kscalar(w));
 }
 
 using Fts = Tensor (*)(const Tensor&, Scalar);
 
-ZK fn1(Cast c,cS s,K x,Fts f) {
+static K fn1(Cast c,cS s,K x,Fts f) {
  KTRY
   Tensor t; Setting k; Scalar v;
   if(xten(x,t))
@@ -605,8 +605,8 @@ ZK fn1(Cast c,cS s,K x,Fts f) {
  KCATCH(s);
 }
 
-Z Tensor elu(const Tensor& t,Scalar v) {return torch::elu(t,v);}          // torch fn has two additional scalars
-Z Tensor glu(const Tensor& t,Scalar v) {return torch::glu(t,v.toLong());} // torch fn uses int64_t for dimension
+static Tensor elu(const Tensor& t,Scalar v) {return torch::elu(t,v);}          // torch fn has two additional scalars
+static Tensor glu(const Tensor& t,Scalar v) {return torch::glu(t,v.toLong());} // torch fn uses int64_t for dimension
 
 KAPI kelu(K x)        {return fn1(Cast::elu,        "elu",        x, elu);}
 KAPI kglu(K x)        {return fn1(Cast::glu,        "glu",        x, glu);}
@@ -624,7 +624,7 @@ KAPI ksoftshrink(K x) {return fn1(Cast::softshrink, "softshrink", x, torch::soft
 // setting2 - given scalars, compare with defaults and set entries in k dictionary
 // fn2      - call activation function directly (no module)
 // ------------------------------------------------------------------------------------
-ZV default2(Cast c,Setting& k1,Setting& k2,Scalar& v1,Scalar& v2) { //given cast, set keys & default values
+static void default2(Cast c,Setting& k1,Setting& k2,Scalar& v1,Scalar& v2) { //given cast, set keys & default values
  switch(c) {
   case Cast::prelu:
    k1=Setting::in;                    k2=Setting::init;
@@ -645,7 +645,7 @@ ZV default2(Cast c,Setting& k1,Setting& k2,Scalar& v1,Scalar& v2) { //given cast
  }
 }
 
-ZV arg2(B r,Cast c,cS s,K x,J i,B &b,Scalar& v1,Scalar& v2) {
+static void arg2(B r,Cast c,cS s,K x,J i,B &b,Scalar& v1,Scalar& v2) {
  // r:true for functional rrelu, b:training flag  (only used for functional rrelu)
  Pairs p; Setting e,k1,k2; J n=xargc(x,i,p); b=false; default2(c,k1,k2,v1,v2);
  if(!(n || p.n)) return;
@@ -668,11 +668,11 @@ ZV arg2(B r,Cast c,cS s,K x,J i,B &b,Scalar& v1,Scalar& v2) {
 }
 
 // version for modules without special handling for function version of rrelu()
-ZV arg2(Cast c,cS s,K x,J i,Scalar& v1,Scalar& v2) {
+static void arg2(Cast c,cS s,K x,J i,Scalar& v1,Scalar& v2) {
  B b; arg2(false,c,s,x,i,b,v1,v2);
 }
 
-ZV setting2(B a,Cast c,K x,const Scalar &w1,const Scalar& w2) {
+static void setting2(B a,Cast c,K x,const Scalar &w1,const Scalar& w2) {
  Setting k1,k2; Scalar v1,v2; default2(c,k1,k2,v1,v2);
  if(a || !match(v1,w1)) dictadd(x,mset(k1),kscalar(w1));
  if(a || !match(v2,w2)) dictadd(x,mset(k2),kscalar(w2));
@@ -680,7 +680,7 @@ ZV setting2(B a,Cast c,K x,const Scalar &w1,const Scalar& w2) {
 
 using Ftss = Tensor (*)(const Tensor&, Scalar, Scalar);
 
-ZK fn2(Cast c,cS s,K x,Ftss f) {
+static K fn2(Cast c,cS s,K x,Ftss f) {
  KTRY
   Tensor t; B b; Setting k1,k2; Scalar v1,v2;
   if(xten(x,t)) {                                                     // tensor w'out any other args
@@ -726,7 +726,7 @@ KAPI kprelu(K x) {
 //         - return options used given a flatten module used
 //         - call flatten as function given input/tensor and optional start & end dimensions
 // ----------------------------------------------------------------------------------------------------
-Z FlattenOptions flatten(K x,J i) {
+static FlattenOptions flatten(K x,J i) {
  FlattenOptions o; int64_t s=o.start_dim(),e=o.end_dim(); Pairs p; J n=xargc(x,i,p);
  if(!(n==0 || (xint64(x,i,s) && (n==1 || (n==2 && xint64(x,i+1,e))))))
   AT_ERROR("flatten: unrecognized arg(s)");
@@ -739,7 +739,7 @@ Z FlattenOptions flatten(K x,J i) {
  return o.start_dim(s).end_dim(e);
 }
 
-ZV flatten(B a,K x,const FlattenImpl* m) {
+static void flatten(B a,K x,const FlattenImpl* m) {
  FlattenOptions d,o=m->options;
  if(a || d.start_dim() != o.start_dim()) OPTION(x, start, kj(o.start_dim()));
  if(a || d.end_dim()   != o.end_dim())   OPTION(x, end,   kj(o.end_dim()));
@@ -760,7 +760,7 @@ KAPI kflatten(K x) {
 // mparms - set parameters/buffers in a defined module from k values in dictionary with matching names
 // mdefine - define module and add to a sequence, reading options (and sometimes parms/buffers) from k
 // ----------------------------------------------------------------------------------------------------
-V mparms(S s,Module &m,K x,B p) { // set named parms/buffers in module m from dict x, p true if parms
+void mparms(S s,Module &m,K x,B p) { // set named parms/buffers in module m from dict x, p true if parms
  K k=kK(x)[0],v=kK(x)[1]; Tensor V; if(v->t) V=kput(v);
  for(auto &a:p ? m.named_parameters() : m.named_buffers()) {
   J i=kfind(k,a.key());
@@ -785,15 +785,15 @@ V mparms(S s,Module &m,K x,B p) { // set named parms/buffers in module m from di
  }
 }
 
-V mparms(S s,Sequential &q,K p,K f) {
+void mparms(S s,Sequential &q,K p,K f) {
  J i=q->size()-1;
  if(p) mparms(s,*q[i],p,true);
  if(f) mparms(s,*q[i],f,false);
 }
 
 //s:type, n:name(optional), i:offset into o, x:options(list/dictionary), p:parms, f:buffers
-V mdefine(Sequential &q,S s,S n=nullptr,J i=-1,K x=nullptr,K p=nullptr,K f=nullptr);
-V mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) { 
+void mdefine(Sequential &q,S s,S n=nullptr,J i=-1,K x=nullptr,K p=nullptr,K f=nullptr);
+void mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) { 
  Cast c=msym(s); Scalar v,w;
  switch(c) {
   case Cast::batchnorm:    PUSH(q,n,bnorm(x,i)); break;
@@ -875,7 +875,7 @@ V mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) {
  if(p || f) mparms(s,q,p,f);  // set parms/buffers if k dictionaries supplied
 }
 
-V mdefine(Sequential &q,K x) { // define modules from k table of options or full state
+void mdefine(Sequential &q,K x) { // define modules from k table of options or full state
  J n=x->t==99 ? 0 : xlen(x);
  for(J i=98-x->t;i<n;++i)
    mdefine(q,
@@ -894,7 +894,7 @@ V mdefine(Sequential &q,K x) { // define modules from k table of options or full
 // mget - extract module options and, optionally, parameters & buffers to k array
 // mtable - extract child modules and return as k table, one row per module
 // --------------------------------------------------------------------------------------------
-V mopt(Module &g,B a,K &v,J i) { //g:generic module, a:true if all options, v:k values, i:table row
+void mopt(Module &g,B a,K &v,J i) { //g:generic module, a:true if all options, v:k values, i:table row
  auto c=Cast::undefined;
  K x=xD(ktn(KS,0),ktn(0,0));
  if       (auto* m=g.as<torch::nn::BatchNorm>())      { c=Cast::batchnorm; bnorm(a,x,m);
@@ -977,7 +977,7 @@ V mopt(Module &g,B a,K &v,J i) { //g:generic module, a:true if all options, v:k 
  else    kS(kK(v)[j])[i]=s, kK(kK(v)[j+2])[i]=x; //table, assign module,options in i'th row
 }
 
-V mget(cS s,Module &m,B a,K &v,J i) {
+void mget(cS s,Module &m,B a,K &v,J i) {
  //s:name in sequence, m:type-erased module, a:true for all options, v:array for values, i:i'th row of table result
  B b=v->n==6;
  mopt(m,a,v,i);
@@ -996,8 +996,8 @@ V mget(cS s,Module &m,B a,K &v,J i) {
  }
 }
 
-ZK mtable(const Sequential& q,B a,B b=true); //a:true for all options else non-defaults, b:true for parms & buffers
-ZK mtable(const Sequential& q,B a,B b) {
+static K mtable(const Sequential& q,B a,B b=true); //a:true for all options else non-defaults, b:true for parms & buffers
+static K mtable(const Sequential& q,B a,B b) {
  J i=0; K k=mkeys(b),v=mvals(b,q->size());
  for(const auto&c:q->named_children()) mget(c.key().c_str(),*c.value(),a,v,i++);
  return xT(xD(k,v));
@@ -1007,7 +1007,7 @@ ZK mtable(const Sequential& q,B a,B b) {
 // tchild - extract named parameter/buffer tensor from child module in sequential
 // mchild - extract child module by index/name, return module state or individual tensor
 // --------------------------------------------------------------------------------------
-ZK tchild(S s,const Module& c) {
+static K tchild(S s,const Module& c) {
  Tensor t;
  if(c.named_parameters().contains(s))
   t=c.named_parameters()[s];
@@ -1018,7 +1018,7 @@ ZK tchild(S s,const Module& c) {
  return kget(t);
 }
 
-ZK mchild(B a,J i,S s,const Sequential &q) {
+static K mchild(B a,J i,S s,const Sequential &q) {
  if(i<0 || (unsigned)i>=q->size())
   AT_ERROR("Invalid module index: ",i);
  if(s) {
@@ -1034,7 +1034,7 @@ ZK mchild(B a,J i,S s,const Sequential &q) {
  }
 }
 
-ZK mchild(B a,S s1,S s2,const Sequential &q) {
+static K mchild(B a,S s1,S s2,const Sequential &q) {
  const auto& m=q->named_children()[s1];
  if(s2) {
   return tchild(s2,*m);
@@ -1054,7 +1054,7 @@ ZK mchild(B a,S s1,S s2,const Sequential &q) {
 // forward - given module pointer and tensor, run forward calculations sequentially
 // train - query or set training flag for a module
 // ------------------------------------------------------------------------------------------
-ZV margs(B p,Sequential q,K x) {
+static void margs(B p,Sequential q,K x) {
  J i=p; S s=nullptr,nm=nullptr;
  if(xsym(x,s) || xsym(x,i,s)) {
   if(xsym(x,i+1,nm)) i++;
@@ -1136,7 +1136,7 @@ KAPI train(K x) {
 // ----------------------------------
 // module fns defined in k namespace
 // ----------------------------------
-V modfn(K x) {
+void modfn(K x) {
  fn(x, "seq",        KFN(seq),1);           // api functions for modules
  fn(x, "forward",    KFN(forward),2);
  fn(x, "train",      KFN(train),1);

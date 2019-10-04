@@ -14,31 +14,31 @@ using Lwi = Tensor (*)(const Tensor&, const Tensor&, const Tensor&, int64_t, int
 // rmsg,rmap - message and mapping for loss reduction to/from sym and enumeration
 // xreduce - check if sym, if matches loss reduction, set int, e.g. `none -> 0, `mean -> 1, `sum -> 2
 // ------------------------------------------------------------------------------------------------------
-Z Cast lmap(S s) {
+static Cast lmap(S s) {
  for(auto&m:env().loss)
   if(std::get<0>(m)==s) return std::get<1>(m);
  AT_ERROR("Unrecognized loss function: ",s);
 }
 
-ZS lmap(Cast c) {
+static S lmap(Cast c) {
  for(auto&m:env().loss)
   if(std::get<1>(m)==c) return std::get<0>(m);
  AT_ERROR("Unrecognized loss function: ",(I)c);
 }
 
-Z S lset(Setting s) {
+static S lset(Setting s) {
  for(auto&m:env().lset)
   if(std::get<1>(m)==s) return std::get<0>(m);
  AT_ERROR("Unrecognized loss setting: ",(I)s);
 }
 
-Z Setting lset(S s) {
+static Setting lset(S s) {
  for(auto&m:env().lset)
   if(std::get<0>(m)==s) return std::get<1>(m);
  AT_ERROR("Unrecognized loss setting: ",s);
 }
 
-Z std::string rmsg(B b) {
+static std::string rmsg(B b) {
  std::string s;
  for(auto&m:env().reduce)
   s += (b ? std::get<0>(m) : std::to_string(std::get<1>(m))) + ",";
@@ -46,24 +46,24 @@ Z std::string rmsg(B b) {
  return s;
 }
 
-Z int64_t rmap(S s) {
+static int64_t rmap(S s) {
  for(auto&m:env().reduce)
   if(std::get<0>(m)==s) return std::get<1>(m);
  AT_ERROR("Unrecognized setting for loss reduction: ",s,", expecting one of ",rmsg(true));
 }
 
-Z S rmap(int64_t r) {
+static S rmap(int64_t r) {
  for(auto&m:env().reduce)
   if(std::get<1>(m)==r) return std::get<0>(m);
  AT_ERROR("Unrecognized setting for loss reduction: ",r,", expecting one of ",rmsg(false));
 }
 
-Z B xreduce(K x,int64_t &r) {
+static B xreduce(K x,int64_t &r) {
  if(x->t == -KS) return r=rmap(x->s), true;
  return false;
 }
 
-Z B xreduce(K x,J i,int64_t &r) {
+static B xreduce(K x,J i,int64_t &r) {
  if(x->t == KS && -1<x->n && x->n>i)
   return r=rmap(kS(x)[i]),true;
  else
@@ -89,7 +89,7 @@ int64_t reduce(cS s,K x,J i) { // check argument(s) for sym or named pair/dict, 
  return r;
 }
 
-ZK kloss(K a,Lf f,cS s) {
+static K kloss(K a,Lf f,cS s) {
  KTRY
   Tensor x,y;
   if(!a->t && (a->n==2 || a->n==3)) {
@@ -110,7 +110,7 @@ KAPI multilabel(K x)  {return kloss(x, torch::multilabel_margin_loss, "multi-lab
 KAPI smoothl1(K x)    {return kloss(x, torch::smooth_l1_loss,         "smooth l1");}
 KAPI softmargin(K x)  {return kloss(x, torch::soft_margin_loss,       "soft margin");}
 
-Z B bcearg(K x) {return x->t==-KS || x->t==KS || xempty(x) || xdict(x);}  // true if arg is a setting (rather than wt tensor)
+static B bcearg(K x) {return x->t==-KS || x->t==KS || xempty(x) || xdict(x);}  // true if arg is a setting (rather than wt tensor)
 
 KAPI bce(K a) {
  KTRY
@@ -134,7 +134,7 @@ KAPI bce(K a) {
 // wtargs - process args from k for weight tensor, index to ignore & reduction method (or some subset)
 // wtloss - functional form for nll,cross entropy, multi-label soft margin (no c++ version yet)
 // ------------------------------------------------------------------------------------------------------
-ZV wtargs(Cast c,cS s,K x,J i,Tensor& w,J& j,int64_t &r) {
+static void wtargs(Cast c,cS s,K x,J i,Tensor& w,J& j,int64_t &r) {
  B b=c==Cast::ce || c==Cast::nll; Pairs p; J n=xargc(x,i,p); j=-100; r=reduce();
  if(n && xreduce(x,i+n-1,r)) n--;
  if(n && xlong(x,i+n-1,j)) {if(b) n--; else AT_ERROR("Index to ignore not expected for ",s," loss");}
@@ -164,7 +164,7 @@ Tensor multilabel_soft_margin_loss(const Tensor& x,const Tensor& y,const Tensor&
  // unable to use torch::apply_loss_reduction(l,r), in anonymous namespace in ATen/native/Loss.cpp
 }
 
-ZK wtloss(K a,Cast c,cS s) {
+static K wtloss(K a,Cast c,cS s) {
  KTRY
   B p=false; J j; int64_t r; Tensor l,x,y,w;
   if(a->t) {
@@ -193,7 +193,7 @@ KAPI multisoft(K x) {return wtloss(x, Cast::multisoft, "multi-label soft margin"
 // bcelogits - input & target, with options for reduction and class weights
 // bcelogitw - input, target & batch weights, along with options for reduction & class wts
 // ---------------------------------------------------------------------------------------
-ZK bceloss(K a,B b,cS s) {  //a:args, b:true if batch wts
+static K bceloss(K a,B b,cS s) {  //a:args, b:true if batch wts
  KTRY
   B p=false; J i=2+b,j; int64_t r; Tensor l,x,y,bw,w;
   if(a->t) {
@@ -218,8 +218,8 @@ KAPI bcelogitw(K x) {return bceloss(x, true,  "binary cross-entropy with logits 
 // marginargs - process optional margin & reduction arguments in given k array
 // marginloss - funcional form of loss functions w'margin & reduction args
 // ------------------------------------------------------------------------------------------------------
-ZF marginval(Cast c) {return c==Cast::hinge ? 1.0 : 0.0;}
-ZV marginargs(Cast c,cS s,K x,J i,double &m,int64_t &r) {
+static F marginval(Cast c) {return c==Cast::hinge ? 1.0 : 0.0;}
+static void marginargs(Cast c,cS s,K x,J i,double &m,int64_t &r) {
  Pairs p; J n=xargc(x,i,p); r=reduce(); m=marginval(c);
  if(n && xreduce(x,i+n-1,r)) n--;
  if(n && xnum(x,i+n-1,m)) n--;
@@ -234,7 +234,7 @@ ZV marginargs(Cast c,cS s,K x,J i,double &m,int64_t &r) {
  }
 }
 
-ZK marginloss(K a,Cast c,cS s) {
+static K marginloss(K a,Cast c,cS s) {
  KTRY
   B p=false,h=c==Cast::hinge; F m; int64_t r; Tensor l,x1,x2,y;
   if(a->t || a->n<3-h || a->n>5-h)
@@ -260,7 +260,7 @@ KAPI margin(K x)     {return marginloss(x, Cast::margin,     "margin ranking");}
 // multiargs - process optional power,margin,weight & reduction arguments in given k array
 // multimargin - funcional form of multi margin loss function
 // ------------------------------------------------------------------------------------------------------
-ZV multiargs(K x,J i,Scalar &pw,Scalar& m,Tensor& w,int64_t &r) {
+static void multiargs(K x,J i,Scalar &pw,Scalar& m,Tensor& w,int64_t &r) {
  Pairs p; J n=xargc(x,i,p); MultiMarginLossOptions o;
  r=o.reduce(); pw=o.p(); m=o.margin();
  if(n && xnum(x,i,pw)) i++,n--;
@@ -295,7 +295,7 @@ KAPI multimargin(K a) {
 // triargs - process optional margin,p,eps,swap flag & reduction args in k array for triplet loss
 // triplet  - funcional form of triplet margin loss function
 // ------------------------------------------------------------------------------------------------------
-ZV triargs(K x,J i,double& m,double& pw,double& e,bool& s,int64_t& r) {
+static void triargs(K x,J i,double& m,double& pw,double& e,bool& s,int64_t& r) {
  Pairs p; J n=xargc(x,i,p); TripletLossOptions o; 
  m=o.margin(); pw=o.p(); e=o.eps(); s=o.swap(); r=o.reduce();
  if(n && xnum(x,i,m))  i++,n--;
@@ -335,7 +335,7 @@ KAPI triplet(K a) {
 // poissonargs - process optional margin,p,eps,swap flag & reduction args in k array for triplet loss
 // poissonloss  - funcional form of poisson nll loss function
 // ------------------------------------------------------------------------------------------------------
-ZV poissonargs(K x,J i,bool& l,bool& f,double& e,int64_t& r) {
+static void poissonargs(K x,J i,bool& l,bool& f,double& e,int64_t& r) {
  Pairs p; J n=xargc(x,i,p); PoissonLossOptions o; 
  l=o.log(); f=o.full(); e=o.eps(); r=o.reduce();
  if(n && xbool(x,i,l))   i++,n--;
@@ -374,7 +374,7 @@ KAPI poissonloss(K a) {
 // ctc2 - check inputs for tensor or arrays for input/target lengths (different forward call)
 // ctc - funcional form of connectionist temporal classification loss between continuous time series & target sequence
 // -------------------------------------------------------------------------------------------------------------------
-ZV ctc1(K x,J i,int64_t& b,bool& z,int64_t& r) {
+static void ctc1(K x,J i,int64_t& b,bool& z,int64_t& r) {
  Pairs p; J n=xargc(x,i,p); CTCLossOptions o; 
  b=o.blank(); z=o.zeroinf(); r=o.reduce();
  while(n) {
@@ -393,7 +393,7 @@ ZV ctc1(K x,J i,int64_t& b,bool& z,int64_t& r) {
  }
 }
 
-Z B ctc2(K a,J i,Tensor& x,Tensor& y,Tensor& nx,Tensor& ny,IntArrayRef& jx,IntArrayRef& jy) {
+static B ctc2(K a,J i,Tensor& x,Tensor& y,Tensor& nx,Tensor& ny,IntArrayRef& jx,IntArrayRef& jy) {
   B p=xtenarg(a,i,x,y);
   if(!(xsize(a,i+2,jx) && xsize(a,i+3,jy))) { // unless both lenghts given as k arrays
     if(!xten(a,i+2,nx)) nx=kput(a,2);  // define input lengths as tensor
@@ -426,7 +426,7 @@ KAPI ctc(K a) {
 // losswt - return class wts if tensor is defined (used to determine device/datatype)
 // loss - main api function that creates/calls loss objects and queries their properties
 // ---------------------------------------------------------------------------------------------------
-ZK lossinit(S s,K x,J i) {
+static K lossinit(S s,K x,J i) {
  J j; F m; Cast c=lmap(s); Tensor w; int64_t r; Lossptr a;
  switch(c) {
   case Cast::bce:         a=std::make_shared<BCELoss>(reduce(s,x,i)); break;
@@ -455,7 +455,7 @@ ZK lossinit(S s,K x,J i) {
  return kptr(new Kloss(c,a));
 }
 
-ZK lossopt(B a,Cast c,Loss *l) {
+static K lossopt(B a,Cast c,Loss *l) {
  K x=xD(ktn(KS,0),ktn(0,0));
  if (auto* p=dynamic_cast<BasicLoss*>(l)) {
   LossOptions d,o=p->options;
@@ -531,7 +531,7 @@ K lossdict(Ktag *g,K x) {
   AT_ERROR("Loss state requires 1-2 args: previously allocated ptr or (ptr;options flag)");
 }
 
-ZK lossfwd(Cast c,Loss *l,K a) {
+static K lossfwd(Cast c,Loss *l,K a) {
  B p; Tensor r,x,y,z;
  if(a->n==3) {
   p=xtenarg(a,1,x,y);
@@ -589,7 +589,7 @@ KAPI loss(K x) {
 // ----------------------------------
 // loss fns defined in k namespace
 // ----------------------------------
-V lossfn(K x) {
+void lossfn(K x) {
  fn(x, "loss",        KFN(loss),1);
  fn(x, "bce",         KFN(bce),1);
  fn(x, "bcelogits",   KFN(bcelogits),1);

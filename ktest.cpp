@@ -85,7 +85,7 @@ KAPI kdict(K x) {
  return kb(xdict(x));
 }
 
-ZK ksub(K x,cS e) {
+static K ksub(K x,cS e) {
  KTRY
  std::cerr << "in ksub " << (!x ? "null" : "with args")<< "\n";
  Tensor t;
@@ -137,7 +137,7 @@ typedef struct {
  }};
 } Testenv;
 
-Testenv& testenv(V) {static Testenv e; return e;}
+Testenv& testenv() {static Testenv e; return e;}
 
 KAPI pairtest(K x) {
  KTRY

@@ -2,7 +2,7 @@
 #include "knn.h"
 #include "kloss.h"
 
-ZV modelpart(K x,J i,Kseq*& q,Kloss*& l,Kopt*& o) {
+static void modelpart(K x,J i,Kseq*& q,Kloss*& l,Kopt*& o) {
  for(;i<x->n;++i) {
   auto* g=xtag(x,i);
   switch(g ? g->a : Class::undefined) {
@@ -50,8 +50,12 @@ Tensor mforward(Kmodel *m,TensorVector& v) {
  return m->q->forward(v[0]);
 }
 
-Tensor mloss(Kmodel *m,TensorVector &v) {
- auto x=mforward(m,v);
+Tensor mloss(Kmodel *m,TensorVector &v,const Tensor& x) {
+/*
+ std::cerr<< x[0] << "\n";
+ std::cerr<< x[63] << "\n";
+ TORCH_CHECK(false,"stop");
+*/
  if(v.size()==2)
   return m->l->forward(x,v[1]);
  else if(v.size()==3)
@@ -59,6 +63,8 @@ Tensor mloss(Kmodel *m,TensorVector &v) {
  else
   AT_ERROR("model: ", v.size()," inputs, expecting 2-3");
 }
+
+Tensor mloss(Kmodel *m,TensorVector &v) { return mloss(m,v,mforward(m,v));}
 
 // -------------------------------------------------------------------------------------------
 // batch - 
@@ -101,10 +107,25 @@ Tensor fit(Kmodel *m,TensorVector& v,int64_t w,int64_t e,B s) {
  TensorVector r;
  auto n=fullsize(v);
  for(size_t i=0; i<e; ++i) {
-  if(s) shuffle(v);
+  if(s) shuffle_(v);
   r.emplace_back(batch(m,v,w,n));
  }
  return torch::stack(r); //.reshape({e,-1});
+}
+
+Tensor evaluate(Kmodel *m,TensorVector& v,int64_t w) {
+ torch::NoGradGuard g;
+ B b=m->q->is_training();
+ if(b) m->q->train(false);
+ auto n=maxsize(v); TensorVector r;
+ //auto s=n%w ? n/w + 1 : n/w;
+ for(int64_t i=0; i<n; i+=w) {
+  subset(v,0,i,w,n);
+  r.emplace_back(mforward(m,v));
+ }
+ subset(v,0,0,n,n);
+ if(b) m->q->train(true);
+ return torch::cat(r);
 }
 
 KAPI kbatch(K x) {
@@ -150,4 +171,16 @@ KAPI training(K x) {
   std::cerr << "seq ref count: " << q.ptr().use_count() << "\n";
   return (x->n==2) ? q->train(b),(K)0 : kb(q->is_training());
  KCATCH("training");
+}
+
+KAPI kevaluate(K x) {
+ KTRY
+  Kmodel *m; TensorVector *v; int64_t w;
+  if((m=xmodel(x,0)) && (v=xvec(x,1)) && xint64(x,2,w)) {
+   TORCH_CHECK(v->size(), "evaluate: vector of inputs is empty");
+   return kget(evaluate(m,*v,w));
+  } else {
+   return KERR("evaluate: unrecognized arg(s)");
+  }
+ KCATCH("evaluate");
 }

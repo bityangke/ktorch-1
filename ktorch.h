@@ -13,6 +13,7 @@
 #define KXVER 3
 #include "k.h"
 #undef R
+#undef Z
 #undef xs
 
 #include "torch/torch.h"
@@ -23,7 +24,7 @@
 # pragma GCC diagnostic pop
 #endif
 
-#define KFN(f) reinterpret_cast<V *>(f)
+#define KFN(f) reinterpret_cast<void *>(f)
 #define KERR(e) krr((S)e)
 
 #define KTRY \
@@ -221,10 +222,10 @@ struct TORCH_API Kmodel : public Ktag {
 };
 
 S krrbuf(const char *);
-V dictadd(K,S,K);
-V dictadd(K,cS,K);
+void dictadd(K,S,K);
+void dictadd(K,cS,K);
 B xind(K,J);
-K kptr(V*);
+K kptr(void*);
 B xptr(K);
 B xptr(K,J);
 Ktag* xtag(K);
@@ -246,7 +247,7 @@ K statekeys();
 J statefind(State,K);
 S statesym(State e,K x,J j=-1);
 K statedict(State e,K x,J j=-1);
-V stateparms(S,Module&,K,B);
+void stateparms(S,Module&,K,B);
 
 B xnull(K);
 B xnull(K,J);
@@ -350,15 +351,15 @@ B xnone(K,J);
 
 S psym(const Pairs&);
 ScalarType ptype(const Pairs&);
-V perr(const Pairs&,cS);
+void perr(const Pairs&,cS);
 B pbool(const Pairs&);
 J plong(const Pairs&);
 F pdouble(const Pairs&);
-V pnum(const Pairs&,Scalar&);
-V psize(const Pairs&,IntArrayRef&,J n=-1);
-V psize(const Pairs&,J,int64_t*);
-V psize(const Pairs&,J,F*);
-V pten(const Pairs&,Tensor&);
+void pnum(const Pairs&,Scalar&);
+void psize(const Pairs&,IntArrayRef&,J n=-1);
+void psize(const Pairs&,J,int64_t*);
+void psize(const Pairs&,J,F*);
+void pten(const Pairs&,Tensor&);
 
 S& optsym(const torch::Device&);
 S& optsym(const TypeMeta&);
@@ -376,10 +377,10 @@ K klist(J,const F*);
 K kexpand(J,const int64_t*);
 K kexpand(J,const F*);
 #define KEX(x) kexpand(x.size(),(*x).data())  // k list from ExpandingArray
-V fn(K,cS,V*,I);
+void fn(K,cS,void*,I);
 
-V randomfn(K);
-V mathfn(K);
+void randomfn(K);
+void mathfn(K);
 
 // tensor routines:
 K kget(const Tensor&);
@@ -398,36 +399,36 @@ K tensorattr(const Tensor&t,A,Attr);
 K vectorattr(const TensorVector&,A,Attr);
 K tensorinfo(const Tensor&,B);
 K vectorinfo(const TensorVector&,B);
-V tensorcopy(Tensor&,const Tensor&,B async=false);
+void tensorcopy(Tensor&,const Tensor&,B async=false);
 Tensor       shuffle(const Tensor &t,      int64_t d=0);
 TensorVector shuffle(const TensorVector& v,int64_t d=0);
-V shuffle_(Tensor &t,      int64_t d=0);
-V shuffle_(TensorVector& v,int64_t d=0);
+void shuffle_(Tensor &t,      int64_t d=0);
+void shuffle_(TensorVector& v,int64_t d=0);
 std::vector<int64_t> newsize(const Tensor&,int64_t,int64_t);
 int64_t maxsize(const Tensor& t,      int64_t d=0);
 int64_t maxsize(const TensorVector& v,int64_t d=0);
 int64_t fullsize(Tensor& t,      int64_t d=0);
 int64_t fullsize(TensorVector& v,int64_t d=0);
-V subset(Tensor& t,int64_t d,int64_t i,int64_t w,int64_t n=0);
-V subset(TensorVector& v,int64_t d,int64_t i,int64_t w,int64_t n=0);
-V setsafe(Tensor& t,const Storage&,int64_t,const IntArrayRef&,const IntArrayRef&);
-V tensorfn(K);
+void subset(Tensor& t,int64_t d,int64_t i,int64_t w,int64_t n=0);
+void subset(TensorVector& v,int64_t d,int64_t i,int64_t w,int64_t n=0);
+void setsafe(Tensor& t,const Storage&,int64_t,const IntArrayRef&,const IntArrayRef&);
+void tensorfn(K);
 
 // module routines:
 //K kseq(const Sequential&,Cast c=Cast::sequential);
 K kseq(const Sequential&);
 K seqto(Kseq*,const TensorOptions&,B);
-V modfn(K);
+void modfn(K);
 K mstate(K);
 
 // loss functions:
 K lossdict(Ktag*,K);
 K lossto(Kloss*,const TensorOptions&,B);
-V lossfn(K);
+void lossfn(K);
 
 // optimization functions:
 K optstate(Ktag*,K);
-V optfn(K);
+void optfn(K);
 
 // global environment
 typedef struct {

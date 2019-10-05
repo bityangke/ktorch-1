@@ -29,7 +29,8 @@ class MaxPoolImpl : public torch::nn::Cloneable<Derived> {
   void reset() override {
     bool z=true;
     for(auto i:*options.stride()) if(i){z=false; break;}
-    //PATCH if(z) *options.stride_ = *options.size_;
+    //PATCH 
+    if(z) *options.stride_ = *options.size_;
     if(options.indices()) indices=torch::nn::Module::register_buffer("indices",indices);
   }
   PoolOptions<D> options;
@@ -96,7 +97,8 @@ class AvgPoolImpl : public torch::nn::Cloneable<Derived> {
   void reset() override {
     bool z=true;
     for(auto i:*options.stride()) if(i){z=false; break;}
-    //PATCH if(z) *options.stride_ = *options.size_;
+    //PATCH
+    if(z) *options.stride_ = *options.size_;
   }
   PoolOptions<D> options;
 };
@@ -268,11 +270,10 @@ class FractionalMaxPoolImpl : public torch::nn::Cloneable<Derived> {
    s=torch::rand({t.size(0),t.size(1),D}, torch::dtype(t.dtype()).device(t.device()));
    bool b=false;
    for(auto r:*options.ratio()) if(r>0) {b=true;break;}
-/* PATCH
+// PATCH
    if(b)
     for(size_t i=0;i<D;++i)
      (*options.outsize_)[i]=t.size(i+2)*(*options.ratio())[i];
-*/
   }
 
   FractionalMaxPoolOptions<D> options;

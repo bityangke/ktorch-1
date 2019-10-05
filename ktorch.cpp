@@ -1250,5 +1250,6 @@ KAPI fns(K x){
  modfn(x);
  lossfn(x);
  optfn(x);
+ modelfn(x);
  return x;
 }

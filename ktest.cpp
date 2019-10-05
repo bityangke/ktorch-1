@@ -1,10 +1,43 @@
 #include "ktorch.h"
 #include "knn.h"
 #include "kloss.h"
+#include <c10/cuda/CUDAMacros.h>
+//#include <c10/cuda/CUDACachingAllocator.h>
 
+// check for cuda via USE_CUDA
+// #ifdef USE_CUDA
+//  ..
+// #endif
+namespace c10 {
+namespace cuda {
+namespace CUDACachingAllocator {
+C10_CUDA_API void emptyCache();
+C10_CUDA_API uint64_t currentMemoryAllocated(int device);
+C10_CUDA_API uint64_t maxMemoryAllocated(int device);
+C10_CUDA_API void     resetMaxMemoryAllocated(int device);
+C10_CUDA_API uint64_t currentMemoryCached(int device);
+C10_CUDA_API uint64_t maxMemoryCached(int device);
+C10_CUDA_API void     resetMaxMemoryCached(int device);
+}}}
+
+/*
+cache      
+memory     e.g. memory() or memory`cuda or memory 0
+maxcache   
+maxmemory  
+emptycache
+resetcache 
+resetmemory
+*/
 KAPI cudamem(K x) {
- //auto n=c10::cuda::CUDACachingAllocator::currentMemoryAllocated(0);
- return (K)0;
+ KTRY
+  // if sym, get device no
+  // if int, verify -1<n< env.cuda
+  size_t n1,n2;
+  std::cerr << "cached & free: " << n1 << ", largest block" << n2 << "\n";
+  auto n=c10::cuda::CUDACachingAllocator::currentMemoryAllocated(x->j);
+  return kj(n);
+ KCATCH("cuda memory");
 }
 
 void errfail() {

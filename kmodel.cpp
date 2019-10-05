@@ -67,10 +67,9 @@ Tensor mloss(Kmodel *m,TensorVector &v,const Tensor& x) {
 Tensor mloss(Kmodel *m,TensorVector &v) { return mloss(m,v,mforward(m,v));}
 
 // -------------------------------------------------------------------------------------------
-// batch - 
-// fit -
-// kbatch -
-// kfit -
+// batch - run model's forward calc, loss, backward calcs and optimizer step in batches
+// train - train model for given batch size and number of passes through the data ("epochs")
+// ktrain - k api fn, expects (model;vector;batch size; optional epochs;optional shuffle flag)
 // -------------------------------------------------------------------------------------------
 Tensor batch(Kmodel *m,TensorVector& v,int64_t w,int64_t n=0);
 Tensor batch(Kmodel *m,TensorVector& v,int64_t w,int64_t n) {
@@ -103,16 +102,40 @@ Tensor batch(Kmodel *m,TensorVector& v,int64_t w,int64_t n) {
  return r;                             // return losses
 }
 
-Tensor fit(Kmodel *m,TensorVector& v,int64_t w,int64_t e,B s) {
- TensorVector r;
+Tensor train(Kmodel *m,TensorVector& v,int64_t w,int64_t e,B s) {
  auto n=fullsize(v);
- for(size_t i=0; i<e; ++i) {
+ if(e) {
+  TensorVector r;
+  for(size_t i=0; i<e; ++i) {
+   if(s) shuffle_(v);
+   r.emplace_back(batch(m,v,w,n));
+  }
+  return torch::stack(r);
+ } else {
   if(s) shuffle_(v);
-  r.emplace_back(batch(m,v,w,n));
+  return batch(m,v,w,n);
  }
- return torch::stack(r); //.reshape({e,-1});
 }
 
+KAPI ktrain(K x) {
+ KTRY
+  Kmodel *m; TensorVector *v; B s=true; int64_t w,e=0;
+  TORCH_CHECK(!x->t, "train: not implemented for ",kname(x->t));
+  auto a=x->n - xbool(x,x->n-1,s);
+  if((m=xmodel(x,0)) && (v=xvec(x,1)) && xint64(x,2,w) && (a==3 || (a==4 && xint64(x,3,e)))) {
+   TORCH_CHECK(w>0,  "train: batch size must be positive");
+   TORCH_CHECK(e>-1, "train: number of passes cannot be negative");
+   TORCH_CHECK(v->size(), "train: vector of inputs is empty");
+   return kget(train(m,*v,w,e,s));
+  } else {
+   return KERR("train: unrecognized arg(s)");
+  }
+ KCATCH("train");
+}
+
+// -------------------------------------------------------------------------------------------
+// eval
+// -------------------------------------------------------------------------------------------
 Tensor evaluate(Kmodel *m,TensorVector& v,int64_t w) {
  torch::NoGradGuard g;
  B b=m->q->is_training();
@@ -128,30 +151,6 @@ Tensor evaluate(Kmodel *m,TensorVector& v,int64_t w) {
  return torch::cat(r);
 }
 
-KAPI kbatch(K x) {
- KTRY
-  Kmodel *m; TensorVector *v; int64_t w;
-  if((m=xmodel(x,0)) && (v=xvec(x,1)) && xint64(x,2,w) && x->n==3) {
-   TORCH_CHECK(v->size(), "model: vector of inputs is empty");
-   return kget(batch(m,*v,w));
-  } else {
-   return KERR("batch: unrecognized arg(s)");
-  }
- KCATCH("batch");
-}
-
-KAPI kfit(K x) {
- KTRY
-  Kmodel *m; TensorVector *v; B s=true; int64_t w,e;
-  if((m=xmodel(x,0)) && (v=xvec(x,1)) && xint64(x,2,w) && xint64(x,3,e) &&
-      (x->n==4 || (x->n==5 && xbool(x,4,s)))) {
-   TORCH_CHECK(v->size(), "model: vector of inputs is empty");
-   return kget(fit(m,*v,w,e,s));
-  } else {
-   return KERR("fit: unrecognized arg(s)");
-  }
- KCATCH("fit");
-}
 
 Sequential& xseq(Ktag *g) {
  switch(g->a) {
@@ -183,4 +182,12 @@ KAPI kevaluate(K x) {
    return KERR("evaluate: unrecognized arg(s)");
   }
  KCATCH("evaluate");
+}
+
+// -------------------------------------------------------------------------------------------
+// add model api functions to library dictionary
+// -------------------------------------------------------------------------------------------
+void modelfn(K x) {
+ fn(x, "model",  KFN(model),1);
+ fn(x, "train",  KFN(ktrain),1);
 }

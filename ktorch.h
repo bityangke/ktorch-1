@@ -430,6 +430,9 @@ void lossfn(K);
 K optstate(Ktag*,K);
 void optfn(K);
 
+// model functions:
+void modelfn(K);
+
 // global environment
 typedef struct {
  I cuda;             // number of CUDA devices

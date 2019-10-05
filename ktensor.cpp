@@ -745,14 +745,12 @@ KAPI backward(K x) {
   } else if(xten(x,0,t)) {
    B a=false,b=false; Tensor g; J n=x->n - xbacksym(x,x->n-1,a,b);
    if(n==1) {
-     //PATCH t.backward(torch::nullopt,a,b); ok=true;
      t.backward({},a,b); ok=true;
    } else if(n==2) {
     if(!xten(x,1,g)) g=kput(x,1).to(t.device());
     if(!g.dim() && t.dim()) g.resize_as_(t).fill_(g[0]);
     t.backward(g,a,b); ok=true;
    } else if(n==1) {
-     //PATCH t.backward(torch::nullopt,a,b); ok=true;
      t.backward({},a,b); ok=true;
    }
   }

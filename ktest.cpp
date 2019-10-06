@@ -33,8 +33,6 @@ KAPI cudamem(K x) {
  KTRY
   // if sym, get device no
   // if int, verify -1<n< env.cuda
-  size_t n1,n2;
-  std::cerr << "cached & free: " << n1 << ", largest block" << n2 << "\n";
   auto n=c10::cuda::CUDACachingAllocator::currentMemoryAllocated(x->j);
   return kj(n);
  KCATCH("cuda memory");

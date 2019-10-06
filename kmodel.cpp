@@ -136,21 +136,46 @@ KAPI ktrain(K x) {
 // -------------------------------------------------------------------------------------------
 // eval
 // -------------------------------------------------------------------------------------------
-Tensor evaluate(Kmodel *m,TensorVector& v,int64_t w) {
+static K eval(Kmodel *m,TensorVector& v,int64_t w,int64_t a) {
  torch::NoGradGuard g;
- B b=m->q->is_training();
+ B b=m->q->is_training(); Tensor x;
  if(b) m->q->train(false);
- auto n=maxsize(v); TensorVector r;
- //auto s=n%w ? n/w + 1 : n/w;
- for(int64_t i=0; i<n; i+=w) {
-  subset(v,0,i,w,n);
-  r.emplace_back(mforward(m,v));
+ auto n=maxsize(v);
+ if(w) {
+  TensorVector r;
+  for(int64_t i=0; i<n; i+=w) {
+   subset(v,0,i,w,n);
+   r.emplace_back(mforward(m,v));
+  }
+  subset(v,0,0,n,n);
+  x=torch::cat(r);
+ } else {
+  x=mforward(m,v);
  }
- subset(v,0,0,n,n);
  if(b) m->q->train(true);
- return torch::cat(r);
+ auto z=mloss(m,v,x).item<double>();
+ switch(a) {
+  case 1: return knk(2,kf(z),kget(x));
+  case 2: return knk(2,kf(z),kget(x.argmax(1)));
+  case 3: return knk(2,kf(z),kf(100.0*torch::sum(v[v.size()-1].eq(x.argmax(1))).item<double>()/n));
+  default: AT_ERROR("Unrecognized evaluation mode: ",a);
+ }
 }
 
+static K keval(K x,int64_t a,cS s) {
+ KTRY
+  Kmodel *m; TensorVector *v; int64_t w=0;
+  TORCH_CHECK((m=xmodel(x,0)) && (v=xvec(x,1)) && (x->n==2 || (x->n==3 && xint64(x,2,w))), 
+              s, ": unrecognized arg(s), expecting (model;vector of inputs;optional batch size)");
+  TORCH_CHECK(v->size(), s, ": vector of inputs is empty");
+  TORCH_CHECK(w>-1, s, ": batch size cannot be negative");
+  return eval(m,*v,w,a);
+ KCATCH(s);
+}
+
+KAPI evaluate(K x) {return keval(x, 1, "evaluate");}
+KAPI evalmax (K x) {return keval(x, 2, "evalmax");}
+KAPI evalpct (K x) {return keval(x, 3, "evalpct");}
 
 Sequential& xseq(Ktag *g) {
  switch(g->a) {
@@ -172,22 +197,13 @@ KAPI training(K x) {
  KCATCH("training");
 }
 
-KAPI kevaluate(K x) {
- KTRY
-  Kmodel *m; TensorVector *v; int64_t w;
-  if((m=xmodel(x,0)) && (v=xvec(x,1)) && xint64(x,2,w)) {
-   TORCH_CHECK(v->size(), "evaluate: vector of inputs is empty");
-   return kget(evaluate(m,*v,w));
-  } else {
-   return KERR("evaluate: unrecognized arg(s)");
-  }
- KCATCH("evaluate");
-}
-
 // -------------------------------------------------------------------------------------------
 // add model api functions to library dictionary
 // -------------------------------------------------------------------------------------------
 void modelfn(K x) {
- fn(x, "model",  KFN(model),1);
- fn(x, "train",  KFN(ktrain),1);
+ fn(x, "model",    KFN(model),    1);
+ fn(x, "train",    KFN(ktrain),   1);
+ fn(x, "evaluate", KFN(evaluate), 1);
+ fn(x, "evalmax",  KFN(evalmax),  1);
+ fn(x, "evalpct",  KFN(evalpct),  1);
 }

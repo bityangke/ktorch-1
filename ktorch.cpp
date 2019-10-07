@@ -43,20 +43,20 @@ B xhelp(K x,S &s) {
 // mapattr - make attr enum to symbol
 // ------------------------------------------------------------------------------------------
 B match(const Scalar &x,const Scalar &y) {
- if(x.isIntegral()) {
-  if(y.isIntegral())
+ if(x.isIntegral(false)) {
+  if(y.isIntegral(false))
    return x.toLong() == y.toLong();
   else if(y.isFloatingPoint())
    return x.toDouble() == y.toDouble();
  } else if(x.isFloatingPoint()) {
-  if(y.isFloatingPoint() || y.isIntegral())
+  if(y.isFloatingPoint() || y.isIntegral(false))
    return x.toDouble() == y.toDouble();
  }
  AT_ERROR("Unexpected scalar type(s), neither integral or floating point, cannot compare");
 }
 
 K kscalar(const Scalar &s) {
- if(s.isIntegral())
+ if(s.isIntegral(false))
   return kj(s.toLong());
  else if(s.isFloatingPoint())
   return kf(s.toDouble());

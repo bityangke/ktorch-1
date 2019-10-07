@@ -268,13 +268,13 @@ static void tensoropt(K x,Tensormode m,Tensor &r) {
   case Tensormode::arange:
    b=!o.has_dtype();
    if(nx==2 && xnum(x,1,z)) {
-    if(b && z.isIntegral()) o=o.dtype(torch::kLong);
+    if(b && z.isIntegral(false)) o=o.dtype(torch::kLong);
     r=torch::arange(z,o);
    } else if(nx==3 && xnum(x,1,a) && xnum(x,2,z)) {
-    if(b && a.isIntegral() && z.isIntegral()) o=o.dtype(torch::kLong);
+    if(b && a.isIntegral(false) && z.isIntegral(false)) o=o.dtype(torch::kLong);
     r=torch::arange(a,z,o);
    } else if(nx==4 && xnum(x,1,a) && xnum(x,2,z) && xnum(x,3,n)) {
-    if(b && a.isIntegral() && z.isIntegral() && n.isIntegral()) o=o.dtype(torch::kLong);
+    if(b && a.isIntegral(false) && z.isIntegral(false) && n.isIntegral(false)) o=o.dtype(torch::kLong);
     r=torch::arange(a,z,n,o);
    }
    break;

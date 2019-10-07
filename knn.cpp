@@ -582,7 +582,7 @@ static void arg1(Cast c,cS s,K x,J i,Scalar& v) { // check argument(s) for singl
    pnum(p,v);
   else
    AT_ERROR("Unrecognized option: ",p.k,", ",s," module expects single scalar option: ",mset(k));
- if(c==Cast::glu && !v.isIntegral())
+ if(c==Cast::glu && !v.isIntegral(false))
   AT_ERROR("Dimension for gated linear unit must be given as an integer");
 }
 
@@ -663,7 +663,7 @@ static void arg2(B r,Cast c,cS s,K x,J i,B &b,Scalar& v1,Scalar& v2) {
   else
    AT_ERROR("Unrecognized option: ",p.k,", ",s," expects options: ",mset(k1),",",mset(k2));
  }
- if(c==Cast::prelu && !v1.isIntegral())
+ if(c==Cast::prelu && !v1.isIntegral(false))
   AT_ERROR("Parameterized ReLU expects number of learnable parameters to be integer, either 1 or number of inputs");
 }
 

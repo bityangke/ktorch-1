@@ -51,11 +51,6 @@ Tensor mforward(Kmodel *m,TensorVector& v) {
 }
 
 Tensor mloss(Kmodel *m,TensorVector &v,const Tensor& x) {
-/*
- std::cerr<< x[0] << "\n";
- std::cerr<< x[63] << "\n";
- TORCH_CHECK(false,"stop");
-*/
  if(v.size()==2)
   return m->l->forward(x,v[1]);
  else if(v.size()==3)
@@ -81,7 +76,7 @@ Tensor batch(Kmodel *m,TensorVector& v,int64_t w,int64_t n) {
  if(w>n) w=n;                          // reduce batch size if exceeds total size
  auto s=n%w ? n/w + 1 : n/w;           // no. of subsets to process
  auto r=torch::empty(s);               // tensor for batch losses
- auto* p=r.data<float>();              // ptr for quicker assignment
+ auto* p=r.data_ptr<float>();          // ptr for quicker assignment
 
  auto loss=[&]() {                     // define closure for
   m->o->zero_grad();                   // resetting gradients
@@ -91,8 +86,8 @@ Tensor batch(Kmodel *m,TensorVector& v,int64_t w,int64_t n) {
  };
 
  for(int64_t i=0,j=0; i<n; i+=w,++j) {
-  //std::cerr << "subset " << j+1 << ", from row " << i << " using " << w << " row(s)\n";
   subset(v,0,i,w,n);                   // narrow tensors to current batch
+  //std::cerr << "subset " << j+1 << ", from row " << i << " using " << w << " row(s)\n";
   if(o)
    p[j]=loss().item<float>(), o->step(); // single loss evaluation
   else
@@ -192,7 +187,6 @@ KAPI training(K x) {
   TORCH_CHECK((g=xtag(x)) || ((g=xtag(x,0)) && x->n==2 && xbool(x,1,b)),
               "training: unrecognized arg(s), expects sequential module or model pointer and optional flag");
   auto& q=xseq(g);
-  std::cerr << "seq ref count: " << q.ptr().use_count() << "\n";
   return (x->n==2) ? q->train(b),(K)0 : kb(q->is_training());
  KCATCH("training");
 }

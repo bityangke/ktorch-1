@@ -277,6 +277,28 @@ static void rnn(B a,K x,const M* m) {
 }
 
 // ----------------------------------------------------------------------------------
+//  maxpool
+// ----------------------------------------------------------------------------------
+template<size_t D,typename M> static M maxpool(K x,J i) {
+ B k=false; Pairs p; J n=xargc(x,i,p);
+ torch::nn::MaxPoolOptions<D> o; Expand<D> a(0);
+ if(!((!n && p.n) || (k=(n==1 && XDIM(x,i,D,a)))))
+  AT_ERROR("Unrecognized arguments for maxpool",D,"d module");
+ if(k) o.size(a);
+ while(xpair(p))
+  switch(mset(p.k)) {
+   case Setting::size:      PDIM(p,D,a); o.size(a); k=true; break;
+   case Setting::stride:    PDIM(p,D,a); o.stride(a); break;
+   case Setting::pad:       PDIM(p,D,a); o.pad(a); break;
+   case Setting::dilate:    PDIM(p,D,a); o.dilate(a); break;
+   case Setting::ceiling:   o.ceiling(pbool(p)); break;
+   default: AT_ERROR("Unrecognized max pooling option: ",p.k); break;
+  }
+ TORCH_CHECK(k,"kernel size must be specified for maxpool",D,"d module");
+ return o;
+}
+
+// ----------------------------------------------------------------------------------
 // pooling layers:
 // ----------------------------------------------------------------------------------
 // pool - define/retrieve max & avg pooling options for 1,2,3d layers

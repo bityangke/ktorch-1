@@ -149,7 +149,6 @@ template<size_t D> Expand<D> expand(const Pairs& p,Cast c) {
 // conv - create 1-3 dimensional convolution/set dictionary given module
 // drop - create dropout module given probability/set dictionary given module
 // embed - create embedding module given options/set dictionary of options given module
-// linear - create linear module w'size,bias options/set dict of options from module
 // rnn - create rnn/gru/lstm module given options/set dictionary of options from module
 // --------------------------------------------------------------------------------------
 torch::nn::BatchNorm bnorm(K x,J k) {
@@ -264,22 +263,29 @@ static void embed(K x,const torch::nn::EmbeddingImpl* m) {
  OPTION(x, cols, kj(o.dimension()));
 }
 
-torch::nn::Linear linear(K x,J k) {
- B b=true; Pairs p; J i=-1,j=-1,n=xargc(x,k,p);
- if(!((n==0 && p.n) || (xlong(x,k,i) && (n==1 || (xlong(x,k+1,j) && (n==2 || (n==3 && xbool(x,k+2,b)))))))) {
-  AT_ERROR("Unrecognized arguments for linear module");
+// --------------------------------------------------------------------------------------
+// linear - parse/retrieve args, invoke functional form
+// --------------------------------------------------------------------------------------
+static torch::nn::LinearOptions linear(K x,J i,Cast c) {
+ B b=true; int64_t in=nj,out=nj; Pairs p; J n=xargc(x,i,p);
+ for(J j=0;j<n;++j) {
+   switch(j) {
+    case 0: in=int64(x,i,c,Setting::in);  break;
+    case 1: out=int64(x,i,c,Setting::out); break;
+    case 2: b=mbool(x,i,c,Setting::bias); break;
+    default: AT_ERROR(msym(c),": up to 3 positional arguments expected, ",n," given");
+  }
  }
  while(xpair(p))
   switch(mset(p.k)) {
-   case Setting::in:   i=plong(p); break;
-   case Setting::out:  j=plong(p); break;
-   case Setting::bias: b=pbool(p); break;
-   default: AT_ERROR("Linear option: ",p.k," unrecognized, expected one of in,out,bias");
+   case Setting::in:   in=int64(p,c); break;
+   case Setting::out:  out=int64(p,c); break;
+   case Setting::bias: b=mbool(p,c); break;
+   default: AT_ERROR("Unrecognized linear option: ",p.k); break;
   }
- if(i<0 || j<0) {
-  AT_ERROR("Linear input & output size must be non-negative, in=",i,", out=",j);
- }
- return torch::nn::Linear(torch::nn::LinearOptions(i,j).with_bias(b));
+ TORCH_CHECK(in>0,  msym(c), ": positive input size required");
+ TORCH_CHECK(out>0, msym(c), ": positive output size required");
+ return torch::nn::LinearOptions(in,out).with_bias(b);
 }
 
 static void linear(B a,K x,const torch::nn::LinearImpl *m) {
@@ -287,6 +293,19 @@ static void linear(B a,K x,const torch::nn::LinearImpl *m) {
  OPTION(x, in,  kj(o.in()));
  OPTION(x, out, kj(o.out()));
  if(a || (o.with_bias() != d.with_bias())) OPTION(x, bias, kb(o.with_bias()));
+}
+
+KAPI klinear(K x) {
+ KTRY
+  TORCH_CHECK(!x->t, "linear not implemented for ",kname(x->t));
+  TORCH_CHECK(x->n==2 || x->n==3, "linear requires 2-3 args, (input; weight; optional bias)");
+  Tensor r, *a=xten(x,0), *w=xten(x,1), *b=xten(x,2);
+  if(x->n==2)
+   r=torch::linear(a ? *a : kput(x,0), w ? *w : kput(x,1));
+  else
+   r=torch::linear(a ? *a : kput(x,0), w ? *w : kput(x,1), b ? *b : kput(x,2));
+  return a||w||b ? kten(r) : kget(r);
+ KCATCH("linear");
 }
 
 template<typename M,typename O>
@@ -941,7 +960,7 @@ void mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) {
  switch(c) {
   case Cast::batchnorm:    PUSH(q,n,bnorm(x,i)); break;
   case Cast::embed:        PUSH(q,n,embed(x,i)); break;
-  case Cast::linear:       PUSH(q,n,linear(x,i)); break;
+  case Cast::linear:       PUSH(q,n,torch::nn::Linear(linear(x,i,c))); break;
 
   case Cast::dropout:      PUSH(q,n,torch::nn::Dropout(drop(s,x,i))); break;
   case Cast::fdropout:     PUSH(q,n,torch::nn::FeatureDropout(drop(s,x,i))); break;
@@ -1300,6 +1319,7 @@ void modfn(K x) {
  fn(x, "hardshrink", KFN(khardshrink), 1);
  fn(x, "hardtanh",   KFN(khardtanh), 1);
  fn(x, "leakyrelu",  KFN(kleakyrelu), 1);
+ fn(x, "linear",     KFN(klinear), 1);
  fn(x, "logsigmoid", KFN(klogsigmoid), 1);
  fn(x, "logsoftmax", KFN(klogsoftmax), 1);
  fn(x, "maxpool1d",  KFN(maxpool1d), 1);

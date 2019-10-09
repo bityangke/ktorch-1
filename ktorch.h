@@ -152,16 +152,16 @@ enum class Tensormode:char {   // tensor creation modes
 
 enum class Setting:char {
  undefined,
- affine,     alpha,      amsgrad,    batchfirst, beta,       beta1,      beta2,
- bi,         bias,       blank,      ceiling,    centered,   changetol,  cols,
- countpad,   dampening,  decay,      dilate,     dim,        drop,       end,
- eps,        eval,       fn,         full,       gradtol,    groups,     hidden,
- history,    ignore,     in,         indices,    init,       inplace,    iter,
- lambda,     layers,     log,        lower,      lr,         lrdecay,    margin,
- max,        min,        momentum,   nesterov,   out,        outpad,     outsize,
- p,          pad,        power,      ratio,      reduce,     rows,       size,
- slope,      start,      stride,     swap,       threshold,  track,      train,
- transpose,  type,       upper,      value,      weight,     zeroinf
+ affine,   alpha,     amsgrad, batchfirst, beta,     beta1,     beta2,  
+ bi,       bias,      blank,   ceiling,    centered, changetol, cols,   
+ countpad, dampening, decay,   dilate,     dim,      divisor,   drop,   
+ end,      eps,       eval,    fn,         full,     gradtol,   groups, 
+ hidden,   history,   ignore,  in,         indices,  init,      inplace,
+ iter,     lambda,    layers,  log,        lower,    lr,        lrdecay,
+ margin,   max,       min,     momentum,   nesterov, out,       outpad, 
+ outsize,  p,         pad,     power,      ratio,    reduce,    rows,   
+ size,     slope,     start,   stride,     swap,     threshold, track,  
+ train,    transpose, type,    upper,      value,    weight,    zeroinf
 };
 
 enum class State:char {
@@ -575,7 +575,7 @@ typedef struct {
   std::make_tuple(cs("threshold"),       Cast::threshold)
  }};
 
- std::array<std::tuple<S,Setting>,45> mset = {{      // module option sym -> enum
+ std::array<std::tuple<S,Setting>,46> mset = {{      // module option sym -> enum
   std::make_tuple(cs("affine"),     Setting::affine),
   std::make_tuple(cs("alpha"),      Setting::alpha),
   std::make_tuple(cs("batchfirst"), Setting::batchfirst),
@@ -586,6 +586,7 @@ typedef struct {
   std::make_tuple(cs("cols"),       Setting::cols),
   std::make_tuple(cs("countpad"),   Setting::countpad),
   std::make_tuple(cs("dilate"),     Setting::dilate),
+  std::make_tuple(cs("divisor"),    Setting::divisor),
   std::make_tuple(cs("dim"),        Setting::dim),
   std::make_tuple(cs("drop"),       Setting::drop),
   std::make_tuple(cs("end"),        Setting::end),

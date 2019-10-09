@@ -94,6 +94,52 @@ static K mvals(B b,J n) {
  return x;
 }
  
+// ----------------------------------------------------------------------------------------------------
+// mbool - check positional args or name-value pairs for boolean, else error w'module & option
+// int64 - check positional args or name-value pairs for long int, else error w'module & option
+// expand - check positional or name-value args for long(s), return expanding array,  else error
+// ----------------------------------------------------------------------------------------------------
+static B mbool(K x,J i,Cast c,Setting s) {
+ B b;
+ TORCH_CHECK(xbool(x,i,b), msym(c)," ",mset(s),": expected boolean scalar, given ",kname(kK(x)[i]->t));
+ return b;
+}
+
+static B mbool(const Pairs& p,Cast c) {
+ TORCH_CHECK(p.t==-KB, msym(c)," ",p.k,": expected boolean scalar, given ",kname(p.t));
+ return p.b;
+}
+
+static int64_t int64(K x,J i,Cast c,Setting s) {
+ int64_t n;
+ TORCH_CHECK(xint64(x,i,n), msym(c)," ",mset(s),": expected long scalar, given ",kname(kK(x)[i]->t));
+ return n;
+}
+
+static int64_t int64(const Pairs& p,Cast c) {
+ TORCH_CHECK(p.t==-KJ, msym(c)," ",p.k,": expected long scalar, given ",kname(p.t));
+ return p.j;
+}
+
+template<size_t D> Expand<D> expand(K a,J i,Cast c,Setting s) {
+ K x=kK(a)[i];
+ TORCH_CHECK(x->t==-KJ || x->t==KJ, msym(c)," ",mset(s),": expected long(s), given ",kname(x->t));
+ TORCH_CHECK(x->t==-KJ || x->n==D,  msym(c)," ",mset(s),": expected scalar or ",D,"-element input, given ",x->n,"-element list");
+ if(x->t==-KJ)
+  return Expand<D>(x->j);
+ else
+  return Expand<D>(IntArrayRef((int64_t*)kJ(x),x->n));
+}
+
+template<size_t D> Expand<D> expand(const Pairs& p,Cast c) {
+ TORCH_CHECK(p.t==-KJ || p.t==KJ,   msym(c)," ",p.k,": expected long(s), given ",kname(p.t));
+ TORCH_CHECK(p.t==-KJ || p.v->n==D, msym(c)," ",p.k,": expected scalar or ",D,"-element input, given ",p.v->n,"-element list");
+ if(p.t==-KJ)
+  return Expand<D>(p.j);
+ else
+  return Expand<D>(IntArrayRef((int64_t*)kJ(p.v),p.v->n));
+}
+
 // --------------------------------------------------------------------------------------
 // bnorm - create batchnorm module given options/set dictionary of options given module
 // conv - create 1-3 dimensional convolution/set dictionary given module
@@ -277,76 +323,128 @@ static void rnn(B a,K x,const M* m) {
 }
 
 // ----------------------------------------------------------------------------------
-//  maxpool
+//  maxpool - process args, return dictionary of options, call functional form
 // ----------------------------------------------------------------------------------
-template<size_t D,typename M> static M maxpool(K x,J i) {
- B k=false; Pairs p; J n=xargc(x,i,p);
- torch::nn::MaxPoolOptions<D> o; Expand<D> a(0);
- if(!((!n && p.n) || (k=(n==1 && XDIM(x,i,D,a)))))
-  AT_ERROR("Unrecognized arguments for maxpool",D,"d module");
- if(k) o.size(a);
+template<size_t D> torch::nn::MaxPoolOptions<D> maxpool(K x,J i,Cast c) {
+ torch::nn::MaxPoolOptions<D> o(0);
+ B sz=false,st=false; Pairs p; J n=xargc(x,i,p);
+ for(J j=0;j<n;++j) {
+   switch(j) {
+    case 0: o.kernel_size(expand<D>(x,i+j,c,Setting::size));    sz=true; break;
+    case 1: o.stride     (expand<D>(x,i+j,c,Setting::stride));  st=true; break;
+    case 2: o.padding    (expand<D>(x,i+j,c,Setting::pad));     break;
+    case 3: o.dilation   (expand<D>(x,i+j,c,Setting::dilate));  break;
+    case 4: o.ceil_mode  (mbool    (x,i+j,c,Setting::ceiling)); break;
+    default: AT_ERROR(msym(c),": up to 5 positional arguments expected, ",n," given");
+  }
+ }
  while(xpair(p))
   switch(mset(p.k)) {
-   case Setting::size:      PDIM(p,D,a); o.size(a); k=true; break;
-   case Setting::stride:    PDIM(p,D,a); o.stride(a); break;
-   case Setting::pad:       PDIM(p,D,a); o.pad(a); break;
-   case Setting::dilate:    PDIM(p,D,a); o.dilate(a); break;
-   case Setting::ceiling:   o.ceiling(pbool(p)); break;
+   case Setting::size:    o.kernel_size(expand<D>(p,c)); sz=true; break;
+   case Setting::stride:  o.stride     (expand<D>(p,c)); st=true; break;
+   case Setting::pad:     o.padding    (expand<D>(p,c)); break;
+   case Setting::dilate:  o.dilation   (expand<D>(p,c)); break;
+   case Setting::ceiling: o.ceil_mode  (mbool(p,c)); break;
    default: AT_ERROR("Unrecognized max pooling option: ",p.k); break;
   }
- TORCH_CHECK(k,"kernel size must be specified for maxpool",D,"d module");
+ TORCH_CHECK(sz, msym(c),": no kernel size given");
+ if(!st) o.stride(o.kernel_size());
  return o;
 }
+
+template<size_t D,typename M> static void maxpool(B a,K x,const M* m) {
+ torch::nn::MaxPoolOptions<D> o=m->options, d(o.kernel_size());
+ OPTION(x, size, KEX(o.kernel_size()));
+ if( a || *o.stride()   != *d.stride())   OPTION(x, stride,  KEX(o.stride()));
+ if( a || *o.padding()  != *d.padding())  OPTION(x, pad,     KEX(o.padding()));
+ if( a || *o.dilation() != *d.dilation()) OPTION(x, dilate,  KEX(o.dilation()));
+ if( a || o.ceil_mode() != d.ceil_mode()) OPTION(x, ceiling, kb(o.ceil_mode()));
+}
+
+static K maxpool(K x,Cast c) {
+ KTRY
+  TORCH_CHECK(!x->t, msym(c)," not implemented for ",kname(x->t));
+  Tensor r, *t=xten(x,0);
+  switch(c) {
+   case Cast::maxpool1d: r=torch::nn::functional::max_pool1d(t ? *t : kput(x,0), maxpool<1>(x,1,c)); break;
+   case Cast::maxpool2d: r=torch::nn::functional::max_pool2d(t ? *t : kput(x,0), maxpool<2>(x,1,c)); break;
+   case Cast::maxpool3d: r=torch::nn::functional::max_pool3d(t ? *t : kput(x,0), maxpool<3>(x,1,c)); break;
+   default: AT_ERROR("Unrecognized max pooling function");
+  }
+  return t ? kten(r) : kget(r);
+ KCATCH("maxpool");
+}
+
+KAPI maxpool1d(K x) {return maxpool(x,Cast::maxpool1d);}
+KAPI maxpool2d(K x) {return maxpool(x,Cast::maxpool2d);}
+KAPI maxpool3d(K x) {return maxpool(x,Cast::maxpool3d);}
+
+// ----------------------------------------------------------------------------------
+//  avgpool - process args, return dictionary of options, call functional form
+// ----------------------------------------------------------------------------------
+template<size_t D> torch::nn::AvgPoolOptions<D> avgpool(K x,J i,Cast c) {
+ torch::nn::AvgPoolOptions<D> o(0);
+ B sz=false,st=false; Pairs p; J n=xargc(x,i,p);
+ for(J j=0;j<n;++j) {
+   switch(j) {
+    case 0: o.kernel_size      (expand<D>(x,i+j,c,Setting::size));     sz=true; break;
+    case 1: o.stride           (expand<D>(x,i+j,c,Setting::stride));   st=true; break;
+    case 2: o.padding          (expand<D>(x,i+j,c,Setting::pad));      break;
+    case 3: o.ceil_mode        (mbool     (x,i+j,c,Setting::ceiling));  break;
+    case 4: o.count_include_pad(mbool     (x,i+j,c,Setting::countpad)); break;
+    case 5: o.divisor_override (int64     (x,i+j,c,Setting::divisor));  break;
+    default: AT_ERROR(msym(c),": up to 6 positional arguments expected, ",n," given");
+  }
+ }
+ while(xpair(p))
+  switch(mset(p.k)) {
+   case Setting::size:    o.kernel_size (expand<D>(p,c)); sz=true; break;
+   case Setting::stride:  o.stride      (expand<D>(p,c)); st=true; break;
+   case Setting::pad:     o.padding     (expand<D>(p,c)); break;
+   case Setting::ceiling: o.ceil_mode        (mbool(p,c)); break;
+   case Setting::countpad:o.count_include_pad(mbool(p,c)); break;
+   case Setting::divisor: o.divisor_override (int64(p,c)); break;
+   default: AT_ERROR("Unrecognized avg pooling option: ",p.k); break;
+  }
+ TORCH_CHECK(sz, msym(c),": no kernel size given");
+ if(!st) o.stride(o.kernel_size());
+ return o;
+}
+
+template<size_t D,typename M> static void avgpool(B a,K x,const M* m) {
+ torch::nn::AvgPoolOptions<D> o=m->options, d(o.kernel_size());
+ OPTION(x, size, KEX(o.kernel_size()));
+ if( a || *o.stride()           != *d.stride())           OPTION(x, stride,   KEX(o.stride()));
+ if( a || *o.padding()          != *d.padding())          OPTION(x, pad,      KEX(o.padding()));
+ if( a || o.ceil_mode()         != d.ceil_mode())         OPTION(x, ceiling,  kb(o.ceil_mode()));
+ if( a || o.count_include_pad() != d.count_include_pad()) OPTION(x, countpad, kb(o.count_include_pad()));
+}
+
+static K avgpool(K x,Cast c) {
+ KTRY
+  TORCH_CHECK(!x->t, msym(c)," not implemented for ",kname(x->t));
+  Tensor r, *t=xten(x,0);
+  switch(c) {
+   case Cast::avgpool1d: r=torch::nn::functional::avg_pool1d(t ? *t : kput(x,0), avgpool<1>(x,1,c)); break;
+   case Cast::avgpool2d: r=torch::nn::functional::avg_pool2d(t ? *t : kput(x,0), avgpool<2>(x,1,c)); break;
+   case Cast::avgpool3d: r=torch::nn::functional::avg_pool3d(t ? *t : kput(x,0), avgpool<3>(x,1,c)); break;
+   default: AT_ERROR("Unrecognized avg pooling function");
+  }
+  return t ? kten(r) : kget(r);
+ KCATCH("avgpool");
+}
+
+KAPI avgpool1d(K x) {return avgpool(x,Cast::avgpool1d);}
+KAPI avgpool2d(K x) {return avgpool(x,Cast::avgpool2d);}
+KAPI avgpool3d(K x) {return avgpool(x,Cast::avgpool3d);}
 
 // ----------------------------------------------------------------------------------
 // pooling layers:
 // ----------------------------------------------------------------------------------
-// pool - define/retrieve max & avg pooling options for 1,2,3d layers
 // apool - define/retrieve pooling options for adaptive max & avg pooling, 1,2,3d
 // fpool - fractional max pooling for 2 & 3d layers
 // lppool - power-average pooling
 // ----------------------------------------------------------------------------------
-template<size_t D,typename M>
-static M pool(K x,J i,B b) { // x:arg(s), i:offset into x, b:true/false for max/avg
- B k=false; Pairs p; J n=xargc(x,i,p);
- PoolOptions<D> o; Expand<D> a(0); cS s=b ? "max" : "avg";
- if(!((!n && p.n) || (k=(n==1 && XDIM(x,i,D,a)))))
-  AT_ERROR("Unrecognized arguments for ",s,"pool",D,"d module");
- if(k) o.size(a);
- while(xpair(p))
-  switch(mset(p.k)) {
-   case Setting::size:      PDIM(p,D,a); o.size(a); k=true; break;
-   case Setting::stride:    PDIM(p,D,a); o.stride(a); break;
-   case Setting::pad:       PDIM(p,D,a); o.pad(a); break;
-   case Setting::dilate:    
-    if(!b) AT_ERROR("Dilation not a valid option for average pooling");
-    PDIM(p,D,a); o.dilate(a); break;
-   case Setting::indices:   
-    if(!b) AT_ERROR("No option for indices with average pooling");
-    o.indices(pbool(p)); break;
-   case Setting::ceiling:   o.ceiling(pbool(p)); break;
-   case Setting::countpad:
-    if(b) AT_ERROR("The option to count padding not available for max pooling");
-    o.countpad(pbool(p)); break;
-   default: AT_ERROR("Unrecognized ",s," pool option: ",p.k); break;
-  }
- if(!k) 
-  AT_ERROR("kernel size must be specified for ",s," pool",D,"d module");
- return M(o);
-}
-
-template<size_t D,typename M>
-static void pool(B a,B b,K x,const M* m) {
- PoolOptions<D> o=m->options, d(o.size());
- OPTION(x, size, KEX(o.size()));
- if( a       || *o.stride() != *d.stride()) OPTION(x, stride,  KEX(o.stride()));
- if( a       || *o.pad()    != *d.pad())    OPTION(x, pad,     KEX(o.pad()));
- if((a && b) || *o.dilate() != *d.dilate()) OPTION(x, dilate,  KEX(o.dilate()));
- if((a && b) || o.indices() != d.indices()) OPTION(x, indices, kb(o.indices()));
- if( a       || o.ceiling() != d.ceiling()) OPTION(x, ceiling, kb(o.ceiling()));
- if((a && !b)|| o.countpad()!= d.countpad())OPTION(x, countpad, kb(o.countpad()));
-}
-
 template<size_t D,typename M>
 static M apool(K x,J i,B b) { //x:arg(s), i:offset, b:true/false for max/avg
  B k=false; Pairs p; J n=xargc(x,i,p);
@@ -831,13 +929,13 @@ void mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) {
   case Cast::conv2d:       PUSH(q,n,(conv<2,torch::nn::Conv2d>(x,i))); break;
   case Cast::conv3d:       PUSH(q,n,(conv<3,torch::nn::Conv3d>(x,i))); break;
 
-  case Cast::maxpool1d:    PUSH(q,n,(pool<1,MaxPool1d>(x,i,true))); break;
-  case Cast::maxpool2d:    PUSH(q,n,(pool<2,MaxPool2d>(x,i,true))); break;
-  case Cast::maxpool3d:    PUSH(q,n,(pool<3,MaxPool3d>(x,i,true))); break;
+  case Cast::maxpool1d:    PUSH(q,n,torch::nn::MaxPool1d(maxpool<1>(x,i,c))); break;
+  case Cast::maxpool2d:    PUSH(q,n,torch::nn::MaxPool2d(maxpool<2>(x,i,c))); break;
+  case Cast::maxpool3d:    PUSH(q,n,torch::nn::MaxPool3d(maxpool<3>(x,i,c))); break;
 
-  case Cast::avgpool1d:    PUSH(q,n,(pool<1,AvgPool1d>(x,i,false))); break;
-  case Cast::avgpool2d:    PUSH(q,n,(pool<2,AvgPool2d>(x,i,false))); break;
-  case Cast::avgpool3d:    PUSH(q,n,(pool<3,AvgPool3d>(x,i,false))); break;
+  case Cast::avgpool1d:    PUSH(q,n,torch::nn::AvgPool1d(avgpool<1>(x,i,c))); break;
+  case Cast::avgpool2d:    PUSH(q,n,torch::nn::AvgPool2d(avgpool<2>(x,i,c))); break;
+  case Cast::avgpool3d:    PUSH(q,n,torch::nn::AvgPool3d(avgpool<3>(x,i,c))); break;
 
   case Cast::adaptmax1d:   PUSH(q,n,(apool<1,AdaptiveMaxPool1d>(x,i,true))); break;
   case Cast::adaptmax2d:   PUSH(q,n,(apool<2,AdaptiveMaxPool2d>(x,i,true))); break;
@@ -932,13 +1030,13 @@ void mopt(Module &g,B a,K &v,J i) { //g:generic module, a:true if all options, v
  } else if(auto* m=g.as<torch::nn::Conv2d>())         { c=Cast::conv2d; conv<2,torch::nn::Conv2dImpl>(a,x,m);
  } else if(auto* m=g.as<torch::nn::Conv3d>())         { c=Cast::conv3d; conv<3,torch::nn::Conv3dImpl>(a,x,m);
 
- } else if(auto* m=g.as<MaxPool1d>())      { c=Cast::maxpool1d; pool<1,MaxPool1dImpl>(a,true,x,m);
- } else if(auto* m=g.as<MaxPool2d>())      { c=Cast::maxpool2d; pool<2,MaxPool2dImpl>(a,true,x,m);
- } else if(auto* m=g.as<MaxPool3d>())      { c=Cast::maxpool3d; pool<3,MaxPool3dImpl>(a,true,x,m);
+ } else if(auto* m=g.as<torch::nn::MaxPool1d>())      { c=Cast::maxpool1d; maxpool<1,torch::nn::MaxPool1dImpl>(a,x,m);
+ } else if(auto* m=g.as<torch::nn::MaxPool2d>())      { c=Cast::maxpool2d; maxpool<2,torch::nn::MaxPool2dImpl>(a,x,m);
+ } else if(auto* m=g.as<torch::nn::MaxPool3d>())      { c=Cast::maxpool3d; maxpool<3,torch::nn::MaxPool3dImpl>(a,x,m);
 
- } else if(auto* m=g.as<AvgPool1d>())      { c=Cast::avgpool1d; pool<1,AvgPool1dImpl>(a,false,x,m);
- } else if(auto* m=g.as<AvgPool2d>())      { c=Cast::avgpool2d; pool<2,AvgPool2dImpl>(a,false,x,m);
- } else if(auto* m=g.as<AvgPool3d>())      { c=Cast::avgpool3d; pool<3,AvgPool3dImpl>(a,false,x,m);
+ } else if(auto* m=g.as<torch::nn::AvgPool1d>())      { c=Cast::avgpool1d; avgpool<1,torch::nn::AvgPool1dImpl>(a,x,m);
+ } else if(auto* m=g.as<torch::nn::AvgPool2d>())      { c=Cast::avgpool2d; avgpool<2,torch::nn::AvgPool2dImpl>(a,x,m);
+ } else if(auto* m=g.as<torch::nn::AvgPool3d>())      { c=Cast::avgpool3d; avgpool<3,torch::nn::AvgPool3dImpl>(a,x,m);
 
  } else if(auto* m=g.as<AdaptiveMaxPool1d>())   { c=Cast::adaptmax1d; apool<1,AdaptiveMaxPool1dImpl>(a,true,x,m);
  } else if(auto* m=g.as<AdaptiveMaxPool2d>())   { c=Cast::adaptmax2d; apool<2,AdaptiveMaxPool2dImpl>(a,true,x,m);
@@ -1159,32 +1257,38 @@ KAPI train(K x) {
 // module fns defined in k namespace
 // ----------------------------------
 void modfn(K x) {
- fn(x, "seq",        KFN(seq),1);           // api functions for modules
+ fn(x, "seq",        KFN(seq), 1);           // api functions for modules
  fn(x, "forward",    KFN(forward),2);
- fn(x, "train",      KFN(train),1);
+ fn(x, "train",      KFN(train), 1);
 
- fn(x, "celu",       KFN(kcelu),1);         // functional form of modules/activations
- fn(x, "elu",        KFN(kelu),1);
- fn(x, "flatten",    KFN(kflatten),1);
- fn(x, "glu",        KFN(kglu),1);
- fn(x, "hardshrink", KFN(khardshrink),1);
- fn(x, "hardtanh",   KFN(khardtanh),1);
- fn(x, "leakyrelu",  KFN(kleakyrelu),1);
- fn(x, "logsigmoid", KFN(klogsigmoid),1);
- fn(x, "logsoftmax", KFN(klogsoftmax),1);
- fn(x, "prelu",      KFN(kprelu),1);
- fn(x, "gelu",       KFN(kgelu),1);
- fn(x, "relu",       KFN(krelu),1);
- fn(x, "relu6",      KFN(krelu6),1);
- fn(x, "rrelu",      KFN(krrelu),1);
- fn(x, "selu",       KFN(kselu),1);
- fn(x, "softmax",    KFN(ksoftmax),1);
- fn(x, "softmin",    KFN(ksoftmin),1);
- fn(x, "softplus",   KFN(ksoftplus),1);
- fn(x, "softsign",   KFN(ksoftsign),1);
- fn(x, "softshrink", KFN(ksoftshrink),1);
- fn(x, "tanhshrink", KFN(ktanhshrink),1);
- fn(x, "threshold",  KFN(kthreshold),1);
+ fn(x, "avgpool1d",  KFN(avgpool1d), 1);    // functional form of modules/activations
+ fn(x, "avgpool2d",  KFN(avgpool2d), 1);
+ fn(x, "avgpool3d",  KFN(avgpool3d), 1);
+ fn(x, "celu",       KFN(kcelu), 1);
+ fn(x, "elu",        KFN(kelu), 1);
+ fn(x, "flatten",    KFN(kflatten), 1);
+ fn(x, "glu",        KFN(kglu), 1);
+ fn(x, "hardshrink", KFN(khardshrink), 1);
+ fn(x, "hardtanh",   KFN(khardtanh), 1);
+ fn(x, "leakyrelu",  KFN(kleakyrelu), 1);
+ fn(x, "logsigmoid", KFN(klogsigmoid), 1);
+ fn(x, "logsoftmax", KFN(klogsoftmax), 1);
+ fn(x, "maxpool1d",  KFN(maxpool1d), 1);
+ fn(x, "maxpool2d",  KFN(maxpool2d), 1);
+ fn(x, "maxpool3d",  KFN(maxpool3d), 1);
+ fn(x, "prelu",      KFN(kprelu), 1);
+ fn(x, "gelu",       KFN(kgelu), 1);
+ fn(x, "relu",       KFN(krelu), 1);
+ fn(x, "relu6",      KFN(krelu6), 1);
+ fn(x, "rrelu",      KFN(krrelu), 1);
+ fn(x, "selu",       KFN(kselu), 1);
+ fn(x, "softmax",    KFN(ksoftmax), 1);
+ fn(x, "softmin",    KFN(ksoftmin), 1);
+ fn(x, "softplus",   KFN(ksoftplus), 1);
+ fn(x, "softsign",   KFN(ksoftsign), 1);
+ fn(x, "softshrink", KFN(ksoftshrink), 1);
+ fn(x, "tanhshrink", KFN(ktanhshrink), 1);
+ fn(x, "threshold",  KFN(kthreshold), 1);
 }
 
 KAPI anytest(K x) {
@@ -1195,9 +1299,9 @@ KAPI anytest(K x) {
   AdaptiveMaxPool1d(false),
   AdaptiveMaxPool2d(false),
   AdaptiveMaxPool3d(false),
-  AvgPool1d(2),
-  AvgPool2d(2),
-  AvgPool3d(2),
+  torch::nn::AvgPool1d(2),
+  torch::nn::AvgPool2d(2),
+  torch::nn::AvgPool3d(2),
   torch::nn::BatchNorm(5),
   CELU(1.0),
   torch::nn::Conv1d(1,2,3),
@@ -1229,9 +1333,9 @@ KAPI anytest(K x) {
   LogSoftmax(1,torch::kDouble),
   LPPool1d(2,3),
   LPPool2d(2,3),
-  MaxPool1d(2),
-  MaxPool2d(2),
-  MaxPool3d(2),
+  torch::nn::MaxPool1d(2),
+  torch::nn::MaxPool2d(2),
+  torch::nn::MaxPool3d(2),
   PReLU(1),
   Pad(LongVector{1,1}),
   torch::nn::RNN(4,5),

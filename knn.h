@@ -82,12 +82,11 @@ TORCH_MODULE(FractionalMaxPool3d);
 template <size_t D>
 struct TORCH_API LPPoolOptions {
  using Ex=torch::ExpandingArray<D>;
- LPPoolOptions(double p,Ex s) : power_(p),size_(std::move(s)) {stride_=size_;}
- LPPoolOptions() {}
- TORCH_ARG(double, power)=0;
- TORCH_ARG(Ex,     size)=0;
- TORCH_ARG(Ex,     stride)=0;
- TORCH_ARG(bool,   ceiling)=false;
+ LPPoolOptions(double p,Ex s) : power_(p),kernel_size_(s),stride_(s) {}
+ TORCH_ARG(double, power);
+ TORCH_ARG(Ex,     kernel_size);
+ TORCH_ARG(Ex,     stride);
+ TORCH_ARG(bool,   ceil_mode)=false;
 };
 
 template <size_t D, typename Derived>
@@ -99,7 +98,7 @@ class LPPoolImpl : public torch::nn::Cloneable<Derived> {
    bool z=true;
    for(auto i:*options.stride()) if(i){z=false; break;}
    //PATCH
-   //if(z) *options.stride_ = *options.size_;
+   //if(z) *options.stride_ = *options.kernel_size_;
   }
   LPPoolOptions<D> options;
 };
@@ -108,8 +107,8 @@ class TORCH_API LPPool1dImpl : public LPPoolImpl<1, LPPool1dImpl> {
  public:
   using LPPoolImpl<1, LPPool1dImpl>::LPPoolImpl;
   torch::Tensor forward(const torch::Tensor& t) {
-   auto r=torch::avg_pool1d(t.pow(options.power()),options.size(),options.stride(),0,options.ceiling());
-   return r.mul((*options.size())[0]).pow(1.0/options.power());
+   auto r=torch::avg_pool1d(t.pow(options.power()),options.kernel_size(),options.stride(),0,options.ceil_mode());
+   return r.mul((*options.kernel_size())[0]).pow(1.0/options.power());
   }
 };
 
@@ -117,8 +116,8 @@ class TORCH_API LPPool2dImpl : public LPPoolImpl<2, LPPool2dImpl> {
  public:
   using LPPoolImpl<2, LPPool2dImpl>::LPPoolImpl;
   torch::Tensor forward(const torch::Tensor& t) {
-   auto r=torch::avg_pool2d(t.pow(options.power()),options.size(),options.stride(),0,options.ceiling());
-   return (torch::sign(r) * torch::relu(torch::abs(r))).mul((*options.size())[0]*(*options.size())[1]).pow(1.0/options.power());
+   auto r=torch::avg_pool2d(t.pow(options.power()),options.kernel_size(),options.stride(),0,options.ceil_mode());
+   return (torch::sign(r) * torch::relu(torch::abs(r))).mul((*options.kernel_size())[0]*(*options.kernel_size())[1]).pow(1.0/options.power());
   }
 };
 

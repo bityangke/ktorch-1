@@ -98,6 +98,7 @@ static K mvals(B b,J n) {
 // mbool - check positional args or name-value pairs for boolean, else error w'module & option
 // int64 - check positional args or name-value pairs for long int, else error w'module & option
 // int64n - int64 but returns optional, i.e. nullopt if k value is null
+// mdouble - check for double(or long) from positional or name-value pair arg
 // expand - check positional or name-value args for long(s), return expanding array,  else error
 // ----------------------------------------------------------------------------------------------------
 static B mbool(K x,J i,Cast c,Setting s) {
@@ -120,6 +121,17 @@ static int64_t int64(K x,J i,Cast c,Setting s) {
 static int64_t int64(const Pairs& p,Cast c) {
  TORCH_CHECK(p.t==-KJ, msym(c)," ",p.k,": expected long scalar, given ",kname(p.t));
  return p.j;
+}
+
+static F mdouble(K x,J i,Cast c,Setting s) {
+ F f;
+ TORCH_CHECK(xnum(x,i,f), msym(c)," ",mset(s),": expected double, given ",kname(kK(x)[i]->t));
+ return f;
+}
+
+static F mdouble(const Pairs& p,Cast c) {
+ TORCH_CHECK(p.t==-KJ || p.t==-KF, msym(c)," ",p.k,": expected double, given ",kname(p.t));
+ return pdouble(p);
 }
 
 static c10::optional<int64_t> int64n(K x,J i,Cast c,Setting s) {auto n=int64(x,i,c,s); if(n==nj) return c10::nullopt; else return n;}
@@ -513,7 +525,6 @@ KAPI adaptavg3d(K x) {return adapt(x,Cast::adaptavg3d);}
 
 // ----------------------------------------------------------------------------------
 // fpool - fractional max pooling for 2 & 3d layers
-// lppool - power-average pooling
 // ----------------------------------------------------------------------------------
 template<size_t D,typename M>
 static M fpool(K x,J i) {
@@ -544,41 +555,45 @@ static void fpool(B a,K x,const M* m) {
  if(a || o.indices() != d.indices()) OPTION(x, indices, kb(o.indices()));
 }
 
-template<size_t D,typename M>
-static M lppool(K x,J i) {
- B b0=false,b1=false; Pairs p; J n=xargc(x,i,p);
- LPPoolOptions<D> o; torch::Scalar s; Expand<D> a(0);
- if(n==1 && xnum(x,i,s)) {                            // single numeric exponent
-  o.power(s.toDouble()); b0=true;
- } else if(n==2 && xnum(x,i,s) && XDIM(x,i+1,D,a)) {  // exponent & size(s)
-  o.power(s.toDouble()),o.size(a); b0=true,b1=true;
- } else if(!(!n && p.n)) {
-  AT_ERROR("Unrecognized arguments for lppool",D,"d module");
+// ----------------------------------------------------------------------------------
+// lppool - power-average pooling
+// ----------------------------------------------------------------------------------
+template<size_t D> LPPoolOptions<D> lppool(K x,J i,Cast c) {
+ LPPoolOptions<D> o(0,0);
+ B pw=false,sz=false,st=false; Pairs p; J n=xargc(x,i,p);
+ for(J j=0;j<n;++j) {
+   switch(j) {
+    case 0: o.power      (mdouble(x,i+j,  c,Setting::power));   pw=true; break;
+    case 1: o.kernel_size(expand<D>(x,i+j,c,Setting::size));    sz=true; break;
+    case 2: o.stride     (expand<D>(x,i+j,c,Setting::stride));  st=true; break;
+    case 3: o.ceil_mode  (mbool    (x,i+j,c,Setting::ceiling)); break;
+    default: AT_ERROR(msym(c),": 2-4 positional arguments expected, ",n," given");
+  }
  }
  while(xpair(p))
   switch(mset(p.k)) {
-   case Setting::power:     o.power(pdouble(p)); b0=true; break;
-   case Setting::size:      PDIM(p,D,a); o.size(a); b1=true; break;
-   case Setting::stride:    PDIM(p,D,a); o.stride(a); break;
-   case Setting::ceiling:   o.ceiling(pbool(p)); break;
-   default: AT_ERROR("Unrecognized lp pool option: ",p.k); break;
+   case Setting::power:   o.power      (mdouble  (p,c)); pw=true; break;
+   case Setting::size:    o.kernel_size(expand<D>(p,c)); sz=true; break;
+   case Setting::stride:  o.stride     (expand<D>(p,c)); st=true; break;
+   case Setting::ceiling: o.ceil_mode  (mbool(p,c)); break;
+   default: AT_ERROR("Unrecognized ",msym(c)," option: ",p.k); break;
   }
- if(!b0) {
-  AT_ERROR("exponent for p-norm must be specified for lppool",D,"d module");
- } else if(!b1) {
-  AT_ERROR("kernel size must be specified for lppool",D,"d module");
- }
- return M(o);
+ TORCH_CHECK(pw, msym(c),": no power given");
+ TORCH_CHECK(sz, msym(c),": no kernel size given");
+ if(!st) o.stride(o.kernel_size());
+ return o;
 }
 
 template<size_t D,typename M>
 static void lppool(B a,K x,const M* m) {
- LPPoolOptions<D> o=m->options, d(o.power(),o.size());
+ LPPoolOptions<D> o=m->options, d(o.power(),o.kernel_size());
  OPTION(x, power, kf(o.power()));
- OPTION(x, size,  KEX(o.size()));
- if(a || *o.stride() != *d.stride()) OPTION(x, stride,  KEX(o.stride()));
- if(a || o.ceiling() != d.ceiling()) OPTION(x, ceiling, kb(o.ceiling()));
+ OPTION(x, size,  KEX(o.kernel_size()));
+ if(a || *o.stride()   != *d.stride())   OPTION(x, stride,  KEX(o.stride()));
+ if(a || o.ceil_mode() != d.ceil_mode()) OPTION(x, ceiling, kb(o.ceil_mode()));
 }
+
+// no torch::nn::functional:lp_pool implemented yet (for version 1.3??)
 
 // ----------------------------------------------------------------------------------
 // padding layers:
@@ -990,8 +1005,8 @@ void mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) {
   case Cast::fmaxpool2d:   PUSH(q,n,(fpool<2,FractionalMaxPool2d>(x,i))); break;
   case Cast::fmaxpool3d:   PUSH(q,n,(fpool<3,FractionalMaxPool3d>(x,i))); break;
 
-  case Cast::lppool1d:     PUSH(q,n,(lppool<1,LPPool1d>(x,i))); break;
-  case Cast::lppool2d:     PUSH(q,n,(lppool<2,LPPool2d>(x,i))); break;
+  case Cast::lppool1d:     PUSH(q,n,LPPool1d(lppool<1>(x,i,c))); break;
+  case Cast::lppool2d:     PUSH(q,n,LPPool2d(lppool<2>(x,i,c))); break;
 
   case Cast::pad:          PUSH(q,n,(pad(x,i))); break;
   case Cast::reflect1d:    PUSH(q,n,(rpad<2,ReflectionPad1d>(x,i,s))); break;

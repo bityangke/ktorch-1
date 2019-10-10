@@ -93,13 +93,9 @@ template <size_t D, typename Derived>
 class LPPoolImpl : public torch::nn::Cloneable<Derived> {
  public:
   LPPoolImpl(double p,torch::ExpandingArray<D> s) : LPPoolImpl(LPPoolOptions<D>(p,s)) {}
-  explicit LPPoolImpl(LPPoolOptions<D> o) : options(std::move(o)) {reset();}
-  void reset() override {
-   bool z=true;
-   for(auto i:*options.stride()) if(i){z=false; break;}
-   //PATCH
-   //if(z) *options.stride_ = *options.kernel_size_;
-  }
+  //explicit LPPoolImpl(LPPoolOptions<D> o) : options(std::move(o)) {reset();}
+  explicit LPPoolImpl(const LPPoolOptions<D>& o) : options(o) {};
+  void reset() override {}
   LPPoolOptions<D> options;
 };
 

@@ -614,7 +614,7 @@ B xbacksym(K x,J i,B& a,B& b) {return xind(x,i) && xbacksym(kK(x)[i],a,b);}
 // xargc - return count of args to process given arg(s), offset, pairs structure to initiate
 // xnone - return true if, given arg list and offset, no meaningful arg supplied
 // ------------------------------------------------------------------------------------------
-B xpairs(K x,Pairs &p) {   // initialize Pairs structure from k value
+B xpairs(K x,Pairs& p) {   // initialize Pairs structure from k value
  p.a=0, p.i=0, p.n=0;      // sets a: 1-dict,2-pairs,3-list,4-syms
  if(x->t==99) {
   K y=kK(x)[0];
@@ -644,7 +644,7 @@ B xpairs(K x,Pairs &p) {   // initialize Pairs structure from k value
  return p.a ? (p.x=x,true) : false;
 }
 
-B xpairs(K x,J i,Pairs &p) {return xind(x,i) && xpairs(kK(x)[i],p);}
+B xpairs(K x,J i,Pairs& p) {return xind(x,i) && xpairs(kK(x)[i],p);}
 
 static void xpair(Pairs& p,K x,J i) {
  if(x->t<0) {
@@ -677,9 +677,9 @@ static void xpair(Pairs& p,K x,J i) {
  }
 }
 
-B xpair(Pairs &p) {
+B xpair(Pairs& p) {
  if(p.i<0 || p.i>=p.n) return false;
- I i=p.i; p.k=nullptr; K y;
+ I i=p.i; p.k=nullptr; p.v=nullptr; K y;
  switch(p.a) {   
   case 1:  //dictionary
    p.k=kS(kK(p.x)[0])[i]; xpair(p,kK(p.x)[1],i); break;
@@ -710,7 +710,7 @@ B xpair(Pairs &p) {
  return p.i++, true;
 }
 
-J xargc(K x,J i,Pairs &p) { // x:arg(s), i:offset, -1 if not applicable, p:pairs to initiate
+J xargc(K x,J i,Pairs& p) { // x:arg(s), i:offset, -1 if not applicable, p:pairs to initiate
  if(!x) {
   return 0;
  } else if(xdict(x)) {
@@ -733,6 +733,7 @@ B xnone(K x,J i) {Pairs p; return !(xargc(x,i,p) || p.n);}
 // plen  - signal length mismatch of input list if non-negative length supplied
 // psym - check for symbol value in name/value pair, return symbol, else error
 // ptype - check for symbol value that matches defined data type, e.g. `long`float`double
+// pempty - return true if empty array value supplied for current name-value pair
 // pbool - check for integral scalar with value 1 or 0, return true/false
 // plong - check for integral scalar, return long int
 // pdouble - check if numeric scalar, return double
@@ -740,9 +741,9 @@ B xnone(K x,J i) {Pairs p; return !(xargc(x,i,p) || p.n);}
 // psize - check if integral scalar or list, set IntArrayRef or ExpandingArray, else error
 // pten - attempt to define a tensor from provided scalar or array
 // ------------------------------------------------------------------------------------------
-void perr(const Pairs &p,cS s) {AT_ERROR("Option: ",p.k," is a ",kname(p.t),", expected a ",s);}
+void perr(const Pairs& p,cS s) {AT_ERROR("Option: ",p.k," is a ",kname(p.t),", expected a ",s);}
 
-static void plen(const Pairs &p,J n,J m) {
+static void plen(const Pairs& p,J n,J m) {
  if(n==0 && (p.t<0 || m)) {
    AT_ERROR("Option: ",p.k," requires zero elements, but single scalar value supplied");
  } else if(n>0 && (p.t>=0 && m!=n)) {
@@ -750,17 +751,18 @@ static void plen(const Pairs &p,J n,J m) {
  }
 }
 
-S psym(const Pairs &p) {if(p.t!=-KS) perr(p,"symbol"); return p.s;}
-ScalarType ptype(const Pairs &p) {if(p.t!=-KS) perr(p,"symbol"); return torch::typeMetaToScalarType(mtype(p.s));}
-B pbool(const Pairs &p) {if(p.t!=-KB) perr(p,"boolean"); return p.b;}
-J plong(const Pairs &p) {if(p.t!=-KJ) perr(p,"long integer"); return p.j;}
+S psym(const Pairs& p) {if(p.t!=-KS) perr(p,"symbol"); return p.s;}
+ScalarType ptype(const Pairs& p) {if(p.t!=-KS) perr(p,"symbol"); return torch::typeMetaToScalarType(mtype(p.s));}
+B pempty(const Pairs& p) {return p.t>=0 && p.v && !p.v->n;}
+B pbool(const Pairs& p) {if(p.t!=-KB) perr(p,"boolean"); return p.b;}
+J plong(const Pairs& p) {if(p.t!=-KJ) perr(p,"long integer"); return p.j;}
 
-F pdouble(const Pairs &p) {
+F pdouble(const Pairs& p) {
  if(!(p.t==-KJ || p.t==-KF)) perr(p,"float, double or integer scalar");
  return p.t==-KJ ? p.j : p.f;
 }
 
-void pnum(const Pairs &p,torch::Scalar &s) {
+void pnum(const Pairs& p,torch::Scalar &s) {
  switch(p.t){
   case -KJ: s=(int64_t)p.j; break;
   case -KF: s=p.f; break;
@@ -768,7 +770,7 @@ void pnum(const Pairs &p,torch::Scalar &s) {
  }
 }
 
-void psize(const Pairs &p,IntArrayRef &s,J n) {
+void psize(const Pairs& p,IntArrayRef &s,J n) {
  if(p.t==-KJ)
   s=IntArrayRef((int64_t*)&p.j,1);  // recast for linux clang/gcc to go from J* -> int64_t*
  else if(!(p.t==KJ && xsize(p.v,s)))
@@ -776,7 +778,7 @@ void psize(const Pairs &p,IntArrayRef &s,J n) {
  plen(p,n,s.size());
 }
 
-void psize(const Pairs &p,J d,int64_t *a) {
+void psize(const Pairs& p,J d,int64_t *a) {
  if(p.t == -KJ) {
    for(J i=0;i<d;++i) a[i]=p.j;
  } else if(p.t == KJ) {
@@ -789,7 +791,7 @@ void psize(const Pairs &p,J d,int64_t *a) {
  }
 }
 
-void psize(const Pairs &p,J d,F *a) {
+void psize(const Pairs& p,J d,F *a) {
  if(p.t == -KF) {
    for(J i=0;i<d;++i) a[i]=p.f;
  } else if(p.t == KF) {
@@ -802,7 +804,7 @@ void psize(const Pairs &p,J d,F *a) {
  }
 }
 
-void pten(const Pairs &p,Tensor &t) {
+void pten(const Pairs& p,Tensor &t) {
  switch(p.t) {
   case 0: if(!(xten(p.v,t))) t=kput(p.v); break;
   case -KB: t=torch::full({},Scalar(p.b)).to(maptype(KB)); break;

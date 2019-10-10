@@ -100,6 +100,7 @@ static K mvals(B b,J n) {
 // int64n - int64 but returns optional, i.e. nullopt if k value is null
 // mdouble - check for double(or long) from positional or name-value pair arg
 // expand - check positional or name-value args for long(s), return expanding array,  else error
+// exdouble - similar to expand, but for double array
 // ----------------------------------------------------------------------------------------------------
 static B mbool(K x,J i,Cast c,Setting s) {
  B b;
@@ -123,6 +124,9 @@ static int64_t int64(const Pairs& p,Cast c) {
  return p.j;
 }
 
+static c10::optional<int64_t> int64n(K x,J i,Cast c,Setting s) {auto n=int64(x,i,c,s); if(n==nj) return c10::nullopt; else return n;}
+static c10::optional<int64_t> int64n(const Pairs& p,Cast c)    {auto n=int64(p,c);     if(n==nj) return c10::nullopt; else return n;}
+
 static F mdouble(K x,J i,Cast c,Setting s) {
  F f;
  TORCH_CHECK(xnum(x,i,f), msym(c)," ",mset(s),": expected double, given ",kname(kK(x)[i]->t));
@@ -133,9 +137,6 @@ static F mdouble(const Pairs& p,Cast c) {
  TORCH_CHECK(p.t==-KJ || p.t==-KF, msym(c)," ",p.k,": expected double, given ",kname(p.t));
  return pdouble(p);
 }
-
-static c10::optional<int64_t> int64n(K x,J i,Cast c,Setting s) {auto n=int64(x,i,c,s); if(n==nj) return c10::nullopt; else return n;}
-static c10::optional<int64_t> int64n(const Pairs& p,Cast c)    {auto n=int64(p,c);     if(n==nj) return c10::nullopt; else return n;}
 
 template<size_t D> Expand<D> expand(K a,J i,Cast c,Setting s) {
  K x=kK(a)[i];
@@ -154,6 +155,25 @@ template<size_t D> Expand<D> expand(const Pairs& p,Cast c) {
   return Expand<D>(p.j);
  else
   return Expand<D>(IntArrayRef((int64_t*)kJ(p.v),p.v->n));
+}
+
+template<size_t D> Exdouble<D> exdouble(K a,J i,Cast c,Setting s) {
+ K x=kK(a)[i];
+ TORCH_CHECK(x->t==-KF || x->t==KF, msym(c)," ",mset(s),": expected double(s), given ",kname(x->t));
+ TORCH_CHECK(x->t==-KF || x->n==D,  msym(c)," ",mset(s),": expected scalar or ",D,"-element input, given ",x->n,"-element list");
+ if(x->t==-KF)
+  return Exdouble<D>(x->f);
+ else
+  return Exdouble<D>(torch::ArrayRef<double>(kF(x),x->n));
+}
+
+template<size_t D> Exdouble<D> exdouble(const Pairs& p,Cast c) {
+ TORCH_CHECK(p.t==-KF || p.t==KF,   msym(c)," ",p.k,": expected double(s), given ",kname(p.t));
+ TORCH_CHECK(p.t==-KF || p.v->n==D, msym(c)," ",p.k,": expected scalar or ",D,"-element input, given ",p.v->n,"-element list");
+ if(p.t==-KF)
+  return Exdouble<D>(p.f);
+ else
+  return Exdouble<D>(torch::ArrayRef<double>(kF(p.v),p.v->n));
 }
 
 // --------------------------------------------------------------------------------------
@@ -282,9 +302,9 @@ static torch::nn::LinearOptions linear(K x,J i,Cast c) {
  B b=true; int64_t in=nj,out=nj; Pairs p; J n=xargc(x,i,p);
  for(J j=0;j<n;++j) {
    switch(j) {
-    case 0: in=int64(x,i,c,Setting::in);  break;
-    case 1: out=int64(x,i,c,Setting::out); break;
-    case 2: b=mbool(x,i,c,Setting::bias); break;
+    case 0:  in=int64(x,i+j,c,Setting::in);   break;
+    case 1: out=int64(x,i+j,c,Setting::out);  break;
+    case 2:   b=mbool(x,i+j,c,Setting::bias); break;
     default: AT_ERROR(msym(c),": up to 3 positional arguments expected, ",n," given");
   }
  }
@@ -360,7 +380,7 @@ static void rnn(B a,K x,const M* m) {
 // ----------------------------------------------------------------------------------
 //  maxpool - process args, return dictionary of options, call functional form
 // ----------------------------------------------------------------------------------
-template<size_t D> torch::nn::MaxPoolOptions<D> maxpool(K x,J i,Cast c) {
+template<size_t D> static torch::nn::MaxPoolOptions<D> maxpool(K x,J i,Cast c) {
  torch::nn::MaxPoolOptions<D> o(0);
  B sz=false,st=false; Pairs p; J n=xargc(x,i,p);
  for(J j=0;j<n;++j) {
@@ -417,7 +437,7 @@ KAPI maxpool3d(K x) {return maxpool(x,Cast::maxpool3d);}
 // ----------------------------------------------------------------------------------
 //  avgpool - process args, return dictionary of options, call functional form
 // ----------------------------------------------------------------------------------
-template<size_t D> torch::nn::AvgPoolOptions<D> avgpool(K x,J i,Cast c) {
+template<size_t D> static torch::nn::AvgPoolOptions<D> avgpool(K x,J i,Cast c) {
  torch::nn::AvgPoolOptions<D> o(0);
  B sz=false,st=false; Pairs p; J n=xargc(x,i,p);
  for(J j=0;j<n;++j) {
@@ -477,7 +497,7 @@ KAPI avgpool3d(K x) {return avgpool(x,Cast::avgpool3d);}
 // ------------------------------------------------------------------------------------
 //  adaptive pooling - process args, return dictionary of options, call functional form
 // ------------------------------------------------------------------------------------
-template<size_t D,typename T> T adapt(K x,J i,Cast c) {
+template<size_t D,typename T> static T adapt(K x,J i,Cast c) {
  T o(0); B sz=false; Pairs p; J n=xargc(x,i,p);
  for(J j=0;j<n;++j) {
    switch(j) {
@@ -526,39 +546,47 @@ KAPI adaptavg3d(K x) {return adapt(x,Cast::adaptavg3d);}
 // ----------------------------------------------------------------------------------
 // fpool - fractional max pooling for 2 & 3d layers
 // ----------------------------------------------------------------------------------
-template<size_t D,typename M>
-static M fpool(K x,J i) {
- Pairs p; J n=xargc(x,i,p);
- FractionalMaxPoolOptions<D> o; Expand<D> a(0),b(0); Expand<D,double> r(0);
- if(n==1 && XDIM(x,i,D,a))                         o.size(a);
- else if(n==2 && XDIM(x,i+1,D,b) && XDIM(x,i,D,a)) o.size(a).outsize(b);
- else if(n==2 && XDIM(x,i+1,D,r) && XDIM(x,i,D,a)) o.size(a).ratio(r);
- else if(!(n==0 && p.n)) AT_ERROR("Unrecognized arguments for ",D,"d fractional max pooling module");
- while(xpair(p))
-  switch(mset(p.k)) {
-   case Setting::size:    PDIM(p,D,a); o.size(a); break;
-   case Setting::outsize: PDIM(p,D,a); o.outsize(a); break;
-   case Setting::ratio:   PDIM(p,D,r); o.ratio(r); break;
-   case Setting::indices: o.indices(pbool(p)); break;
-   default: AT_ERROR("Unrecognized option for fractional max pooling: ",p.k); break;
+template<size_t D> static FractionalMaxPoolOptions<D> fpool(K x,J i,Cast c) {
+ FractionalMaxPoolOptions<D> o(0);
+ B e,sz=false; Pairs p; J n=xargc(x,i,p);
+ for(J j=0;j<n;++j) {
+   e=xempty(x,i+j);
+   switch(j) {
+    case 0: o.size(expand<D>(x,i+j,c,Setting::size)); sz=true; break;
+    case 1: if(e) o.outsize(c10::nullopt); else o.outsize(expand  <D>(x,i+j,c,Setting::outsize)); break;
+    case 2: if(e) o.ratio  (c10::nullopt); else o.ratio  (exdouble<D>(x,i+j,c,Setting::ratio));   break;
+    case 3: o.indices(mbool(x,i+j,c,Setting::indices)); break;
+    default: AT_ERROR(msym(c),": up to 4 positional arguments expected, ",n," given");
   }
- return M(o);
+ }
+ while(xpair(p)) {
+  e=pempty(p);
+  switch(mset(p.k)) {
+   case Setting::size:    o.size(expand<D>(p,c)); sz=true; break;
+   case Setting::outsize: if(e) o.outsize(c10::nullopt); else o.outsize(expand  <D>(p,c)); break;
+   case Setting::ratio:   if(e) o.ratio  (c10::nullopt); else o.ratio  (exdouble<D>(p,c)); break;
+   case Setting::indices: o.indices(mbool(p,c)); break;
+   default: AT_ERROR("Unrecognized ",msym(c)," option: ",p.k); break;
+  }
+ }
+ TORCH_CHECK(sz, msym(c),": no kernel size given");
+ TORCH_CHECK(o.outsize()||o.ratio(), msym(c),": no output size or ratio given");
+ TORCH_CHECK(!(o.outsize()&&o.ratio()), msym(c),": cannot specify both output size & ratio");
+ return o;
 }
 
-template<size_t D,typename M>
-static void fpool(B a,K x,const M* m) {
+template<size_t D,typename M> static void fpool(B a,K x,const M* m) {
  FractionalMaxPoolOptions<D> o=m->options, d(o.size());
  OPTION(x, size, KEX(o.size()));
- B b=false; for(auto r:*o.ratio()) if(r) {b=true; break;}
- if(a || b) OPTION(x, ratio,   KEX(o.ratio()));
- if(a ||!b) OPTION(x, outsize, KEX(o.outsize()));
+ if(a || o.outsize().has_value())    OPTION(x, outsize, o.outsize() ? KEX(o.outsize().value()) : ktn(0,0));
+ if(a || o.ratio().has_value())      OPTION(x, ratio,   o.ratio()   ? KEX(o.ratio().value())   : ktn(0,0));
  if(a || o.indices() != d.indices()) OPTION(x, indices, kb(o.indices()));
 }
 
 // ----------------------------------------------------------------------------------
 // lppool - power-average pooling
 // ----------------------------------------------------------------------------------
-template<size_t D> LPPoolOptions<D> lppool(K x,J i,Cast c) {
+template<size_t D> static LPPoolOptions<D> lppool(K x,J i,Cast c) {
  LPPoolOptions<D> o(0,0);
  B pw=false,sz=false,st=false; Pairs p; J n=xargc(x,i,p);
  for(J j=0;j<n;++j) {
@@ -567,7 +595,7 @@ template<size_t D> LPPoolOptions<D> lppool(K x,J i,Cast c) {
     case 1: o.kernel_size(expand<D>(x,i+j,c,Setting::size));    sz=true; break;
     case 2: o.stride     (expand<D>(x,i+j,c,Setting::stride));  st=true; break;
     case 3: o.ceil_mode  (mbool    (x,i+j,c,Setting::ceiling)); break;
-    default: AT_ERROR(msym(c),": 2-4 positional arguments expected, ",n," given");
+    default: AT_ERROR(msym(c),": up to 4 positional arguments expected, ",n," given");
   }
  }
  while(xpair(p))
@@ -584,8 +612,7 @@ template<size_t D> LPPoolOptions<D> lppool(K x,J i,Cast c) {
  return o;
 }
 
-template<size_t D,typename M>
-static void lppool(B a,K x,const M* m) {
+template<size_t D,typename M> static void lppool(B a,K x,const M* m) {
  LPPoolOptions<D> o=m->options, d(o.power(),o.kernel_size());
  OPTION(x, power, kf(o.power()));
  OPTION(x, size,  KEX(o.kernel_size()));
@@ -1002,8 +1029,8 @@ void mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) {
   case Cast::adaptavg2d:   PUSH(q,n,torch::nn::AdaptiveAvgPool2d(adapt<2,torch::nn::AdaptiveAvgPool2dOptions>(x,i,c))); break;
   case Cast::adaptavg3d:   PUSH(q,n,torch::nn::AdaptiveAvgPool3d(adapt<3,torch::nn::AdaptiveAvgPool3dOptions>(x,i,c))); break;
 
-  case Cast::fmaxpool2d:   PUSH(q,n,(fpool<2,FractionalMaxPool2d>(x,i))); break;
-  case Cast::fmaxpool3d:   PUSH(q,n,(fpool<3,FractionalMaxPool3d>(x,i))); break;
+  case Cast::fmaxpool2d:   PUSH(q,n,FractionalMaxPool2d(fpool<2>(x,i,c))); break;
+  case Cast::fmaxpool3d:   PUSH(q,n,FractionalMaxPool3d(fpool<3>(x,i,c))); break;
 
   case Cast::lppool1d:     PUSH(q,n,LPPool1d(lppool<1>(x,i,c))); break;
   case Cast::lppool2d:     PUSH(q,n,LPPool2d(lppool<2>(x,i,c))); break;

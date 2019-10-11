@@ -879,9 +879,9 @@ KAPI kstate(K x) {
    case Class::sequential: return mstate(x);
    case Class::loss:       return lossdict(g,x);
    case Class::optimizer:  return optstate(g,x);
+   case Class::model:      return modelstate(g,x);
    case Class::tensor:
-   case Class::vector:
-   case Class::model:      AT_ERROR("state not defined for ",mapclass(g->a));
+   case Class::vector:     AT_ERROR("state not defined for ",mapclass(g->a));
    default: return KERR("Not a recognized pointer");
   }
  KCATCH("state")
@@ -1249,7 +1249,7 @@ KAPI fns(K x){
 
  tensorfn(x);
  mathfn(x);
- modfn(x);
+ nnfn(x);
  lossfn(x);
  optfn(x);
  modelfn(x);

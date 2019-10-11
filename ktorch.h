@@ -416,23 +416,26 @@ void subset(TensorVector& v,int64_t d,int64_t i,int64_t w,int64_t n=0);
 void setsafe(Tensor& t,const Storage&,int64_t,const IntArrayRef&,const IntArrayRef&);
 void tensorfn(K);
 
-// module routines:
-//K kseq(const Sequential&,Cast c=Cast::sequential);
+// nn module & functional routines:
 K kseq(const Sequential&);
 K seqto(Kseq*,const TensorOptions&,B);
-void modfn(K);
+K mtable(const Sequential& q,B a,B b=true);
+void nnfn(K);
 K mstate(K);
 
 // loss functions:
 K lossdict(Ktag*,K);
+K lossdict(B,B,Cast,Loss*);
 K lossto(Kloss*,const TensorOptions&,B);
 void lossfn(K);
 
 // optimization functions:
 K optstate(Ktag*,K);
+K optstate(B,B,Cast,OptimizerBase*);
 void optfn(K);
 
 // model functions:
+K modelstate(Ktag*,K);
 void modelfn(K);
 
 // global environment
@@ -491,6 +494,12 @@ typedef struct {
   std::make_tuple(cs("loss"),       Class::loss),
   std::make_tuple(cs("optimizer"),  Class::optimizer),
   std::make_tuple(cs("model"),      Class::model)
+ }};
+
+ std::array<std::tuple<S,Class>,3> model = {{
+  std::make_tuple(cs("seq"),  Class::sequential),
+  std::make_tuple(cs("loss"), Class::loss),
+  std::make_tuple(cs("opt"),  Class::optimizer),
  }};
 
  std::array<std::tuple<S,Tensormode>,13> tensormode = {{    //tensor creation mode: map symbol -> enum

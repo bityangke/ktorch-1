@@ -15,9 +15,26 @@ static void modelpart(K x,J i,Kseq*& q,Kloss*& l,Kopt*& o) {
  }
 }
 
+K modelkeys() {
+ K x=ktn(KS,env().model.size());
+ for(auto &m:env().model)
+  if     (std::get<1>(m)==Class::sequential) kS(x)[0]=std::get<0>(m);
+  else if(std::get<1>(m)==Class::loss)       kS(x)[1]=std::get<0>(m);
+  else if(std::get<1>(m)==Class::optimizer)  kS(x)[2]=std::get<0>(m);
+ return x;
+}
+
 K modelstate(B a,B b,Kmodel *m) {
-  std::cerr << "model state..\n";
- return (K)0;
+ return xD(modelkeys(), knk(3, mtable(m->q,a,b), lossdict(a,b,m->lc,m->l.get()), optstate(a,b,m->oc,m->o.get())));
+}
+
+// this version of modelstate called from generic state function in k-level api
+K modelstate(Ktag *g,K x) {
+ B a=env().alloptions;
+ if(x->n==1 || (x->n==2 && xbool(x,1,a)))
+  return modelstate(a,true,(Kmodel*)g);
+ else
+  AT_ERROR("model state requires 1-2 args: previously allocated ptr or (ptr;options flag)");
 }
 
 KAPI model(K x) {

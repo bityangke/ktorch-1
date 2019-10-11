@@ -33,8 +33,9 @@ KAPI cudamem(K x) {
  KTRY
   // if sym, get device no
   // if int, verify -1<n< env.cuda
-  auto n=c10::cuda::CUDACachingAllocator::currentMemoryAllocated(x->j);
-  return kj(n);
+  //auto n=c10::cuda::CUDACachingAllocator::currentMemoryAllocated(x->j);
+  //return kj(n);
+  return kj(nj);
  KCATCH("cuda memory");
 }
 

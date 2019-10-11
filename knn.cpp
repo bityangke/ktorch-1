@@ -180,7 +180,6 @@ template<size_t D> Exdouble<D> exdouble(const Pairs& p,Cast c) {
 // bnorm - create batchnorm module given options/set dictionary of options given module
 // conv - create 1-3 dimensional convolution/set dictionary given module
 // drop - create dropout module given probability/set dictionary given module
-// embed - create embedding module given options/set dictionary of options given module
 // rnn - create rnn/gru/lstm module given options/set dictionary of options from module
 // --------------------------------------------------------------------------------------
 torch::nn::BatchNorm bnorm(K x,J k) {
@@ -273,6 +272,9 @@ static void drop(B a,K x,F f) {
  if(a || d != f) OPTION(x, drop, kf(f));
 }
 
+// --------------------------------------------------------------------------------------
+// embed - create embedding module given options/set dictionary of options given module
+// --------------------------------------------------------------------------------------
 torch::nn::Embedding embed(K x,J k) {
  Pairs p; J i=-1,j=-1,n=xargc(x,k,p);
  if(!((n==0 && p.n) || (xlong(x,k,i) && (n==1 || (n==2 && xlong(x,k+1,j))))))
@@ -291,8 +293,8 @@ torch::nn::Embedding embed(K x,J k) {
 
 static void embed(K x,const torch::nn::EmbeddingImpl* m) {
  auto o=m->options;
- OPTION(x, rows, kj(o.count()));
- OPTION(x, cols, kj(o.dimension()));
+ OPTION(x, rows, kj(o.num_embeddings()));
+ OPTION(x, cols, kj(o.embedding_dim()));
 }
 
 // --------------------------------------------------------------------------------------
@@ -1200,8 +1202,7 @@ void mget(cS s,Module &m,B a,K &v,J i) {
  }
 }
 
-static K mtable(const Sequential& q,B a,B b=true); //a:true for all options else non-defaults, b:true for parms & buffers
-static K mtable(const Sequential& q,B a,B b) {
+K mtable(const Sequential& q,B a,B b) {
  J i=0; K k=mkeys(b),v=mvals(b,q->size());
  for(const auto&c:q->named_children()) mget(c.key().c_str(),*c.value(),a,v,i++);
  return xT(xD(k,v));
@@ -1340,7 +1341,7 @@ KAPI train(K x) {
 // ----------------------------------
 // module fns defined in k namespace
 // ----------------------------------
-void modfn(K x) {
+void nnfn(K x) {
  fn(x, "seq",        KFN(seq), 1);           // api functions for modules
  fn(x, "forward",    KFN(forward),2);
  fn(x, "train",      KFN(train), 1);

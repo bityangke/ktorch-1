@@ -414,7 +414,7 @@ static K optinit(S s,K x,K y) {
  return kptr(new Kopt(c,o));
 }
 
-static K optstate(B a,B b,Cast c,OptimizerBase *o) {
+K optstate(B a,B b,Cast c,OptimizerBase *o) {
  F r; S s; omap(c,s,r); K k,v,x,y;
  switch(c) {
   case Cast::adagrad: {auto m=(Adagrad*)o; x=adagrad(a,r,m); if(b) y=adagrad(m); break;}
@@ -439,7 +439,7 @@ static K optstate(B a,B b,Cast c,OptimizerBase *o) {
  return xD(k,v);
 }
 
-// this version of optstate() called from generic state() function in k-level api
+// this version of optstate called from generic state function in k-level api
 K optstate(Ktag *g,K x) {
  B a=env().alloptions;
  if(x->n==1 || (x->n==2 && xbool(x,1,a)))

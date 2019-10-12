@@ -37,6 +37,13 @@ K modelstate(Ktag *g,K x) {
   AT_ERROR("model state requires 1-2 args: previously allocated ptr or (ptr;options flag)");
 }
 
+KAPI modeltable(K x) {
+ KTRY
+  TORCH_CHECK(x->t==99, "modeltable not implemented for ",kname(x->t));
+  return k(0,(S)"{raze[x where b],x where not b:98=type each x}",r1(x),0);
+ KCATCH("modeltable");
+}
+
 KAPI model(K x) {
  KTRY
   B a=env().alloptions;

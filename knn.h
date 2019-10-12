@@ -1,4 +1,68 @@
 #pragma once
+// ---------------------------------------------------------------------
+// Adaptive Avg Pool pending, should be released in 1.4
+// Options for a `D`-dimensional adaptive avgpool functional and module
+// ---------------------------------------------------------------------
+namespace torch { namespace nn {
+template <size_t D> struct AdaptiveAvgPoolOptions {
+  AdaptiveAvgPoolOptions(ExpandingArray<D> output_size) : output_size_(output_size) {}
+  TORCH_ARG(ExpandingArray<D>, output_size);
+};
+
+using AdaptiveAvgPool1dOptions = AdaptiveAvgPoolOptions<1>;
+using AdaptiveAvgPool2dOptions = AdaptiveAvgPoolOptions<2>;
+using AdaptiveAvgPool3dOptions = AdaptiveAvgPoolOptions<3>;
+
+namespace functional {
+inline Tensor adaptive_avg_pool1d(const Tensor& input, const AdaptiveAvgPool1dOptions& options) {
+   return torch::adaptive_avg_pool1d(input, options.output_size());
+}
+
+inline Tensor adaptive_avg_pool2d(const Tensor& input, const AdaptiveAvgPool2dOptions& options) {
+   return torch::adaptive_avg_pool2d(input, options.output_size());
+}
+
+inline Tensor adaptive_avg_pool3d(const Tensor& input, const AdaptiveAvgPool3dOptions& options) {
+   return torch::adaptive_avg_pool3d(input, options.output_size());
+}
+}
+
+template <size_t D, typename Derived>
+class TORCH_API AdaptiveAvgPoolImpl : public torch::nn::Cloneable<Derived> {
+ public:
+  AdaptiveAvgPoolImpl(ExpandingArray<D> output_size)
+      : AdaptiveAvgPoolImpl(AdaptiveAvgPoolOptions<D>(output_size)) {}
+  explicit AdaptiveAvgPoolImpl(const AdaptiveAvgPoolOptions<D>& options_) : options(options_) {}
+  void reset() override {}
+  AdaptiveAvgPoolOptions<D> options;
+};
+
+class TORCH_API AdaptiveAvgPool1dImpl :
+  public AdaptiveAvgPoolImpl<1, AdaptiveAvgPool1dImpl> {
+ public:
+  using AdaptiveAvgPoolImpl<1, AdaptiveAvgPool1dImpl>::AdaptiveAvgPoolImpl;
+  Tensor forward(const Tensor& input) {return torch::nn::functional::adaptive_avg_pool1d(input, options);}
+};
+
+class TORCH_API AdaptiveAvgPool2dImpl :
+  public AdaptiveAvgPoolImpl<2, AdaptiveAvgPool2dImpl> {
+ public:
+  using AdaptiveAvgPoolImpl<2, AdaptiveAvgPool2dImpl>::AdaptiveAvgPoolImpl;
+  Tensor forward(const Tensor& input) {return torch::nn::functional::adaptive_avg_pool2d(input, options);}
+};
+
+class TORCH_API AdaptiveAvgPool3dImpl :
+  public AdaptiveAvgPoolImpl<3, AdaptiveAvgPool3dImpl> {
+ public:
+  using AdaptiveAvgPoolImpl<3, AdaptiveAvgPool3dImpl>::AdaptiveAvgPoolImpl;
+  Tensor forward(const Tensor& input) {return torch::nn::functional::adaptive_avg_pool3d(input, options);}
+};
+
+TORCH_MODULE(AdaptiveAvgPool1d);
+TORCH_MODULE(AdaptiveAvgPool2d);
+TORCH_MODULE(AdaptiveAvgPool3d);
+}}
+
 // ------------------------------------------
 // fractional max pool 2,3d
 // ------------------------------------------
@@ -119,13 +183,25 @@ struct TORCH_API PadOptions {
  TORCH_ARG(torch::Scalar, value)=0;
 };
 
+namespace torch { namespace nn {
 template <size_t D>
-struct TORCH_API RPadOptions {
- using Ex=torch::ExpandingArray<D>;
- RPadOptions(Ex p) : pad_(std::move(p)) {}
- RPadOptions() {}
- TORCH_ARG(Ex,pad)=0;
+struct TORCH_API ReflectionPadOptions {
+  ReflectionPadOptions(ExpandingArray<D*2> padding) : padding_(padding) {}
+  TORCH_ARG(ExpandingArray<D*2>, padding);
 };
+using ReflectionPad1dOptions = ReflectionPadOptions<1>;
+using ReflectionPad2dOptions = ReflectionPadOptions<2>;
+
+template <size_t D>
+struct TORCH_API ReplicationPadOptions {
+  ReplicationPadOptions(ExpandingArray<D*2> padding) : padding_(padding) {}
+  TORCH_ARG(ExpandingArray<D*2>, padding);
+};
+
+using ReplicationPad1dOptions = ReplicationPadOptions<1>;
+using ReplicationPad2dOptions = ReplicationPadOptions<2>;
+using ReplicationPad3dOptions = ReplicationPadOptions<3>;
+}}
 
 // ------------------------------------------
 // constant pad n-dim
@@ -147,27 +223,28 @@ TORCH_MODULE(Pad);
 // reflection pad 1,2d
 // ------------------------------------------
 template <size_t D, typename Derived>
-class ReflectionPadImpl : public torch::nn::Cloneable<Derived> {
+class TORCH_API ReflectionPadImpl : public torch::nn::Cloneable<Derived> {
  public:
-  ReflectionPadImpl(torch::ExpandingArray<D> p) : ReflectionPadImpl(RPadOptions<D>(p)) {}
-  explicit ReflectionPadImpl(RPadOptions<D> o) : options(std::move(o)) {reset();}
+  ReflectionPadImpl(torch::ExpandingArray<D*2> padding)
+      : ReflectionPadImpl(torch::nn::ReflectionPadOptions<D>(padding)) {}
+  explicit ReflectionPadImpl(const torch::nn::ReflectionPadOptions<D>& options_) : options(options_) {}
   void reset() override {}
-  RPadOptions<D> options;
+  torch::nn::ReflectionPadOptions<D> options;
 };
 
-class TORCH_API ReflectionPad1dImpl : public ReflectionPadImpl<2, ReflectionPad1dImpl> {
+class TORCH_API ReflectionPad1dImpl : public ReflectionPadImpl<1, ReflectionPad1dImpl> {
  public:
-  using ReflectionPadImpl<2, ReflectionPad1dImpl>::ReflectionPadImpl;
+  using ReflectionPadImpl<1, ReflectionPad1dImpl>::ReflectionPadImpl;
   torch::Tensor forward(const torch::Tensor& input) {
-   return torch::reflection_pad1d(input,options.pad());
+   return torch::reflection_pad1d(input,options.padding());
   }
 };
 
-class TORCH_API ReflectionPad2dImpl : public ReflectionPadImpl<4, ReflectionPad2dImpl> {
+class TORCH_API ReflectionPad2dImpl : public ReflectionPadImpl<2, ReflectionPad2dImpl> {
  public:
-  using ReflectionPadImpl<4, ReflectionPad2dImpl>::ReflectionPadImpl;
+  using ReflectionPadImpl<2, ReflectionPad2dImpl>::ReflectionPadImpl;
   torch::Tensor forward(const torch::Tensor& input) {
-   return torch::reflection_pad2d(input,options.pad());
+   return torch::reflection_pad2d(input,options.padding());
   }
 };
 
@@ -178,35 +255,35 @@ TORCH_MODULE(ReflectionPad2d);
 // replication pad 1,2,3d
 // ------------------------------------------
 template <size_t D, typename Derived>
-class ReplicationPadImpl : public torch::nn::Cloneable<Derived> {
+class TORCH_API ReplicationPadImpl : public torch::nn::Cloneable<Derived> {
  public:
-  ReplicationPadImpl(torch::ExpandingArray<D> p) : ReplicationPadImpl(RPadOptions<D>(p)) {}
-  explicit ReplicationPadImpl(RPadOptions<D> o) : options(std::move(o)) {reset();}
+  ReplicationPadImpl(torch::ExpandingArray<D*2> p) : ReplicationPadImpl(torch::nn::ReplicationPadOptions<D>(p)) {}
+  explicit ReplicationPadImpl(const torch::nn::ReplicationPadOptions<D> o) : options(o) {}
   void reset() override {}
-  RPadOptions<D> options;
+  torch::nn::ReplicationPadOptions<D> options;
 };
 
-class TORCH_API ReplicationPad1dImpl : public ReplicationPadImpl<2, ReplicationPad1dImpl> {
+class TORCH_API ReplicationPad1dImpl : public ReplicationPadImpl<1, ReplicationPad1dImpl> {
  public:
-  using ReplicationPadImpl<2, ReplicationPad1dImpl>::ReplicationPadImpl;
+  using ReplicationPadImpl<1, ReplicationPad1dImpl>::ReplicationPadImpl;
   torch::Tensor forward(const torch::Tensor& input) {
-   return torch::replication_pad1d(input,options.pad());
+   return torch::replication_pad1d(input,options.padding());
   }
 };
 
-class TORCH_API ReplicationPad2dImpl : public ReplicationPadImpl<4, ReplicationPad2dImpl> {
+class TORCH_API ReplicationPad2dImpl : public ReplicationPadImpl<2, ReplicationPad2dImpl> {
  public:
-  using ReplicationPadImpl<4, ReplicationPad2dImpl>::ReplicationPadImpl;
+  using ReplicationPadImpl<2, ReplicationPad2dImpl>::ReplicationPadImpl;
   torch::Tensor forward(const torch::Tensor& input) {
-   return torch::replication_pad2d(input,options.pad());
+   return torch::replication_pad2d(input,options.padding());
   }
 };
 
-class TORCH_API ReplicationPad3dImpl : public ReplicationPadImpl<6, ReplicationPad3dImpl> {
+class TORCH_API ReplicationPad3dImpl : public ReplicationPadImpl<3, ReplicationPad3dImpl> {
  public:
-  using ReplicationPadImpl<6, ReplicationPad3dImpl>::ReplicationPadImpl;
+  using ReplicationPadImpl<3, ReplicationPad3dImpl>::ReplicationPadImpl;
   torch::Tensor forward(const torch::Tensor& input) {
-   return torch::replication_pad3d(input,options.pad());
+   return torch::replication_pad3d(input,options.padding());
   }
 };
 

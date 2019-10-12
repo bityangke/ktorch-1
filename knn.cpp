@@ -293,8 +293,12 @@ torch::nn::Embedding embed(K x,J k) {
 
 static void embed(K x,const torch::nn::EmbeddingImpl* m) {
  auto o=m->options;
+ OPTION(x, rows, kj(o.count()));
+ OPTION(x, cols, kj(o.dimension()));
+/* will be renamed:
  OPTION(x, rows, kj(o.num_embeddings()));
  OPTION(x, cols, kj(o.embedding_dim()));
+*/
 }
 
 // --------------------------------------------------------------------------------------
@@ -625,10 +629,7 @@ template<size_t D,typename M> static void lppool(B a,K x,const M* m) {
 // no torch::nn::functional:lp_pool implemented yet (for version 1.3??)
 
 // ----------------------------------------------------------------------------------
-// padding layers:
-// ----------------------------------------------------------------------------------
 // pad - n-dimensional padding, specify even number of sizes and optional pad value
-// rpad - reflect/replicate fixed dimension padding
 // ----------------------------------------------------------------------------------
 static Pad pad(K x,J i) {
  IntArrayRef a; Scalar s=PadOptions().value(); Pairs p; J n=xargc(x,i,p); LongVector v;
@@ -655,23 +656,29 @@ static void pad(B a,K x,const PadImpl* m) {
   OPTION(x, value, kscalar(m->options.value()));
 }
 
-template<size_t D,typename M>
-static M rpad(K x,J k,S s) {
- B z=true; Expand<D> a(0); Pairs p; J n=xargc(x,k,p);
- if(!((n==0 && p.n) || (n==1 && XDIM(x,k,D,a))))
-  AT_ERROR("Unrecognized arguments for ",s," padding module");
+// ----------------------------------------------------------------------------------
+// rpad - reflect/replicate fixed dimension padding
+// ----------------------------------------------------------------------------------
+template<size_t D,typename M> static M rpad(K x,J i,Cast c) {
+ M o(0);
+ B sz=false; Pairs p; J n=xargc(x,i,p);
+ for(J j=0;j<n;++j)
+   switch(j) {
+    case 0: o.padding(expand<D*2>(x,i+j,c,Setting::pad)); sz=true; break;
+    default: AT_ERROR(msym(c),": only 1 positional argument expected, ",n," given");
+  }
  while(xpair(p))
-  if(mset(p.k)==Setting::pad)
-    PDIM(p,D,a);
-  else
-   AT_ERROR(s," option: ",p.k," not recognized");
- for(auto i:*a) if(i>0){z=false; break;}
- if(z)
-  AT_ERROR("No size(s) specified for ",s," padding module");
- return M(a);
+  switch(mset(p.k)) {
+   case Setting::pad: o.padding(expand<D*2>(p,c)); sz=true; break;
+   default: AT_ERROR("Unrecognized ",msym(c)," option: ",p.k); break;
+  }
+ TORCH_CHECK(sz, msym(c),": no padding sizes given");
+ return o;
 }
 
-template<typename M> static void rpad(K x,const M* m) {OPTION(x, pad, KEX(m->options.pad()));}
+template<typename M> static void rpad(K x,const M* m) {
+ OPTION(x, pad, KEX(m->options.padding()));
+}
 
 // ----------------------------------------------------------------------------------
 //  softmax, softmin, logsoftmax layers
@@ -1038,11 +1045,11 @@ void mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) {
   case Cast::lppool2d:     PUSH(q,n,LPPool2d(lppool<2>(x,i,c))); break;
 
   case Cast::pad:          PUSH(q,n,(pad(x,i))); break;
-  case Cast::reflect1d:    PUSH(q,n,(rpad<2,ReflectionPad1d>(x,i,s))); break;
-  case Cast::reflect2d:    PUSH(q,n,(rpad<4,ReflectionPad2d>(x,i,s))); break;
-  case Cast::replicate1d:  PUSH(q,n,(rpad<2,ReplicationPad1d>(x,i,s))); break;
-  case Cast::replicate2d:  PUSH(q,n,(rpad<4,ReplicationPad2d>(x,i,s))); break;
-  case Cast::replicate3d:  PUSH(q,n,(rpad<6,ReplicationPad3d>(x,i,s))); break;
+  case Cast::reflect1d:    PUSH(q,n,ReflectionPad1d(rpad<1,torch::nn::ReflectionPad1dOptions>(x,i,c))); break;
+  case Cast::reflect2d:    PUSH(q,n,ReflectionPad2d(rpad<2,torch::nn::ReflectionPad2dOptions>(x,i,c))); break;
+  case Cast::replicate1d:  PUSH(q,n,ReplicationPad1d(rpad<1,torch::nn::ReplicationPad1dOptions>(x,i,c))); break;
+  case Cast::replicate2d:  PUSH(q,n,ReplicationPad2d(rpad<2,torch::nn::ReplicationPad2dOptions>(x,i,c))); break;
+  case Cast::replicate3d:  PUSH(q,n,ReplicationPad3d(rpad<3,torch::nn::ReplicationPad3dOptions>(x,i,c))); break;
 
   case Cast::rnn:          PUSH(q,n,(rnn<torch::nn::RNN, torch::nn::RNNOptions> (s,x,i))); break;
   case Cast::gru:          PUSH(q,n,(rnn<torch::nn::GRU, torch::nn::GRUOptions> (s,x,i))); break;
@@ -1141,6 +1148,10 @@ void mopt(Module &g,B a,K &v,J i) { //g:generic module, a:true if all options, v
  } else if(auto* m=g.as<Pad>())              { c=Cast::pad;         pad(a,x,m);
  } else if(auto* m=g.as<ReflectionPad1d>())  { c=Cast::reflect1d;   rpad(x,m);
  } else if(auto* m=g.as<ReflectionPad2d>())  { c=Cast::reflect2d;   rpad(x,m);
+/*
+ } else if(auto* m=g.as<torch::nn::ReflectionPad1d>())  { c=Cast::reflect1d;   rpad(x,m);
+ } else if(auto* m=g.as<torch::nn::ReflectionPad2d>())  { c=Cast::reflect2d;   rpad(x,m);
+*/
  } else if(auto* m=g.as<ReplicationPad1d>()) { c=Cast::replicate1d; rpad(x,m);
  } else if(auto* m=g.as<ReplicationPad2d>()) { c=Cast::replicate2d; rpad(x,m);
  } else if(auto* m=g.as<ReplicationPad3d>()) { c=Cast::replicate3d; rpad(x,m);

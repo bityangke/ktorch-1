@@ -178,9 +178,6 @@ template<size_t D> Exdouble<D> exdouble(const Pairs& p,Cast c) {
 
 // --------------------------------------------------------------------------------------
 // bnorm - create batchnorm module given options/set dictionary of options given module
-// conv - create 1-3 dimensional convolution/set dictionary given module
-// drop - create dropout module given probability/set dictionary given module
-// rnn - create rnn/gru/lstm module given options/set dictionary of options from module
 // --------------------------------------------------------------------------------------
 torch::nn::BatchNorm bnorm(K x,J k) {
  B a=true,t=true; F e=1e-5,m=0.1; Pairs p; J i,n=xargc(x,k,p);
@@ -208,6 +205,46 @@ static void bnorm(B a,K x,const torch::nn::BatchNormImpl* m) {
  if(a || (o.stateful() != d.stateful())) OPTION(x, track,     kb(o.stateful()));
 }
 
+// --------------------------------------------------------------------------------------
+// conv - create 1-3d convolution/transposed convolution, set dictionary given module
+// --------------------------------------------------------------------------------------
+template<size_t D> static torch::nn::ConvOptions<D> conv(K x,J i,Cast c) {
+ torch::nn::ConvOptions<D> o(0,0,0);
+ B in=false,out=false,sz=false; Pairs p; J n=xargc(x,i,p);
+ for(J j=0;j<n;++j)
+   switch(j) {
+    case 0: o.input_channels (int64(x,i+j,c,Setting::in));            in=true; break;
+    case 1: o.output_channels(int64(x,i+j,c,Setting::in));           out=true; break;
+    case 2: o.kernel_size    (expand<D>(x,i+j,c,Setting::size));      sz=true; break;
+    case 3: o.stride         (expand<D>(x,i+j,c,Setting::stride));    break;
+    case 4: o.padding        (expand<D>(x,i+j,c,Setting::pad));       break;
+    case 5: o.output_padding (expand<D>(x,i+j,c,Setting::outpad));    break;
+    case 6: o.dilation       (expand<D>(x,i+j,c,Setting::dilate));    break;
+    case 7: o.groups         (int64(x,i+j,c,Setting::groups));        break;
+    case 8: o.with_bias      (mbool    (x,i+j,c,Setting::bias));      break;
+    case 9: o.transposed     (mbool    (x,i+j,c,Setting::transpose)); break;
+    default: AT_ERROR(msym(c),": up to 10 positional arguments expected, ",n," given");
+  }
+ while(xpair(p))
+  switch(mset(p.k)) {
+   case Setting::in:        o.input_channels (int64(p,c));     in=true; break;
+   case Setting::out:       o.output_channels(int64(p,c));    out=true; break;
+   case Setting::size:      o.kernel_size    (expand<D>(p,c)); sz=true; break;
+   case Setting::stride:    o.stride         (expand<D>(p,c)); break;
+   case Setting::pad:       o.padding        (expand<D>(p,c)); break;
+   case Setting::outpad:    o.output_padding (expand<D>(p,c)); break;
+   case Setting::dilate:    o.dilation       (expand<D>(p,c)); break;
+   case Setting::groups:    o.groups         (int64(p,c));     break;
+   case Setting::bias:      o.with_bias      (mbool(p,c));     break;
+   case Setting::transpose: o.transposed     (mbool(p,c));     break;
+   default: AT_ERROR("Unrecognized convolution option: ",p.k); break;
+  }
+ TORCH_CHECK(in,  msym(c),": number of input channels not defined");
+ TORCH_CHECK(out, msym(c),": number of output channels not defined");
+ TORCH_CHECK(sz,  msym(c),": no kernel size(s) given");
+ return o;
+}
+
 template<size_t D,typename M>
 static M conv(K x,J k) {
  B b=true,t=false; Pairs p; size_t d; J i=-1,j=-1,g=1,n=xargc(x,k,p);
@@ -219,13 +256,13 @@ static M conv(K x,J k) {
    case Setting::in:        i=plong(p); break;
    case Setting::out:       j=plong(p); break;
    case Setting::size:      PDIM(p,D,sz); break;
-   case Setting::bias:      b=pbool(p); break;
-   case Setting::transpose: t=pbool(p); break;
-   case Setting::groups:    g=plong(p); break;
    case Setting::stride:    PDIM(p,D,st); break;
    case Setting::pad:       PDIM(p,D,pd); break;
    case Setting::outpad:    PDIM(p,D,po); break;
    case Setting::dilate:    PDIM(p,D,dl); break;
+   case Setting::groups:    g=plong(p); break;
+   case Setting::bias:      b=pbool(p); break;
+   case Setting::transpose: t=pbool(p); break;
    default: AT_ERROR("Unrecognized convolution option: ",p.k); break;
   }
  if(i<0) {
@@ -247,14 +284,17 @@ static void conv(B a,K x,const M* m) {
  OPTION(x, out,  kj(o.output_channels()));
  OPTION(x, size, KEX(o.kernel_size()));
  if(a || (*o.stride()         != *d.stride()))         OPTION(x, stride,    KEX(o.stride()));
- if(a || ( o.with_bias()      !=  d.with_bias()))      OPTION(x, bias,      kb(o.with_bias()));
- if(a || ( o.transposed()     !=  d.transposed()))     OPTION(x, transpose, kb(o.transposed()));
- if(a || ( o.groups()         !=  d.groups()))         OPTION(x, groups,    kj(o.groups()));
  if(a || (*o.padding()        != *d.padding()))        OPTION(x, pad,       KEX(o.padding()));
  if(a || (*o.output_padding() != *d.output_padding())) OPTION(x, outpad,    KEX(o.output_padding()));
  if(a || (*o.dilation()       != *d.dilation()))       OPTION(x, dilate,    KEX(o.dilation()));
+ if(a || ( o.groups()         !=  d.groups()))         OPTION(x, groups,    kj(o.groups()));
+ if(a || ( o.with_bias()      !=  d.with_bias()))      OPTION(x, bias,      kb(o.with_bias()));
+ if(a || ( o.transposed()     !=  d.transposed()))     OPTION(x, transpose, kb(o.transposed()));
 }
 
+// --------------------------------------------------------------------------------------
+// drop - create dropout module given probability/set dictionary given module
+// --------------------------------------------------------------------------------------
 static F drop(S s,K x,J i) {
  F f=torch::nn::DropoutOptions().rate(); Pairs p; J n=xargc(x,i,p);
  if(!(n==0 || (n==1 && xdouble(x,i,f))))
@@ -346,6 +386,9 @@ KAPI klinear(K x) {
  KCATCH("linear");
 }
 
+// --------------------------------------------------------------------------------------
+// rnn - create rnn/gru/lstm module given options/set dictionary of options from module
+// --------------------------------------------------------------------------------------
 template<typename M,typename O>
 static M rnn(S s,K x,J k) {
  auto f=torch::nn::RNNActivation::ReLU;
@@ -1004,7 +1047,7 @@ void mparms(S s,Sequential &q,K p,K f) {
  if(f) mparms(s,*q[i],f,false);
 }
 
-//s:type, n:name(optional), i:offset into o, x:options(list/dictionary), p:parms, f:buffers
+//s:type, n:name(optional), i:offset into x, x:options(list/dictionary), p:parms, f:buffers
 void mdefine(Sequential &q,S s,S n=nullptr,J i=-1,K x=nullptr,K p=nullptr,K f=nullptr);
 void mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) { 
  Cast c=msym(s); Scalar v,w;
@@ -1018,9 +1061,9 @@ void mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) {
   case Cast::adropout:     PUSH(q,n,AlphaDropout(drop(s,x,i))); break;
   case Cast::fadropout:    PUSH(q,n,FeatureAlphaDropout(drop(s,x,i))); break;
 
-  case Cast::conv1d:       PUSH(q,n,(conv<1,torch::nn::Conv1d>(x,i))); break;
-  case Cast::conv2d:       PUSH(q,n,(conv<2,torch::nn::Conv2d>(x,i))); break;
-  case Cast::conv3d:       PUSH(q,n,(conv<3,torch::nn::Conv3d>(x,i))); break;
+  case Cast::conv1d:       PUSH(q,n,torch::nn::Conv1d(conv<1>(x,i,c))); break;
+  case Cast::conv2d:       PUSH(q,n,torch::nn::Conv2d(conv<2>(x,i,c))); break;
+  case Cast::conv3d:       PUSH(q,n,torch::nn::Conv3d(conv<3>(x,i,c))); break;
 
   case Cast::maxpool1d:    PUSH(q,n,torch::nn::MaxPool1d(maxpool<1>(x,i,c))); break;
   case Cast::maxpool2d:    PUSH(q,n,torch::nn::MaxPool2d(maxpool<2>(x,i,c))); break;

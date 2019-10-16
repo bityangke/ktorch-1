@@ -174,7 +174,7 @@ Tensor kput(K x,J i) {
 }
 // --------------------------------------------------------------------------------------
 // tensorlike - tensor creation routines, e.g. ones_like() where tensor given as template
-// tensorout - tensor creation reouties, e.g. ones_out(), where output tensor is given
+// tensorout - tensor creation routines, e.g. ones_out(), where output tensor is given
 // tensoropt - tensor creation routines where tensor size and option(s) given
 // tensormode - determines whether a template tensor or output tensor given w'other args
 // tensorput - put k value(s) -> tensor, return new tensor ptr unless output tensor given
@@ -293,8 +293,7 @@ static K tensormode(K x,S s,Tensormode m) {
  if((in=xten(x,1,t)))            tensorlike(x,m,t,r); // input tensor is 2nd arg
  else if((out=xten(x,x->n-1,t))) tensorout(x,m,t,r);  // output tensor is final arg
  else                            tensoropt(x,m,r);    // no input/output tensor
- if(!r.defined())
-  AT_ERROR("Unrecognized argument(s) for tensor creation mode: ",s);
+ TORCH_CHECK(r.defined(),"Unrecognized argument(s) for tensor creation mode: ",s);
  return out ? (K)0 : kten(r);
 }
 
@@ -497,9 +496,6 @@ KAPI options(K x) {
 // ------------------------------------------------------------------------------------------------
 K stordata(const Storage& s) {
  TORCH_CHECK(s.device().is_cpu(), "Cannot copy CUDA storage via memcpy");
- std::cerr << "    dtype: " << s.dtype() << "\n";
- std::cerr << "     size: " << s.size() << "\n";
- std::cerr << " capacity: " << s.capacity() << "\n";
  K x=ktn(maptype(s.dtype()),s.size());
  memcpy(kG(x),s.data(),s.capacity());
  return x;
@@ -635,6 +631,55 @@ KAPI narrow(K x) {
 }
 
 // -------------------------------------------------------------------------------------------
+// transpose tensor/array, 3-d & higher require two dim's to swap, optional in-place flag
+// -------------------------------------------------------------------------------------------
+KAPI transpose(K x) {
+ KTRY
+  if(x->t) return r1(x); // k scalar/simple list returned as is
+  B b=false; J n=x->n-xbool(x,x->n-1,b); int64_t i,j; Tensor t;
+  B p=xten(x,t) || xten(x,0,t);
+  if(!p) t=xmixed(x,4) ? kput(x,0) : (n=1,kput(x));
+  TORCH_CHECK(n==3 || t.dim()<3, "transpose of ",t.dim(),"d tensor needs the two dimenstions to be swapped");
+  if(n==1)
+   return p ? (b ? t.t_(),(K)0 : kten(t.t())) : kget(t.t());
+  else if(xint64(x,1,i) && xint64(x,2,j) && n==3)
+   return p ? (b ? t.transpose_(i,j),(K)0 : kten(t.transpose(i,j))) : kget(t.transpose(i,j));
+  else
+   AT_ERROR("transpose expects tensor or (tensor;inplace flag) or (tensor;dim1;dim2;optional inplace flag");
+ KCATCH("transpose");
+}
+
+// -------------------------------------------------------------------------------------------
+// kresize - handle inputs for resize/View/reshape
+// resize - resize tensor in place given size or tensor w'size to use, also allow k array input
+//          will reallocate storage if larger size required, elements will be uninitialized
+// view - attempt to create a new tensor that is view of existing tensor (shares storage)
+//        error if view size is not compatible with input tensor's size and stride 
+// reshape - like view, but will create new storage for new tensor if view not possible
+// -------------------------------------------------------------------------------------------
+static K kresize(K x,I m,cS e) {
+ KTRY
+  IntArrayRef n; Tensor *t=xten(x,0),*s=xten(x,1);
+  TORCH_CHECK(!x->t,   e," not implemented for ",kname(x->t));
+  TORCH_CHECK(x->n==2, e," expects (array/tensor;new size/tensor w'size to use)");
+  TORCH_CHECK(s || xsize(x,1,n), e," expects 2nd arg of size or tensor w'size to use");
+  switch(m) {
+   case 0: if(t) return t->resize_(s ? s->sizes() : n), (K)0;
+           else  return kget(kput(x,0).resize_(s ? s->sizes() : n));
+   case 1: if(t) return kten(t->reshape(s ? s->sizes() : n));
+           else  return kget(kput(x,0).reshape(s ? s->sizes() : n));
+   case 2: if(t) return kten(t->view(s ? s->sizes() : n));
+           else  return kget(kput(x,0).view(s ? s->sizes() : n));
+   default: return KERR("invalid resize/reshape mode");
+  }
+ KCATCH(e);
+}
+
+KAPI resize(K x)  {return kresize(x, 0, "resize");}
+KAPI reshape(K x) {return kresize(x, 1, "reshape");}
+KAPI view(K x)    {return kresize(x, 2, "view");}
+
+// -------------------------------------------------------------------------------------------
 // newsize - return new vector for tensor sizes, replacing size at dimension d with new value
 // maxsize - find the maximum size at given dimension using underlying storage size
 // fullsize -  restore tensor(s) to maximum size at given dimension
@@ -714,6 +759,7 @@ void subsetsafe(Tensor& t,int64_t d,int64_t i,int64_t w) {
 // tensorcopy - tgt <- src values, must have same type & device, tgt resized if src larger
 // grad = return gradient data or empty, if ptr enlisted, return gradient ptr, which must be free'd
 // backward - backprop given tensor, optional tensor and sym for retain/create gradient graph
+// detach - detach tensor, with optional flag to perform the detach in place
 // ------------------------------------------------------------------------------------------
 void tensorcopy(Tensor &tgt,const Tensor &src,B async) {
  if(src.dtype() != tgt.dtype()) {
@@ -760,15 +806,29 @@ KAPI backward(K x) {
  KCATCH("backward");
 }
 
+KAPI detach(K x) {
+ KTRY
+  B b=false; Tensor *t;
+  TORCH_CHECK((t=xten(x)) || ((t=xten(x,0)) && xbool(x,1,b) && x->n==2),
+              "detach: unrecognized arg(s), expecting tensor or (tensor;inplace flag)");
+  return b ? t->detach_(),(K)0 : kten(t->detach());
+ KCATCH("detach");
+}
+
 // ----------------------------------
 // tensor fns defined in k namespace
 // ----------------------------------
 void tensorfn(K x) {
- fn(x, "tensor",    KFN(tensor),1);
- fn(x, "backward",  KFN(backward),1);
- fn(x, "grad",      KFN(grad),1);
- fn(x, "vector",    KFN(vector),1);
- fn(x, "options",   KFN(options),1);
- fn(x, "shuffle",   KFN(kshuffle),1);
- fn(x, "narrow",    KFN(narrow),1);
+ fn(x, "tensor",    KFN(tensor), 1);
+ fn(x, "grad",      KFN(grad), 1);
+ fn(x, "backward",  KFN(backward), 1);
+ fn(x, "detach",    KFN(detach), 1);
+ fn(x, "vector",    KFN(vector), 1);
+ fn(x, "options",   KFN(options), 1);
+ fn(x, "shuffle",   KFN(kshuffle), 1);
+ fn(x, "narrow",    KFN(narrow), 1);
+ fn(x, "transpose", KFN(transpose), 1);
+ fn(x, "resize",    KFN(resize), 1);
+ fn(x, "reshape",   KFN(reshape), 1);
+ fn(x, "View",      KFN(view), 1);
 }

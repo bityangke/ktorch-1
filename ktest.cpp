@@ -39,6 +39,23 @@ KAPI cudamem(K x) {
  KCATCH("cuda memory");
 }
 
+void f(int64_t n) {
+ n*=1000000;
+ auto t=torch::rand(n);
+ double d=0; float f=0,*p=t.data_ptr<float>();
+ for(size_t i=0; i<n; ++i) d+=p[i], f+=p[i];
+ std::cerr << "double  sum: " <<   d << "\n";
+ std::cerr << "float   sum: " <<   f << "\n\n";
+ std::cerr << "double mean: " << d/n << "\n";
+ std::cerr << "float  mean: " << f/n << "\n";
+ std::cerr << "torch  mean: " << t.mean().item().toFloat() << "\n";
+}
+
+KAPI ftest(K x) {
+ f(x->j);
+ return (K)0;
+}
+
 void errfail() {
  if(true) {
   AT_ERROR("err");

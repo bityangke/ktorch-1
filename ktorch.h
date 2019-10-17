@@ -147,8 +147,13 @@ enum class Cast:char {
 
 enum class Tensormode:char {   // tensor creation modes
  undefined,
- arange,   empty,    eye,      full,     linspace, logspace, ones,
- rand,     randint,  randn,    randperm, range,    zeros
+ arange, empty, eye,     full,  linspace, logspace,
+ ones,   rand,  randint, randn, randperm, range,
+ zeros
+};
+
+enum class Prob:char {  // probablility distributions
+ cauchy, exponential, geometric, lognormal, normal, random, uniform
 };
 
 enum class Setting:char {
@@ -516,6 +521,16 @@ typedef struct {
   std::make_tuple(cs("arange"),   Tensormode::arange),
   std::make_tuple(cs("linspace"), Tensormode::linspace),
   std::make_tuple(cs("logspace"), Tensormode::logspace)
+ }};
+
+ std::array<std::tuple<S,Prob>,7> prob = {{    //probability distribution: map symbol -> enum
+  std::make_tuple(cs("cauchy"),      Prob::cauchy),
+  std::make_tuple(cs("exponential"), Prob::exponential),
+  std::make_tuple(cs("geometric"),   Prob::geometric),
+  std::make_tuple(cs("lognormal"),   Prob::lognormal),
+  std::make_tuple(cs("normal"),      Prob::normal),
+  std::make_tuple(cs("random"),      Prob::random),
+  std::make_tuple(cs("uniform"),     Prob::uniform),
  }};
 
  std::array<std::tuple<S,torch::nn::RNNActivation>,2> rnnfn = {{

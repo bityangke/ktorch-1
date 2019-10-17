@@ -605,6 +605,38 @@ KAPI kshuffle(K x) {
 }
 
 // -------------------------------------------------------------------------------------------
+//  subset - take a subset of a particular tensor dimension, given offset & width
+//           operate on vector of tensors if same size on given dimension
+//           requires tensor, dim, offset, width
+//           optional max size of given dim can be supplied, else calculated from storage size
+// setsafe - calls set_() after checking that the length implied by sizes & strides will fit
+// subsetsafe - alternate form of subset using setsafe rather than maximum size dimension
+// -------------------------------------------------------------------------------------------
+void subset(Tensor& t,int64_t d,int64_t i,int64_t w,int64_t n) {
+ if(!n) n=maxsize(t,d);  // if not given, get max size of dimension d from overall storage size
+ TORCH_CHECK(i<n,"subset offset of ",i," must be from 0-",n-1," the maximum size for dimension ",d);
+ if(w>n) w=n;            // reduce subset window if greater than max size
+ if(w>n-i) w=n-i;        // final subset may be a fraction of window
+ t.set_(t.storage(), i*t.stride(d), w==t.size(d) ? t.sizes() : newsize(t,d,w), t.strides());
+}
+
+void subset(TensorVector& v,int64_t d,int64_t i,int64_t w,int64_t n) {
+ if(!n) n=maxsize(v,d);
+ for(auto& t:v) subset(t,d,i,w,n);
+}
+
+void setsafe(Tensor& t,const Storage& s,int64_t i,const IntArrayRef& sz,const IntArrayRef& st) {
+ TORCH_CHECK(s.size()>=i+computeStorageSize(sz,st), 
+            "size ",sz," and stride ",st," require total of ",computeStorageSize(sz,st),
+            " plus offset of ",i," exceeds storage size of ",s.size());
+ t.set_(s,i,sz,st);
+}
+
+void subsetsafe(Tensor& t,int64_t d,int64_t i,int64_t w) {
+ setsafe(t, t.storage(), i*t.stride(d), newsize(t,d,w), t.strides());
+}
+
+// -------------------------------------------------------------------------------------------
 // narrow - narrow a tensor/vector along given dimension, according to offset,size
 //          in-place flag defaults to false
 // -------------------------------------------------------------------------------------------
@@ -721,37 +753,67 @@ int64_t fullsize(TensorVector& v,int64_t d) {
  return m;
 }
 
-// -------------------------------------------------------------------------------------------
-//  subset - take a subset of a particular tensor dimension, given offset & width
-//           operate on vector of tensors if same size on given dimension
-//           requires tensor, dim, offset, width
-//           optional max size of given dim can be supplied, else calculated from storage size
-// setsafe - calls set_() after checking that the length implied by sizes & strides will fit
-// subsetsafe - alternate form of subset using setsafe rather than maximum size dimension
-// -------------------------------------------------------------------------------------------
-void subset(Tensor& t,int64_t d,int64_t i,int64_t w,int64_t n) {
- if(!n) n=maxsize(t,d);  // if not given, get max size of dimension d from overall storage size
- TORCH_CHECK(i<n,"subset offset of ",i," must be from 0-",n-1," the maximum size for dimension ",d);
- if(w>n) w=n;            // reduce subset window if greater than max size
- if(w>n-i) w=n-i;        // final subset may be a fraction of window
- t.set_(t.storage(), i*t.stride(d), w==t.size(d) ? t.sizes() : newsize(t,d,w), t.strides());
+// ------------------------------------------------------------------------------------------
+// probablity distribution methods: given tensor, fill w'random vars from chosen distribution
+// ------------------------------------------------------------------------------------------
+static S prob(Prob p) {
+ for(auto& m:env().prob) if(std::get<1>(m)==p) return std::get<0>(m);
+ AT_ERROR("Unrecognized probability distribution: ",(I)p);
 }
 
-void subset(TensorVector& v,int64_t d,int64_t i,int64_t w,int64_t n) {
- if(!n) n=maxsize(v,d);
- for(auto& t:v) subset(t,d,i,w,n);
+static K kprob(K x,Prob p) {
+ KTRY
+  Tensor *t; Scalar a,b;
+  TORCH_CHECK((t=xten(x)) || (t=xten(x,0)), prob(p)," requires tensor as 1st arg");
+  if(x->n==1) {
+   switch(p) {
+    case Prob::cauchy:      t->cauchy_(); break;
+    case Prob::exponential: t->exponential_(); break;
+    case Prob::geometric:   AT_ERROR(prob(p)," requires a probability argument"); break;
+    case Prob::lognormal:   t->log_normal_(); break;
+    case Prob::normal:      t->normal_(); break;
+    case Prob::random:      t->random_(); break;
+    case Prob::uniform:     t->uniform_(); break;
+   }
+  } else if(x->n==2) {
+   TORCH_CHECK(xnum(x,1,a), prob(p),": invalid number for 2nd arg");
+   TORCH_CHECK(p != Prob::random || a.isIntegral(false), prob(p),": requires integer arg for high limit");
+   switch(p) {
+    case Prob::cauchy:      t->cauchy_(a.toDouble()); break;
+    case Prob::exponential: t->exponential_(a.toDouble()); break;
+    case Prob::geometric:   t->geometric_(a.toDouble()); break;
+    case Prob::lognormal:   t->log_normal_(a.toDouble()); break;
+    case Prob::normal:      t->normal_(a.toDouble()); break;
+    case Prob::random:      t->random_(a.toLong()); break;
+    case Prob::uniform:     t->uniform_(a.toDouble()); break;
+   }
+  } else if(x->n==3) {
+   TORCH_CHECK(xnum(x,1,a), prob(p),": invalid number for 2nd arg");
+   TORCH_CHECK(xnum(x,2,b), prob(p),": invalid number for 3rd arg");
+   TORCH_CHECK(p != Prob::random || (a.isIntegral(false) && b.isIntegral(false)), prob(p),": requires integer args for low & high limits");
+   switch(p) {
+    case Prob::cauchy:      t->cauchy_(a.toDouble(),b.toDouble()); break;
+    case Prob::exponential:
+    case Prob::geometric:   AT_ERROR(prob(p),": tales up to 2 args, ",x->n," supplied"); break;
+    case Prob::lognormal:   t->log_normal_(a.toDouble(),b.toDouble()); break;
+    case Prob::normal:      t->normal_(a.toDouble(),b.toDouble()); break;
+    case Prob::random:      t->random_(a.toLong(),b.toLong()); break;
+    case Prob::uniform:     t->uniform_(a.toDouble(),b.toDouble()); break;
+   }
+  } else {
+    AT_ERROR(prob(p)," accepts no more than ",(p==Prob::exponential || p==Prob::geometric) ? 2 : 3," args, ",x->n," supplied");
+  }
+  return (K)0;
+ KCATCH("probability");
 }
 
-void setsafe(Tensor& t,const Storage& s,int64_t i,const IntArrayRef& sz,const IntArrayRef& st) {
- TORCH_CHECK(s.size()>=i+computeStorageSize(sz,st), 
-            "size ",sz," and stride ",st," require total of ",computeStorageSize(sz,st),
-            " plus offset of ",i," exceeds storage size of ",s.size());
- t.set_(s,i,sz,st);
-}
-
-void subsetsafe(Tensor& t,int64_t d,int64_t i,int64_t w) {
- setsafe(t, t.storage(), i*t.stride(d), newsize(t,d,w), t.strides());
-}
+KAPI Cauchy(K x)      {return kprob(x, Prob::cauchy);}
+KAPI Exponential(K x) {return kprob(x, Prob::exponential);}
+KAPI Geometric(K x)   {return kprob(x, Prob::geometric);}
+KAPI Lognormal(K x)   {return kprob(x, Prob::lognormal);}
+KAPI Normal(K x)      {return kprob(x, Prob::normal);}
+KAPI Random(K x)      {return kprob(x, Prob::random);}
+KAPI Uniform(K x)     {return kprob(x, Prob::uniform);}
 
 // ------------------------------------------------------------------------------------------
 // tensor utility fns: 
@@ -819,16 +881,23 @@ KAPI detach(K x) {
 // tensor fns defined in k namespace
 // ----------------------------------
 void tensorfn(K x) {
- fn(x, "tensor",    KFN(tensor), 1);
- fn(x, "grad",      KFN(grad), 1);
- fn(x, "backward",  KFN(backward), 1);
- fn(x, "detach",    KFN(detach), 1);
- fn(x, "vector",    KFN(vector), 1);
- fn(x, "options",   KFN(options), 1);
- fn(x, "shuffle",   KFN(kshuffle), 1);
- fn(x, "narrow",    KFN(narrow), 1);
- fn(x, "transpose", KFN(transpose), 1);
- fn(x, "resize",    KFN(resize), 1);
- fn(x, "reshape",   KFN(reshape), 1);
- fn(x, "View",      KFN(view), 1);
+ fn(x, "tensor",      KFN(tensor), 1);
+ fn(x, "grad",        KFN(grad), 1);
+ fn(x, "backward",    KFN(backward), 1);
+ fn(x, "detach",      KFN(detach), 1);
+ fn(x, "vector",      KFN(vector), 1);
+ fn(x, "options",     KFN(options), 1);
+ fn(x, "shuffle",     KFN(kshuffle), 1);
+ fn(x, "narrow",      KFN(narrow), 1);
+ fn(x, "transpose",   KFN(transpose), 1);
+ fn(x, "resize",      KFN(resize), 1);
+ fn(x, "reshape",     KFN(reshape), 1);
+ fn(x, "View",        KFN(view), 1);
+ fn(x, "cauchy",      KFN(Cauchy), 1);
+ fn(x, "exponential", KFN(Exponential), 1);
+ fn(x, "geometric",   KFN(Geometric), 1);
+ fn(x, "lognormal",   KFN(Lognormal), 1);
+ fn(x, "normal",      KFN(Normal), 1);
+ fn(x, "random",      KFN(Random), 1);
+ fn(x, "uniform",     KFN(Uniform), 1);
 }

@@ -862,8 +862,7 @@ KAPI backward(K x) {
      t.backward({},a,b); ok=true;
    }
   }
-  if(!ok)
-   AT_ERROR("Unexpected arg(s) for backward call, expecting tensor, (tensor;sym), (tensor;grad tensor/array) or (tensor;grad tensor/array;sym)");
+  TORCH_CHECK(ok, "backward: unexpected arg(s), expecting tensor, (tensor;sym), (tensor;grad tensor/array) or (tensor;grad tensor/array;sym)");
   return (K)0;
  KCATCH("backward");
 }

@@ -36,7 +36,7 @@ B xhelp(K x,S &s) {
 // match - return true if scalars match (check long/double value)
 // kscalar - return k double/long from torch scalar
 // xlen - 1 if scalar else x->n for lists, no. of table rows or dictionary elements
-// kname - string from k data type
+// kname - string from k data type or object
 // ksizeof - given k type, return size of element, e.g. KF -> 8
 // maptype - map k data type to/from torch type
 // mapclass - make class enum to symbol
@@ -120,6 +120,8 @@ cS kname(A k) {
  }
 }
 
+cS kname(K x) {return xptr(x) ? mapclass(xtag(x)->a) : kname(x->t);}
+ 
 J ksizeof(A k) {
  switch(k) {
   case KE: return sizeof(E);

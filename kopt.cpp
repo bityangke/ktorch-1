@@ -477,13 +477,13 @@ KAPI opt(K x) {
 }
 
 KAPI kstep(K x) {
- Kopt *o;
- if((o=xoptim(x))) {
-  if(o->c == Cast::lbfgs)
-   AT_ERROR("LBFGS optimizer requires model, loss & inputs");
+ KTRY
+  Kopt *o;
+  TORCH_CHECK(o=xoptim(x), "step not implemented for ", kname(x));
+  TORCH_CHECK(o->c != Cast::lbfgs, "LBFGS optimizer requires model, loss & inputs");
   ((Optimizer*)o->get())->step();
- }
- return (K)0;
+  return (K)0;
+ KCATCH("step");
 }
 
 KAPI lr(K x) {

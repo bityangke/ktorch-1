@@ -242,6 +242,7 @@ K kscalar(const Scalar&);
 J xlen(K);
 J xlen(K,J);
 cS kname(A);
+cS kname(K);
 J ksizeof(A);
 A maptype(TypeMeta);
 TypeMeta maptype(A);

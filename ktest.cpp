@@ -216,18 +216,6 @@ KAPI pairtest(K x) {
  KCATCH("pairs test..");
 }
 
-/*
-K model(Sequential& q,Loss *l,Optimizer *o,LossClosureOptimizer *oc) {
-    
- auto cost=[&]() {
-  o->zero_grad();
-  auto z=l->forward(q->forward(v[0]
-  z.backward();
-  return d;
- };
-}
-*/
-
 KAPI lbfgs(K x) {
     int i, n=x->j;
     auto t=torch::randn({n});

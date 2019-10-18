@@ -2,6 +2,13 @@
 #include "knn.h"
 #include "kloss.h"
 
+// -------------------------------------------------------------------------------------------
+// modelpart
+// modelkeys
+// modelstate
+// modeltable
+// model
+// -------------------------------------------------------------------------------------------
 static void modelpart(K x,J i,Kseq*& q,Kloss*& l,Kopt*& o) {
  for(;i<x->n;++i) {
   auto* g=xtag(x,i);
@@ -67,9 +74,21 @@ KAPI model(K x) {
 }
 
 // -------------------------------------------------------------------------------------------
+// mback
 // mforward
 // mloss
 // -------------------------------------------------------------------------------------------
+K mback(K x) {
+ Kmodel *m; Tensor *input,*label,loss;
+ if((m=xmodel(x,0)) && (input=xten(x,1)) && (label=xten(x,2))) {
+  loss=m->l->forward(m->q->forward(*input),*label);
+ } else {
+  AT_ERROR("backward expects (model; inputs; labels)");
+ }
+ loss.backward();
+ return kget(loss);
+}
+
 Tensor mforward(Kmodel *m,TensorVector& v) {
  return m->q->forward(v[0]);
 }

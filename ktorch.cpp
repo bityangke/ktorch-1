@@ -1159,6 +1159,7 @@ static K attr(K x,A k,Attr a) {
   switch(g->a) {
    case Class::tensor: return tensorattr(((Kten*)g)->t,k,a);
    case Class::vector: return vectorattr(((Kvec*)g)->v,k,a);
+   case Class::loss:   return  lossattr(((Kloss*)g)->l,k,a);
    default: AT_ERROR(mapattr(a),": not implemented for ",mapclass(g->a));
   }
  KCATCH("attr");

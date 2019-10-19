@@ -74,11 +74,11 @@ KAPI model(K x) {
 }
 
 // -------------------------------------------------------------------------------------------
-// mback
+// mbackward
 // mforward
 // mloss
 // -------------------------------------------------------------------------------------------
-K mback(K x) {
+K mbackward(K x) {
  Kmodel *m; Tensor *input,*label,loss;
  if((m=xmodel(x,0)) && (input=xten(x,1)) && (label=xten(x,2))) {
   loss=m->l->forward(m->q->forward(*input),*label);

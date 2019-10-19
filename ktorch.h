@@ -433,6 +433,7 @@ K mstate(K);
 K lossdict(Ktag*,K);
 K lossdict(B,B,Cast,Loss*);
 K lossto(Kloss*,const TensorOptions&,B);
+K lossattr(const Lossptr&,A,Attr);
 void lossfn(K);
 
 // optimization functions:

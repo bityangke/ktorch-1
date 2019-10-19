@@ -586,6 +586,13 @@ KAPI loss(K x) {
  KCATCH("Loss module");
 }
 
+K lossattr(const Lossptr& l,A k,Attr a) {
+ switch(a) {
+  case Attr::ref:     return kj(l.use_count());
+  default: AT_ERROR(mapattr(a),": not implemented for loss modules");
+ }
+}
+
 // ----------------------------------
 // loss fns defined in k namespace
 // ----------------------------------

@@ -439,6 +439,7 @@ void lossfn(K);
 // optimization functions:
 K optstate(Ktag*,K);
 K optstate(B,B,Cast,OptimizerBase*);
+K optattr(const Optptr&,A,Attr);
 void optfn(K);
 
 // model functions:
@@ -449,7 +450,7 @@ void modelfn(K);
 typedef struct {
  I cuda;             // number of CUDA devices
  B frame=false;      // if true, error message returns stack frame
- B alloptions=true;  // if true, queries return all settings, else only those not matching defaults
+ B alloptions=true;  // if true, return all option settings, else only non-defaults
  S help=cs("help");
 
  std::vector<std::tuple<S,torch::Device>> device;
@@ -764,3 +765,4 @@ typedef struct {
 } Env;
 
 Env& env();
+std::unordered_set<J>& pointer();

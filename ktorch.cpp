@@ -4,7 +4,7 @@
 // krrbuf - copy msg to a buffer for signalling error to k
 // dictadd - add an entry in a dictionary mapping symbol -> k value
 // xind - true if i is valid index of k list (type=0)
-// kptr - given void *, return K value(type=0) containing a single long scalar = (intptr_t)void *
+// kptr - given void *, add to pointer list & return k list of one long scalar = (intptr_t)void *
 // xptr - given k value, return true if enclosed scalar
 // xtag - if enclosed integer ptr detected from k, return pointer to tag structure
 // xhelp - check for single argument: `help, or 2 symbols, e.g. `help`conv2d
@@ -18,8 +18,8 @@ void dictadd(K x, S s,K v){K *k=kK(x); js(&k[0],cs(s)); jk(&k[1],v);}
 void dictadd(K x,cS s,K v){K *k=kK(x); js(&k[0],cs(s)); jk(&k[1],v);}
 
 B xind(K x,J i) {return !x->t && -1<i && i<x->n;}
-K kptr(void *v){return knk(1,kj((intptr_t)v));}
-B xptr(K x) {return !x->t && x->n==1 && kK(x)[0]->t==-KJ;}
+K kptr(void *v){J j=(intptr_t)v; pointer().insert(j); return knk(1,kj(j));}
+B xptr(K x) {return !x->t && x->n==1 && kK(x)[0]->t==-KJ && pointer().count(kK(x)[0]->j);}
 B xptr(K x,J i) {return xind(x,i) && xptr(kK(x)[i]);}
 Ktag* xtag(K x) {return xptr(x) ? (Ktag*)kK(x)[0]->j : nullptr;}
 Ktag* xtag(K x,J i) {return xind(x,i) ? xtag(kK(x)[i]) : nullptr;}
@@ -36,10 +36,10 @@ B xhelp(K x,S &s) {
 // match - return true if scalars match (check long/double value)
 // kscalar - return k double/long from torch scalar
 // xlen - 1 if scalar else x->n for lists, no. of table rows or dictionary elements
+// mapclass - map class enum to symbol
 // kname - string from k data type or object
 // ksizeof - given k type, return size of element, e.g. KF -> 8
 // maptype - map k data type to/from torch type
-// mapclass - make class enum to symbol
 // mapattr - make attr enum to symbol
 // ------------------------------------------------------------------------------------------
 B match(const Scalar &x,const Scalar &y) {
@@ -71,6 +71,12 @@ J xlen(K x) {
 }
 
 J xlen(K x,J i) {return xind(x,i) ? xlen(kK(x)[i]) : -1;}
+
+S mapclass(Class a) {
+ for(auto& m:env().kclass)
+  if(a==std::get<1>(m)) return std::get<0>(m);
+ AT_ERROR("Unrecognized class: ", (I)a);
+}
 
 cS kname(A k) {
  A t=abs(k); B b=k<0;
@@ -148,12 +154,6 @@ TypeMeta maptype(A k) {
  for(auto &m:env().ktype)
   if(t==std::get<0>(m)) return std::get<1>(m);
  AT_ERROR("No torch type found for k: ",kname(k));
-}
-
-S mapclass(Class a) {
- for(auto& m:env().kclass)
-  if(a==std::get<1>(m)) return std::get<0>(m);
- AT_ERROR("Unrecognized class: ", (I)a);
 }
 
 S mapattr(Attr a) {
@@ -861,14 +861,13 @@ K kexpand(J n,const F       *e) {return kex<F>      (n,e) ? kf(e[0]) : klist(n,e
 // kstate - retrieve module/loss/optimizer state: options, internal buffers & parameters
 // to - convert tensor/module device and or data type, e.g. to[tensor;`cuda`float;0b]
 // kdetail - return dictionary of attributes of given object and level of detail
-// zerograd - return dictionary of attributes of given object and level of detail
 // -----------------------------------------------------------------------------------------
 KAPI kfree(K x){
  KTRY
   if(auto* a=xtag(x))
-   return delete a, (K)0;
+   return delete a, pointer().erase(kK(x)[0]->j), (K)0;
   else
-   return KERR("Not a recognized pointer, unable to free");
+   return KERR("Not a current pointer, unable to free");
  KCATCH("free");
 }
 
@@ -925,6 +924,10 @@ static K kinfo(K x,B b,cS e) {
 KAPI info1(K x) {return kinfo(x, false, "info");}
 KAPI info2(K x) {return kinfo(x, true,  "detail");}
 
+// -----------------------------------------------------------------------------------------
+// zerograd - return dictionary of attributes of given object and level of detail
+// backward - backward calcs on tensor or model(uses model loss(model output,target) )
+// -----------------------------------------------------------------------------------------
 KAPI zerograd(K x) {
  KTRY
   auto *g=xtag(x);
@@ -935,12 +938,25 @@ KAPI zerograd(K x) {
    case Class::vector:     for(auto& t:((Kvec*)g)->v) f(t); break;
    case Class::sequential: ((Kseq*)g)->q->zero_grad(); break;
    case Class::optimizer:  ((Kopt*)g)->o->zero_grad(); break;
+   case Class::model:      ((Kmodel*)g)->q->zero_grad(); break;
    default: AT_ERROR("zerograd not implemented for ",mapclass(g->a));
   }
   return (K)0;
  KCATCH("zero gradients");
 }
 
+KAPI backward1(K x) {
+ KTRY
+  auto *g=xtag(x);
+  TORCH_CHECK(g, "zerograd not implemented for ",kname(x->t));
+  switch(g->a) {
+ //case Class::tensor:     f(((Kten*)g)->t); break;
+ //case Class::model:      ((Kmodel*)g)->q->zero_grad(); break;
+   default: AT_ERROR("backward not implemented for ",mapclass(g->a));
+  }
+  return (K)0;
+ KCATCH("backward");
+}
 
 // ---------------------------------------------------------------------------------------------
 // cudadevices - return number of CUDA devices enabled or available CUDA device symbols
@@ -1157,9 +1173,10 @@ static K attr(K x,A k,Attr a) {
   auto* g=xtag(x);
   TORCH_CHECK(g, mapattr(a),": unrecognized arg(s) - ",kname(x->t));
   switch(g->a) {
-   case Class::tensor: return tensorattr(((Kten*)g)->t,k,a);
-   case Class::vector: return vectorattr(((Kvec*)g)->v,k,a);
-   case Class::loss:   return  lossattr(((Kloss*)g)->l,k,a);
+   case Class::tensor:    return tensorattr(((Kten*)g)->t,k,a);
+   case Class::vector:    return vectorattr(((Kvec*)g)->v,k,a);
+   case Class::loss:      return  lossattr(((Kloss*)g)->l,k,a);
+   case Class::optimizer: return    optattr(((Kopt*)g)->o,k,a);
    default: AT_ERROR(mapattr(a),": not implemented for ",mapclass(g->a));
   }
  KCATCH("attr");
@@ -1191,6 +1208,7 @@ KAPI     stride(K x) {return attr(x,  KJ, Attr::stride);}
 // kinit - called when shared library is first opened
 // -----------------------------------------------------------------------------------------
 Env& env() {static Env e; return e;}
+std::unordered_set<J>& pointer() {static std::unordered_set<J> p; return p;}
 
 static void kinit() __attribute__((constructor));
 

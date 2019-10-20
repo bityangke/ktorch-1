@@ -509,6 +509,16 @@ KAPI lr(K x) {
  KCATCH("lr");
 }
 
+// ---------------------------------------------------------------------------------------
+// optattr - return attribute of given optimizer
+// ---------------------------------------------------------------------------------------
+K optattr(const Optptr& o,A k,Attr a) {
+ switch(a) {
+  case Attr::ref:     return kj(o.use_count());
+  default: AT_ERROR(mapattr(a),": not implemented for optimizers");
+ }
+}
+
 // -------------------------------------------------------------------------------------------
 // add optimizer api functions to library dictionary
 // -------------------------------------------------------------------------------------------

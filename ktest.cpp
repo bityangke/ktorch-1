@@ -56,6 +56,26 @@ KAPI ftest(K x) {
  return (K)0;
 }
 
+KAPI hashtest(K x) {
+ std::unordered_set<J> Ptrs;
+ Ptrs.insert(10);
+ Ptrs.insert(20);
+ Ptrs.insert(2);
+ Ptrs.insert(20);
+
+ std::cerr << "size: " << Ptrs.size() << "\n";
+ for(auto j:Ptrs)
+  std::cerr << j << "\n";
+
+ //std::cerr << " find: " << Ptrs.find(20) << "\n";
+ std::cerr << "count: " << Ptrs.count(20) << "\n";
+ Ptrs.erase(20);
+ std::cerr << "size: " << Ptrs.size() << "\n";
+ //std::cerr << " find: " << Ptrs.find(20) << "\n";
+ std::cerr << "count: " << Ptrs.count(20) << "\n";
+ return (K)0;
+}
+
 void errfail() {
  if(true) {
   AT_ERROR("err");

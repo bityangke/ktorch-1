@@ -385,6 +385,8 @@ K klist(J,const F*);
 K kexpand(J,const int64_t*);
 K kexpand(J,const F*);
 #define KEX(x) kexpand(x.size(),(*x).data())  // k list from ExpandingArray
+B kfree(K);
+B kfree(K,J);
 void fn(K,cS,void*,I);
 
 void randomfn(K);

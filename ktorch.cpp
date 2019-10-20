@@ -867,17 +867,25 @@ K kexpand(J n,const int64_t *e) {return kex<int64_t>(n,e) ? kj(e[0]) : klist(n,e
 K kexpand(J n,const F       *e) {return kex<F>      (n,e) ? kf(e[0]) : klist(n,e);}
 
 // -----------------------------------------------------------------------------------------
-// kfree - free allocated object according to tag
+// kfree - free allocated object and remove from active pointer set
+// Kfree - k-api to free a previously allocated pointer
 // kstate - retrieve module/loss/optimizer state: options, internal buffers & parameters
 // to - convert tensor/module device and or data type, e.g. to[tensor;`cuda`float;0b]
 // kdetail - return dictionary of attributes of given object and level of detail
 // -----------------------------------------------------------------------------------------
-KAPI kfree(K x){
+B kfree(K x) {
+ if(auto *a=xtag(x))
+   return delete a, pointer().erase(kK(x)[0]->j), true;
+ else
+   return false;
+}
+
+B kfree(K x,J i) {return xind(x,i) ? kfree(kK(x)[i]) : false;}
+
+KAPI Kfree(K x){
  KTRY
-  if(auto* a=xtag(x))
-   return delete a, pointer().erase(kK(x)[0]->j), (K)0;
-  else
-   return KERR("Not a current pointer, unable to free");
+  TORCH_CHECK(kfree(x), "Not a pointer, unable to free");
+  return (K)0;
  KCATCH("free");
 }
 
@@ -1244,7 +1252,7 @@ void fn(K x,cS s,void *f,I n){dictadd(x,s,dl(f,n));}
 
 KAPI fns(K x){
  x=xD(ktn(KS,0),ktn(0,0));
- fn(x, "free",        KFN(kfree),       1);
+ fn(x, "free",        KFN(Kfree),       1);
  fn(x, "to",          KFN(to),          1);
  fn(x, "info",        KFN(info1),       1);
  fn(x, "detail",      KFN(info2),       1);

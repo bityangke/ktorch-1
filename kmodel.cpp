@@ -3,11 +3,11 @@
 #include "kloss.h"
 
 // -------------------------------------------------------------------------------------------
-// modelpart
-// modelkeys
-// modelstate
+// modelpart - parse args from k to define sequential, loss & optimizer modules
+// modelkeys - return list of symbols used for model state dictionary
+// modelstate - return a dictionary with state of sequential module, loss fn & optimizer
 // modeltable
-// model
+// model - create model from sequential, loss & optimizer modules or retrieve input options
 // -------------------------------------------------------------------------------------------
 static void modelpart(K x,J i,Kseq*& q,Kloss*& l,Kopt*& o) {
  for(;i<x->n;++i) {
@@ -44,6 +44,11 @@ K modelstate(Ktag *g,K x) {
   AT_ERROR("model state requires 1-2 args: previously allocated ptr or (ptr;options flag)");
 }
 
+static void modelfree(K x,J i) {
+ for(;i<x->n;++i) 
+  TORCH_CHECK(kfree(x,i), "model: unable to free arg[",i,"]");
+}
+
 KAPI modeltable(K x) {
  KTRY
   TORCH_CHECK(x->t==99, "modeltable not implemented for ",kname(x->t));
@@ -64,10 +69,13 @@ KAPI model(K x) {
     if(q) m->q=q->q;              // reassign model's sequential module
     if(l) m->lc=l->c, m->l=l->l;  // loss function
     if(o) m->oc=o->c, m->o=o->o;  // optimizer
+    modelfree(x,1);
     return (K)0;
    } else {
     TORCH_CHECK(q && l && o, (q ? (l ? "optimizer" : "loss") : "sequential module")," not specified");
-    return kptr(new Kmodel(q,l,o));
+    m=new Kmodel(q,l,o);
+    modelfree(x,0);
+    return kptr(m);
    }
   }
  KCATCH("model");

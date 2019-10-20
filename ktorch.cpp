@@ -5,7 +5,7 @@
 // dictadd - add an entry in a dictionary mapping symbol -> k value
 // xind - true if i is valid index of k list (type=0)
 // kptr - given void *, add to pointer list & return k list of one long scalar = (intptr_t)void *
-// xptr - given k value, return true if enclosed scalar
+// xptr - given k value, return true if enclosed scalar and in pointer set
 // xtag - if enclosed integer ptr detected from k, return pointer to tag structure
 // xhelp - check for single argument: `help, or 2 symbols, e.g. `help`conv2d
 // --------------------------------------------------------------------------------------------------
@@ -19,8 +19,18 @@ void dictadd(K x,cS s,K v){K *k=kK(x); js(&k[0],cs(s)); jk(&k[1],v);}
 
 B xind(K x,J i) {return !x->t && -1<i && i<x->n;}
 K kptr(void *v){J j=(intptr_t)v; pointer().insert(j); return knk(1,kj(j));}
-B xptr(K x) {return !x->t && x->n==1 && kK(x)[0]->t==-KJ && pointer().count(kK(x)[0]->j);}
+
+B xptr(K x) {
+ if(!x->t && x->n==1 && kK(x)[0]->t==-KJ) {
+  TORCH_CHECK(pointer().count(kK(x)[0]->j), "stale pointer");
+  return true;
+ } else {
+  return false;
+ }
+}
+
 B xptr(K x,J i) {return xind(x,i) && xptr(kK(x)[i]);}
+
 Ktag* xtag(K x) {return xptr(x) ? (Ktag*)kK(x)[0]->j : nullptr;}
 Ktag* xtag(K x,J i) {return xind(x,i) ? xtag(kK(x)[i]) : nullptr;}
 

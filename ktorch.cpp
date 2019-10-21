@@ -868,10 +868,8 @@ K kexpand(J n,const F       *e) {return kex<F>      (n,e) ? kf(e[0]) : klist(n,e
 
 // -----------------------------------------------------------------------------------------
 // kfree - free allocated object and remove from active pointer set
-// Kfree - k-api to free a previously allocated pointer
-// kstate - retrieve module/loss/optimizer state: options, internal buffers & parameters
-// to - convert tensor/module device and or data type, e.g. to[tensor;`cuda`float;0b]
-// kdetail - return dictionary of attributes of given object and level of detail
+// Kfree - k-api fn to free a previously allocated object or all allocated objects
+// kobj - k-api fn returns table of ptr & object
 // -----------------------------------------------------------------------------------------
 B kfree(K x) {
  if(auto *a=xtag(x))
@@ -884,11 +882,34 @@ B kfree(K x,J i) {return xind(x,i) ? kfree(kK(x)[i]) : false;}
 
 KAPI Kfree(K x){
  KTRY
-  TORCH_CHECK(kfree(x), "Not a pointer, unable to free");
+  if(xempty(x)) {
+   for(auto j:pointer()) delete (Ktag*)j;
+   pointer().clear();
+  } else {
+   TORCH_CHECK(kfree(x), "Not a pointer, unable to free");
+  }
   return (K)0;
  KCATCH("free");
 }
 
+KAPI kobj(K x) {
+ KTRY
+  K k=ktn(KS,2),v=ktn(0,2); auto n=pointer().size(); size_t i=0;
+  kS(k)[0]=cs("ptr"); kS(k)[1]=cs("obj");
+  kK(v)[0]=ktn(0,n); kK(v)[1]=ktn(KS,n);
+  for(auto j:pointer()) {
+   kK(kK(v)[0])[i]   = knk(1,kj(j));
+   kS(kK(v)[1])[i++] = mapclass(((Ktag*)j)->a);
+  }
+  return xT(xD(k,v));
+ KCATCH("obj");
+}
+
+// -----------------------------------------------------------------------------------------
+// kstate - retrieve module/loss/optimizer state: options, internal buffers & parameters
+// to - convert tensor/module device and or data type, e.g. to[tensor;`cuda`float;0b]
+// kdetail - return dictionary of attributes of given object and level of detail
+// -----------------------------------------------------------------------------------------
 KAPI kstate(K x) {
  KTRY
   Ktag *g;
@@ -1253,6 +1274,7 @@ void fn(K x,cS s,void *f,I n){dictadd(x,s,dl(f,n));}
 KAPI fns(K x){
  x=xD(ktn(KS,0),ktn(0,0));
  fn(x, "free",        KFN(Kfree),       1);
+ fn(x, "obj",         KFN(kobj),        1);
  fn(x, "to",          KFN(to),          1);
  fn(x, "info",        KFN(info1),       1);
  fn(x, "detail",      KFN(info2),       1);

@@ -8,6 +8,7 @@
 // #ifdef USE_CUDA
 //  ..
 // #endif
+/*
 namespace c10 {
 namespace cuda {
 namespace CUDACachingAllocator {
@@ -19,6 +20,7 @@ C10_CUDA_API uint64_t currentMemoryCached(int device);
 C10_CUDA_API uint64_t maxMemoryCached(int device);
 C10_CUDA_API void     resetMaxMemoryCached(int device);
 }}}
+*/
 
 /*
 cache      
@@ -43,7 +45,7 @@ void f(int64_t n) {
  n*=1000000;
  auto t=torch::rand(n);
  double d=0; float f=0,*p=t.data_ptr<float>();
- for(size_t i=0; i<n; ++i) d+=p[i], f+=p[i];
+ for(int64_t i=0; i<n; ++i) d+=p[i], f+=p[i];
  std::cerr << "double  sum: " <<   d << "\n";
  std::cerr << "float   sum: " <<   f << "\n\n";
  std::cerr << "double mean: " << d/n << "\n";

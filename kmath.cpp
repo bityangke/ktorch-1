@@ -810,10 +810,10 @@ static K kwindow(K x,I m,cS e) { // m: 0-bartlett, 1-blackman, 2-hann, 3-hamming
  KCATCH(e);
 }
 
-KAPI Bartlett_window(K x) {return kwindow(x, 0, "bartlett_window");}
-KAPI Blackman_window(K x) {return kwindow(x, 1, "blackman_window");}
-KAPI     Hann_window(K x) {return kwindow(x, 2, "hann_window");}
-KAPI  Hamming_window(K x) {return kwindow(x, 3, "hamming_window");}
+KAPI Bartlett(K x) {return kwindow(x, 0, "bartlett");}
+KAPI Blackman(K x) {return kwindow(x, 1, "blackman");}
+KAPI     Hann(K x) {return kwindow(x, 2, "hann");}
+KAPI  Hamming(K x) {return kwindow(x, 3, "hamming");}
 
 // ---------------------------------------------------------------------------------
 // fft - complex-to-complex discrete Fourier transform
@@ -1486,10 +1486,10 @@ static K chol(K x,Ftb f,Gtb g,B b,cS e) {
  KCATCH(e);
 }
 
-KAPI Cholesky(K x)         {return chol(x, torch::cholesky,         torch::cholesky_out,         false, "Cholesky decomposition");}
-KAPI Cholesky_inverse(K x) {return chol(x, torch::cholesky_inverse, torch::cholesky_inverse_out, true,  "Invert positive semi-definite matrix given Cholesky factors");}
+KAPI Cholesky(K x)        {return chol(x, torch::cholesky,         torch::cholesky_out,         false, "Cholesky decomposition");}
+KAPI Choleskyinverse(K x) {return chol(x, torch::cholesky_inverse, torch::cholesky_inverse_out, true,  "Invert positive semi-definite matrix given Cholesky factors");}
 
-KAPI Cholesky_solve(K x) {
+KAPI Choleskysolve(K x) {
  KTRY
   B p,u=false; J n=xlen(x); Tensor a,b,r;
   if(n==2 || (n==3 && (xbool(x,2,u) || xten(x,2,r))) || (n==4 && xbool(x,2,u) && xten(x,3,r))) {
@@ -1569,14 +1569,14 @@ void mathfn(K x) {
  fn(x, "Atan",               KFN(Atan),               1);
  fn(x, "atan2",              KFN(Atan2),              1);
  fn(x, "baddbmm",            KFN(Baddbmm),            1);
- fn(x, "bartlett_window",    KFN(Bartlett_window),    1);
- fn(x, "blackman_window",    KFN(Blackman_window),    1);
+ fn(x, "bartlett",           KFN(Bartlett),           1);
+ fn(x, "blackman",           KFN(Blackman),           1);
  fn(x, "bincount",           KFN(Bincount),           1);
  fn(x, "bmm",                KFN(Bmm),                1);
  fn(x, "ceil",               KFN(Ceil),               1);
  fn(x, "cholesky",           KFN(Cholesky),           1);
- fn(x, "cholesky_inverse",   KFN(Cholesky_inverse),   1);
- fn(x, "cholesky_solve",     KFN(Cholesky_solve),     1);
+ fn(x, "choleskyinverse",    KFN(Choleskyinverse),    1);
+ fn(x, "choleskysolve",      KFN(Choleskysolve),      1);
  fn(x, "clamp",              KFN(Clamp),              1);
  fn(x, "Cos",                KFN(Cos),                1);
  fn(x, "cosh",               KFN(Cosh),               1);
@@ -1610,8 +1610,8 @@ void mathfn(K x) {
  fn(x, "geqrf",              KFN(Geqrf),              1);
  fn(x, "ger",                KFN(Ger),                1);
  fn(x, "gt",                 KFN(GT),                 1);
- fn(x, "hann_window",        KFN(Hann_window),        1);
- fn(x, "hamming_window",     KFN(Hamming_window),     1);
+ fn(x, "hann",               KFN(Hann),               1);
+ fn(x, "hamming",            KFN(Hamming),            1);
  fn(x, "histc",              KFN(Histc),              1);
  fn(x, "inverse",            KFN(Inverse),            1);
  fn(x, "ifft",               KFN(Ifft),               1);
@@ -1631,18 +1631,18 @@ void mathfn(K x) {
  fn(x, "lstsq",              KFN(Lstsq),              1);
  fn(x, "lt",                 KFN(Lt),                 1);
  fn(x, "lu",                 KFN(Lu),                 1);
- fn(x, "lu_info",            KFN(Lu_info),            1);
- fn(x, "lu_solve",           KFN(Lu_solve),           1);
- fn(x, "lu_unpack",          KFN(Lu_unpack),          1);
+ fn(x, "luinfo",             KFN(Lu_info),            1);
+ fn(x, "lusolve",            KFN(Lu_solve),           1);
+ fn(x, "luunpack",           KFN(Lu_unpack),          1);
  fn(x, "matmul",             KFN(Matmul),             1);
- fn(x, "matrix_power",       KFN(Matrix_power),       1);
- fn(x, "matrix_rank",        KFN(Matrix_rank),        1);
+ fn(x, "power",              KFN(Matrix_power),       1);
+ fn(x, "rank",               KFN(Matrix_rank),        1);
  fn(x, "Max",                KFN(Max),                1);
  fn(x, "mean",               KFN(Mean),               1);
  fn(x, "median",             KFN(Median),             1);
  fn(x, "Min",                KFN(Min),                1);
- fn(x, "max_values",         KFN(Max_values),         1);
- fn(x, "min_values",         KFN(Min_values),         1);
+ fn(x, "maxvalues",          KFN(Max_values),         1);
+ fn(x, "minvalues",          KFN(Min_values),         1);
  fn(x, "mm",                 KFN(Mm),                 1);
  fn(x, "mmt",                KFN(Mmt),                1);
  fn(x, "mode",               KFN(Mode),               1);
@@ -1686,7 +1686,7 @@ void mathfn(K x) {
  fn(x, "trace",              KFN(Trace),              1);
  fn(x, "tril",               KFN(Tril),               1);
  fn(x, "triu",               KFN(Triu),               1);
- fn(x, "triangular_solve",   KFN(Triangular_solve),   1);
+ fn(x, "trisolve",           KFN(Triangular_solve),   1);
  fn(x, "trunc",              KFN(Trunc),              1);
  fn(x, "unique",             KFN(Unique),             1);
  fn(x, "uniquec",            KFN(Uniquec),            1);

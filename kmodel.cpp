@@ -152,7 +152,7 @@ Tensor train(Kmodel *m,TensorVector& v,int64_t w,int64_t e,B s) {
  auto n=fullsize(v);
  if(e) {
   TensorVector r;
-  for(size_t i=0; i<e; ++i) {
+  for(int64_t i=0; i<e; ++i) {
    if(s) shuffle_(v);
    r.emplace_back(batch(m,v,w,n));
   }

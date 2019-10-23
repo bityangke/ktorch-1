@@ -332,7 +332,7 @@ KAPI tensor(K x) {
 // tensor vector fns: 
 // ------------------------------------------------------------------------------------------
 // vecinit - initialize vector of tensors from k array, tensor ptr(s) or some mix of both
-// vector -
+// vector - create vector of tensors, or return vector or vector element, or replace element
 // ------------------------------------------------------------------------------------------
 K vecinit(K x) {
  TensorVector v;
@@ -345,30 +345,37 @@ K vecinit(K x) {
    v.emplace_back(t);
  } else if(auto *t=xten(x)) {
   v.emplace_back(*t);
+  kfree(x);
  } else {
-  for(J i=0;i<x->n;++i) {
-   Tensor t;
-   v.emplace_back(xten(x,i,t) ? std::move(t) : kput(kK(x)[i]));
-  }
+  for(J i=0;i<x->n;++i)
+   if(auto *t=xten(x,i))
+    v.emplace_back(*t), kfree(x,i);
+   else
+    v.emplace_back(kput(x,i));
  }
  return kvec(v);
 }
 
 KAPI vector(K x) {
  KTRY
-  J i; Tensor t;
-  if(auto* v=xvec(x)) {
+  J i;
+  if(auto* v=xvec(x)) {             // if previously created vector, return as list of arrays
    return kget(*v);
-  } else if(auto* v=xvec(x,0)) {
-   if(xlong(x,1,i)) {
-    if(x->n==2)
+  } else if(auto* v=xvec(x,0)) {    // if previously created vector
+   if(xlong(x,1,i)) {               // and an index,
+    if(x->n==2) {                   // return array
      return kget(v->at(i));
-    else if(x->n==3)
-     return (v->at(i)=xten(x,2,t) ? std::move(t) : kput(x,2)), (K)0;
+    } else if(x->n==3) {            // if index and tensor/array supplied
+      if(auto* t=xten(x,2))         // replace vector element
+       v->at(i)=*t, kfree(x,2);     // and free if tensor
+      else 
+       v->at(i)=kput(x,2);          // else convert k array to tensor and add to vector
+      return (K)0;
+    }
    }
    //} else if(auto *w=xvec(x,1) && x->n==2)
    // v.insert(v.end(), w.begin(), w.end()), (K)0;
-   AT_ERROR("Vector given with unrecognized arg(s)");
+   AT_ERROR("vector: unrecognized arg(s)");
   } else {
    return vecinit(x);
   }

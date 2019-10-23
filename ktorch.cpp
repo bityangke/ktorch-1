@@ -125,7 +125,7 @@ cS kname(A k) {
   case 109: return "f':";
   case 110: return "f/:";
   case 111: return "f\\:";
-  case 112: return "dynamic load";
+  case 112: return "dynamic load fn";
   default:
     if(t>19 && t<77)
      return b ? "enum scalar" : "enum list";
@@ -894,6 +894,7 @@ KAPI Kfree(K x){
 
 KAPI kobj(K x) {
  KTRY
+  TORCH_CHECK(xempty(x), "obj: empty arg expected");
   K k=ktn(KS,2),v=ktn(0,2); auto n=pointer().size(); size_t i=0;
   kS(k)[0]=cs("ptr"); kS(k)[1]=cs("obj");
   kK(v)[0]=ktn(0,n); kK(v)[1]=ktn(KS,n);
@@ -954,7 +955,7 @@ static K kinfo(K x,B b,cS e) {
   auto* g=xtag(x);
   TORCH_CHECK(g, e," not implemented for ",kname(x->t));
   switch(g->a) {
-   case Class::tensor:     return tensorinfo(((Kten*)g)->t,b ? 2 : 0);
+   case Class::tensor:     return tensorinfo(((Kten*)g)->t,b);
    default: AT_ERROR(e," not implemented for ",mapclass(g->a));
   }
  KCATCH(e);
@@ -1000,6 +1001,7 @@ KAPI backward1(K x) {
 // ---------------------------------------------------------------------------------------------
 // cudadevices - return number of CUDA devices enabled or available CUDA device symbols
 // cudadevice - k interface to set/query current CUDA device, e.g. `cuda:0 
+// defaultdevice - return `cuda if any cuda devices available, else `cpu
 // ---------------------------------------------------------------------------------------------
 KAPI cudadevices(K x) {
  if(xnull(x)) {
@@ -1015,11 +1017,10 @@ KAPI cudadevices(K x) {
 
 KAPI cudadevice(K x) {
  KTRY
+  TORCH_CHECK(env().cuda, "no CUDA device available");
   torch::Device d(torch::kCUDA);
   auto *g = c10::impl::getDeviceGuardImpl(d.type());
-  if(!env().cuda) {
-   return KERR("No CUDA device available");
-  } else if(xempty(x)) {
+  if(xempty(x)) {
    for(auto &m:env().device)
     if(g->getDevice()==std::get<1>(m)) return ks(std::get<0>(m));
    AT_ERROR("Unable to map CUDA device: ",g->getDevice().index()," to symbol");
@@ -1029,6 +1030,13 @@ KAPI cudadevice(K x) {
    return KERR("Unrecognized CUDA device, expecting cuda with valid device number, e.g. `cuda:0");
   }
  KCATCH("Unable to query/set CUDA device")
+}
+
+static K defaultdevice() {
+ auto d=torch::Device(env().cuda ? torch::DeviceType::CUDA : torch::DeviceType::CPU);
+ for(auto& c:env().device)
+  if(std::get<1>(c)==d) return ks(std::get<0>(c));
+ return KERR("unable to get default device");
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1229,7 +1237,7 @@ KAPI    weakref(K x) {return attr(x, -KJ, Attr::weakref);}
 KAPI        ptr(K x) {return attr(x, -KJ, Attr::ptr);}
 KAPI    storage(K x) {return attr(x, -KJ, Attr::storage);}
 
-KAPI     device(K x) {return attr(x, -KS, Attr::device);}
+KAPI     device(K x) {return xempty(x) ? defaultdevice() : attr(x, -KS, Attr::device);}
 KAPI      dtype(K x) {return attr(x, -KS, Attr::dtype);}
 KAPI     layout(K x) {return attr(x, -KS, Attr::layout);}
 KAPI   gradient(K x) {return attr(x, -KS, Attr::gradient);}

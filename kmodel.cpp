@@ -82,10 +82,14 @@ KAPI model(K x) {
 }
 
 // -------------------------------------------------------------------------------------------
-// mbackward
-// mforward
+// mforward - return tensor from running sequential forward calcs on input(s)
+// mbackward - given model, input & target, do forward calcs, get loss, backward prop on loss
 // mloss
 // -------------------------------------------------------------------------------------------
+Tensor mforward(Kmodel *m,TensorVector& v) {
+ return m->q->forward(v[0]);
+}
+
 K mbackward(K x) {
  Kmodel *m; Tensor *input,*label,loss;
  if((m=xmodel(x,0)) && (input=xten(x,1)) && (label=xten(x,2))) {
@@ -95,10 +99,6 @@ K mbackward(K x) {
  }
  loss.backward();
  return kget(loss);
-}
-
-Tensor mforward(Kmodel *m,TensorVector& v) {
- return m->q->forward(v[0]);
 }
 
 Tensor mloss(Kmodel *m,TensorVector &v,const Tensor& x) {
@@ -236,7 +236,7 @@ KAPI training(K x) {
  KTRY
   B b; Ktag *g;
   TORCH_CHECK((g=xtag(x)) || ((g=xtag(x,0)) && x->n==2 && xbool(x,1,b)),
-              "training: unrecognized arg(s), expects sequential module or model pointer and optional flag");
+              "training: unrecognized arg(s), expects sequential module or model and optional flag");
   auto& q=xseq(g);
   return (x->n==2) ? q->train(b),(K)0 : kb(q->is_training());
  KCATCH("training");

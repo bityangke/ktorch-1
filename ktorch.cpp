@@ -966,6 +966,7 @@ KAPI info2(K x) {return kinfo(x, true,  "detail");}
 
 // -----------------------------------------------------------------------------------------
 // zerograd - return dictionary of attributes of given object and level of detail
+// forward - forward calcs on sequential module or model
 // backward - backward calcs on tensor or model(uses model loss(model output,target) )
 // -----------------------------------------------------------------------------------------
 KAPI zerograd(K x) {
@@ -985,13 +986,26 @@ KAPI zerograd(K x) {
  KCATCH("zero gradients");
 }
 
-KAPI backward1(K x) {
+KAPI forward(K x) {
  KTRY
-  auto *g=xtag(x);
-  TORCH_CHECK(g, "zerograd not implemented for ",kname(x->t));
+  Ktag *g;
+  TORCH_CHECK((g=xtag(x,0)), "forward expects a sequential module or full model as first arg");
   switch(g->a) {
- //case Class::tensor:     f(((Kten*)g)->t); break;
- //case Class::model:      ((Kmodel*)g)->q->zero_grad(); break;
+   case Class::sequential: return seqforward(  ((Kseq*)g)->q,x);
+   case Class::model:      return seqforward(((Kmodel*)g)->q,x);
+   default: AT_ERROR("forward not implemented for ",mapclass(g->a));
+  }
+  return (K)0;
+ KCATCH("forward");
+}
+
+KAPI backward(K x) {
+ KTRY
+  Ktag *g;
+  TORCH_CHECK((g=xtag(x)) || (g=xtag(x,0)), "backward expects a tensor or model as first arg");
+  switch(g->a) {
+   case Class::tensor: return tensorback(x);
+   case Class::model:  return mbackward(x);
    default: AT_ERROR("backward not implemented for ",mapclass(g->a));
   }
   return (K)0;
@@ -1287,7 +1301,9 @@ KAPI fns(K x){
  fn(x, "info",        KFN(info1),       1);
  fn(x, "detail",      KFN(info2),       1);
  fn(x, "state",       KFN(kstate),      1);
+ fn(x, "forward",     KFN(forward),     1);
  fn(x, "zerograd",    KFN(zerograd),    1);
+ fn(x, "backward",    KFN(backward),    1);
  fn(x, "default",     KFN(kdefault),    1);
  fn(x, "setting",     KFN(ksetting),    1);
  fn(x, "config",      KFN(config),      1);

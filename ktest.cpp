@@ -1,7 +1,7 @@
 #include "ktorch.h"
 #include "knn.h"
 #include "kloss.h"
-#include <c10/cuda/CUDAMacros.h>
+//#include <c10/cuda/CUDAMacros.h>
 //#include <c10/cuda/CUDACachingAllocator.h>
 
 // check for cuda via USE_CUDA

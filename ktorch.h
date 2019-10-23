@@ -422,12 +422,14 @@ int64_t fullsize(TensorVector& v,int64_t d=0);
 void subset(Tensor& t,int64_t d,int64_t i,int64_t w,int64_t n=0);
 void subset(TensorVector& v,int64_t d,int64_t i,int64_t w,int64_t n=0);
 void setsafe(Tensor& t,const Storage&,int64_t,const IntArrayRef&,const IntArrayRef&);
+K tensorback(K);
 void tensorfn(K);
 
 // nn module & functional routines:
 K kseq(const Sequential&);
 K seqto(Kseq*,const TensorOptions&,B);
 K mtable(const Sequential& q,B a,B b=true);
+K seqforward(Sequential&,K);
 void nnfn(K);
 K mstate(K);
 
@@ -446,6 +448,7 @@ void optfn(K);
 
 // model functions:
 K modelstate(Ktag*,K);
+K mbackward(K);
 void modelfn(K);
 
 // global environment

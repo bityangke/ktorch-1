@@ -826,8 +826,8 @@ KAPI Uniform(K x)     {return kprob(x, Prob::uniform);}
 // tensor utility fns: 
 // ------------------------------------------------------------------------------------------
 // tensorcopy - tgt <- src values, must have same type & device, tgt resized if src larger
-// grad = return gradient data or empty, if ptr enlisted, return gradient ptr, which must be free'd
-// backward - backprop given tensor, optional tensor and sym for retain/create gradient graph
+// grad = return gradient data or empty, if ptr enlisted, return gradient ptr (must free)
+// tensorback - backprop given tensor, optional tensor & sym for retain/create gradient graph
 // detach - detach tensor, with optional flag to perform the detach in place
 // ------------------------------------------------------------------------------------------
 void tensorcopy(Tensor &tgt,const Tensor &src,B async) {
@@ -852,26 +852,24 @@ KAPI grad(K x) {
  KCATCH("Unable to get gradient");
 }
 
-KAPI backward(K x) {
- KTRY
-  Tensor t; B ok=false;
-  if(xten(x,t)) {
-   t.backward(); ok=true;
-  } else if(xten(x,0,t)) {
-   B a=false,b=false; Tensor g; J n=x->n - xbacksym(x,x->n-1,a,b);
-   if(n==1) {
-     t.backward({},a,b); ok=true;
-   } else if(n==2) {
-    if(!xten(x,1,g)) g=kput(x,1).to(t.device());
-    if(!g.dim() && t.dim()) g.resize_as_(t).fill_(g[0]);
-    t.backward(g,a,b); ok=true;
-   } else if(n==1) {
-     t.backward({},a,b); ok=true;
-   }
+K tensorback(K x) {
+ Tensor t; B ok=false;
+ if(xten(x,t)) {
+  t.backward(); ok=true;
+ } else if(xten(x,0,t)) {
+  B a=false,b=false; Tensor g; J n=x->n - xbacksym(x,x->n-1,a,b);
+  if(n==1) {
+    t.backward({},a,b); ok=true;
+  } else if(n==2) {
+   if(!xten(x,1,g)) g=kput(x,1).to(t.device());
+   if(!g.dim() && t.dim()) g.resize_as_(t).fill_(g[0]);
+   t.backward(g,a,b); ok=true;
+  } else if(n==1) {
+    t.backward({},a,b); ok=true;
   }
-  TORCH_CHECK(ok, "backward: unexpected arg(s), expecting tensor, (tensor;sym), (tensor;grad tensor/array) or (tensor;grad tensor/array;sym)");
-  return (K)0;
- KCATCH("backward");
+ }
+ TORCH_CHECK(ok, "backward: unexpected arg(s), expecting tensor, (tensor;sym), (tensor;grad tensor/array) or (tensor;grad tensor/array;sym)");
+ return (K)0;
 }
 
 KAPI detach(K x) {
@@ -889,7 +887,6 @@ KAPI detach(K x) {
 void tensorfn(K x) {
  fn(x, "tensor",      KFN(tensor), 1);
  fn(x, "grad",        KFN(grad), 1);
- fn(x, "backward",    KFN(backward), 1);
  fn(x, "detach",      KFN(detach), 1);
  fn(x, "vector",      KFN(vector), 1);
  fn(x, "options",     KFN(options), 1);

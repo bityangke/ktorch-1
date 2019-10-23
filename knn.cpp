@@ -1310,8 +1310,7 @@ static K mchild(B a,S s1,S s2,const Sequential &q) {
 // margs - helper function used to parse module creation args (if not table/dictionary)
 // seq - create/append sequential module
 // mstate - class,module,name,options,parms,buffers for module(s) or selected parm/buffer
-// forward - given module pointer and tensor, run forward calculations sequentially
-// train - query or set training flag for a module
+// seqforward - given sequential module and input, run forward calcs, return tensor to k
 // ------------------------------------------------------------------------------------------
 static void margs(B p,Sequential q,K x) {
  J i=p; S s=nullptr,nm=nullptr;
@@ -1367,38 +1366,17 @@ K mstate(K x) {
  }
 }
 
-KAPI forward(K x,K y) {
- KTRY
-  B p; Tensor r,t; Sequential q;
-  if(xseq(x,q)) {
-   if(!(p=xten(y,t))) t=kput(y);
-   r=q->forward(t);
-   return p ? kten(r) : kget(r);
-  } else {
-   AT_ERROR("1st argument not a recognized module, ",kname(x->t)," supplied");
-  }
- KCATCH("forward");
-}
-
-KAPI train(K x) {
- KTRY
-  B b;Sequential q;
-  if(xseq(x,q))
-   return kb(q->is_training());
-  else if(xseq(x,0,q) & xbool(x,1,b))
-   return q->train(b), (K)0;
-  else
-   return KERR("Unrecognized arguments for module training flag: expecting module or (module;flag)");
- KCATCH("train")
+K seqforward(Sequential& q,K x) {
+ TORCH_CHECK(!x->t && x->n==2, "forward expects two args: sequential/model & input tensor or array");
+ Tensor *t=xten(x,1);
+ return kten(q->forward(t ? *t : kput(x,1)));
 }
 
 // ----------------------------------
 // module fns defined in k namespace
 // ----------------------------------
 void nnfn(K x) {
- fn(x, "seq",        KFN(seq), 1);           // api functions for modules
- fn(x, "forward",    KFN(forward),2);
- fn(x, "train",      KFN(train), 1);
+ fn(x, "seq",        KFN(seq), 1);           // api function for module create/query
 
  fn(x, "adaptavg1d", KFN(adaptavg1d), 1);    // functional form of modules/activations
  fn(x, "adaptavg2d", KFN(adaptavg2d), 1);

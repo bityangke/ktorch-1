@@ -41,6 +41,24 @@ KAPI cudamem(K x) {
  KCATCH("cuda memory");
 }
 
+KAPI kdata(K x,K y) {
+ KTRY
+  int64_t i=0;
+  auto dataset = torch::data::datasets::MNIST(x->s)
+    .map(torch::data::transforms::Normalize<>(0.5, 0.5))
+    .map(torch::data::transforms::Stack<>());
+  auto data_loader = torch::data::make_data_loader(std::move(dataset));
+  for (torch::data::Example<>& batch : *data_loader) {
+    if(i==y->j) {
+     std::cout << batch.target << "\n";
+     std::cout << batch.data   << "\n ";
+     return kten(batch.data);
+    }
+  }
+  return (K)0;
+ KCATCH("mnist test");
+}
+
 void f(int64_t n) {
  n*=1000000;
  auto t=torch::rand(n);

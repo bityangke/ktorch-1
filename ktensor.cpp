@@ -612,6 +612,7 @@ KAPI kshuffle(K x) {
 }
 
 // -------------------------------------------------------------------------------------------
+// subsets - given subset size, total size & optional drop last flag, return number of subsets
 //  subset - take a subset of a particular tensor dimension, given offset & width
 //           operate on vector of tensors if same size on given dimension
 //           requires tensor, dim, offset, width
@@ -619,6 +620,8 @@ KAPI kshuffle(K x) {
 // setsafe - calls set_() after checking that the length implied by sizes & strides will fit
 // subsetsafe - alternate form of subset using setsafe rather than maximum size dimension
 // -------------------------------------------------------------------------------------------
+int64_t subsets(int64_t w,int64_t n,bool b) {return n%w ? n/w + !b : n/w;}
+
 void subset(Tensor& t,int64_t d,int64_t i,int64_t w,int64_t n) {
  if(!n) n=maxsize(t,d);  // if not given, get max size of dimension d from overall storage size
  TORCH_CHECK(i<n,"subset offset of ",i," must be from 0-",n-1," the maximum size for dimension ",d);
@@ -641,6 +644,36 @@ void setsafe(Tensor& t,const Storage& s,int64_t i,const IntArrayRef& sz,const In
 
 void subsetsafe(Tensor& t,int64_t d,int64_t i,int64_t w) {
  setsafe(t, t.storage(), i*t.stride(d), newsize(t,d,w), t.strides());
+}
+
+// -------------------------------------------------------------------------------------------
+// batch - k api function to batch tensor/vector in place
+// restore - k api function to restore tensor/vector to full size
+// -------------------------------------------------------------------------------------------
+KAPI batch(K x) {
+ KTRY
+  Tensor *t=nullptr; TensorVector *v=nullptr; int64_t i,w,n;
+  TORCH_CHECK((t=xten(x,0))||(v=xvec(x,0)), "batch expects 1st arg of tensor or vector");
+  TORCH_CHECK(x->n==3, "batch expects 3 args, (tensor/vector; batch index; batch size)");
+  TORCH_CHECK(xint64(x,1,i) && i>-1, "batch: 2nd arg is not a valid batch index");
+  TORCH_CHECK(xint64(x,2,w) && w> 0, "batch: 3rd arg is not a valid batch size");
+  n=t ? maxsize(*t,0) : maxsize(*v,0);
+  TORCH_CHECK(i*w<n, "batch index of ",i," beyond max of ",subsets(w,n)-1);
+  if(t)
+   subset(*t,0,i*w,w,n);
+  else
+   subset(*v,0,i*w,w,n);
+  return (K)0;
+ KCATCH("batch")
+}
+
+KAPI restore(K x) {
+ KTRY
+  Tensor *t; TensorVector *v;
+  TORCH_CHECK((t=xten(x))||(v=xvec(x)), "restore expects tensor or vector");
+  if(t) fullsize(*t,0); else fullsize(*v,0);
+  return (K)0;
+ KCATCH("restore")
 }
 
 // -------------------------------------------------------------------------------------------
@@ -891,6 +924,8 @@ void tensorfn(K x) {
  fn(x, "vector",      KFN(vector), 1);
  fn(x, "options",     KFN(options), 1);
  fn(x, "shuffle",     KFN(kshuffle), 1);
+ fn(x, "batch",       KFN(batch), 1);
+ fn(x, "restore",     KFN(restore), 1);
  fn(x, "narrow",      KFN(narrow), 1);
  fn(x, "transpose",   KFN(transpose), 1);
  fn(x, "resize",      KFN(resize), 1);

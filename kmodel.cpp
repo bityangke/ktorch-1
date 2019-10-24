@@ -113,19 +113,19 @@ Tensor mloss(Kmodel *m,TensorVector &v,const Tensor& x) {
 Tensor mloss(Kmodel *m,TensorVector &v) { return mloss(m,v,mforward(m,v));}
 
 // -------------------------------------------------------------------------------------------
-// batch - run model's forward calc, loss, backward calcs and optimizer step in batches
+// trainbatch - run model's forward calc, loss, backward calcs and optimizer step in batches
 // train - train model for given batch size and number of passes through the data ("epochs")
 // ktrain - k api fn, expects (model;vector;batch size; optional epochs;optional shuffle flag)
 // -------------------------------------------------------------------------------------------
-Tensor batch(Kmodel *m,TensorVector& v,int64_t w,int64_t n=0);
-Tensor batch(Kmodel *m,TensorVector& v,int64_t w,int64_t n) {
+Tensor trainbatch(Kmodel *m,TensorVector& v,int64_t w,int64_t n=0);
+Tensor trainbatch(Kmodel *m,TensorVector& v,int64_t w,int64_t n) {
  Optimizer *o=nullptr; LossClosureOptimizer *c=nullptr;
  if(m->oc == Cast::lbfgs) c=(LossClosureOptimizer*)m->o.get();
  else                     o=(Optimizer*)m->o.get();
 
  if(!n) n=maxsize(v);
  if(w>n) w=n;                          // reduce batch size if exceeds total size
- auto s=n%w ? n/w + 1 : n/w;           // no. of subsets to process
+ auto s=subsets(w,n);                  // no. of subsets to process
  auto r=torch::empty(s);               // tensor for batch losses
  auto* p=r.data_ptr<float>();          // ptr for quicker assignment
 
@@ -138,7 +138,6 @@ Tensor batch(Kmodel *m,TensorVector& v,int64_t w,int64_t n) {
 
  for(int64_t i=0,j=0; i<n; i+=w,++j) {
   subset(v,0,i,w,n);                   // narrow tensors to current batch
-  //std::cerr << "subset " << j+1 << ", from row " << i << " using " << w << " row(s)\n";
   if(o)
    p[j]=loss().item<float>(), o->step(); // single loss evaluation
   else
@@ -154,12 +153,12 @@ Tensor train(Kmodel *m,TensorVector& v,int64_t w,int64_t e,B s) {
   TensorVector r;
   for(int64_t i=0; i<e; ++i) {
    if(s) shuffle_(v);
-   r.emplace_back(batch(m,v,w,n));
+   r.emplace_back(trainbatch(m,v,w,n));
   }
   return torch::stack(r);
  } else {
   if(s) shuffle_(v);
-  return batch(m,v,w,n);
+  return trainbatch(m,v,w,n);
  }
 }
 

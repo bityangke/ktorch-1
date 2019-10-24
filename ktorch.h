@@ -419,6 +419,7 @@ int64_t maxsize(const Tensor& t,      int64_t d=0);
 int64_t maxsize(const TensorVector& v,int64_t d=0);
 int64_t fullsize(Tensor& t,      int64_t d=0);
 int64_t fullsize(TensorVector& v,int64_t d=0);
+int64_t subsets(int64_t w,int64_t n,bool b=false);
 void subset(Tensor& t,int64_t d,int64_t i,int64_t w,int64_t n=0);
 void subset(TensorVector& v,int64_t d,int64_t i,int64_t w,int64_t n=0);
 void setsafe(Tensor& t,const Storage&,int64_t,const IntArrayRef&,const IntArrayRef&);

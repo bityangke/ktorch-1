@@ -367,3 +367,99 @@ KAPI sparse1(K x) {
  //return kten(torch::sparse_coo_tensor(i.t(),v));
  return kten(torch::sparse_coo_tensor(i.t(),v,m.sizes()));
 }
+
+KAPI gan(K x) {
+ const int64_t kNoiseSize = 100;
+ const int64_t kBatchSize = 60;
+ const int64_t kNumberOfEpochs = 100;
+ const char*   kDataFolder = "/home/t/data/mnist";
+ const int64_t kLogInterval = 938;
+
+ torch::manual_seed(1);
+ using namespace torch;
+ torch::Device device(torch::cuda::is_available() ? torch::kCUDA : torch::kCPU);
+
+  nn::Sequential generator(
+   nn::Conv2d(nn::Conv2dOptions(kNoiseSize, 256, 4).with_bias(false).transposed(true)),
+      nn::BatchNorm(256),
+      nn::Functional(torch::relu),
+   nn::Conv2d(nn::Conv2dOptions(256, 128, 3).stride(2).padding(1).with_bias(false).transposed(true)),
+      nn::BatchNorm(128),
+      nn::Functional(torch::relu),
+   nn::Conv2d(nn::Conv2dOptions(128, 64, 4).stride(2).padding(1).with_bias(false).transposed(true)),
+      nn::BatchNorm(64),
+      nn::Functional(torch::relu),
+   nn::Conv2d(nn::Conv2dOptions(64, 1, 4).stride(2).padding(1).with_bias(false).transposed(true)),
+   nn::Functional(torch::tanh));
+  generator->to(device);
+  //return mtable(generator,true,true);
+
+  nn::Sequential discriminator(
+      nn::Conv2d(nn::Conv2dOptions(1, 64, 4).stride(2).padding(1).with_bias(false)),
+      nn::Functional(torch::leaky_relu, 0.2),
+      nn::Conv2d(nn::Conv2dOptions(64, 128, 4).stride(2).padding(1).with_bias(false)),
+      nn::BatchNorm(128),
+      nn::Functional(torch::leaky_relu, 0.2),
+      nn::Conv2d(nn::Conv2dOptions(128, 256, 4).stride(2).padding(1).with_bias(false)),
+      nn::BatchNorm(256),
+      nn::Functional(torch::leaky_relu, 0.2),
+      nn::Conv2d(nn::Conv2dOptions(256, 1, 3).stride(1).padding(0).with_bias(false)),
+      nn::Functional(torch::sigmoid));
+  discriminator->to(device);
+  //torch::Tensor z = torch::randn({kBatchSize, kNoiseSize, 1, 1}, device);
+  //return kten(generator->forward(z));
+
+  auto dataset = torch::data::datasets::MNIST(kDataFolder).map(torch::data::transforms::Normalize<>(0.5, 0.5)).map(torch::data::transforms::Stack<>());
+  const int64_t batches_per_epoch = std::ceil(dataset.size().value() / static_cast<double>(kBatchSize));
+//auto data_loader = torch::data::make_data_loader(std::move(dataset),torch::data::DataLoaderOptions().batch_size(kBatchSize).workers(2));
+  auto data_loader = torch::data::make_data_loader<torch::data::samplers::SequentialSampler>(std::move(dataset),torch::data::DataLoaderOptions().batch_size(kBatchSize).workers(2));
+  torch::optim::Adam generator_optimizer    (    generator->parameters(), torch::optim::AdamOptions(2e-4).beta1(0.5));
+  torch::optim::Adam discriminator_optimizer(discriminator->parameters(), torch::optim::AdamOptions(2e-4).beta1(0.5));
+  auto losses=torch::zeros(kNumberOfEpochs*batches_per_epoch*2);
+  auto lossptr=losses.data_ptr<float>();
+
+  for (int64_t epoch = 1; epoch <= kNumberOfEpochs; ++epoch) {
+    int64_t batch_index = 0;
+    for (torch::data::Example<>& batch : *data_loader) {
+      return kget(batch.data);
+      // Train discriminator with real images.
+      discriminator->zero_grad();
+      torch::Tensor real_images = batch.data.to(device);
+      torch::Tensor real_labels = torch::empty(batch.data.size(0), device).uniform_(0.8, 1.0);
+      torch::Tensor real_output = discriminator->forward(real_images);
+      torch::Tensor d_loss_real = torch::binary_cross_entropy(real_output, real_labels);
+      d_loss_real.backward();
+
+      // Train discriminator with fake images.
+      torch::Tensor noise = torch::randn({batch.data.size(0), kNoiseSize, 1, 1}, device);
+      torch::Tensor fake_images = generator->forward(noise);
+      torch::Tensor fake_labels = torch::zeros(batch.data.size(0), device);
+      torch::Tensor fake_output = discriminator->forward(fake_images.detach());
+      torch::Tensor d_loss_fake = torch::binary_cross_entropy(fake_output, fake_labels);
+      d_loss_fake.backward();
+
+      torch::Tensor d_loss = d_loss_real + d_loss_fake;
+      discriminator_optimizer.step();
+
+      // Train generator.
+      generator->zero_grad();
+      fake_labels.fill_(1);
+      fake_output = discriminator->forward(fake_images);
+      torch::Tensor g_loss =
+          torch::binary_cross_entropy(fake_output, fake_labels);
+      g_loss.backward();
+      generator_optimizer.step();
+      batch_index++;
+      *lossptr++ = d_loss.item<float>();
+      *lossptr++ = g_loss.item<float>();
+      if (batch_index % kLogInterval == 0) {
+        std::printf("\r[%2ld/%2ld][%3ld/%3ld] D_loss: %.4f | G_loss: %.4f\n",
+            epoch, kNumberOfEpochs, batch_index, batches_per_epoch, d_loss.item<float>(), g_loss.item<float>());
+      }
+    }
+  }
+  torch::Tensor samples = generator->forward(torch::randn({10, kNoiseSize, 1, 1}, device));
+  torch::save((samples + 1.0) / 2.0, torch::str("sample.pt"));
+ return kget(losses.reshape({kNumberOfEpochs,batches_per_epoch,2}));
+}
+

@@ -87,7 +87,7 @@ static K math2(K x,Ftt f,Fts fn,Gtt g,cS e) {
     p=xtenarg(x,a,b);
    }
    if(r.defined())
-    return g(r,a,b.defined() ? b : torch::scalar_to_tensor(n)), (K)0;
+    return g(r,a,b.defined() ? b : torch::full({},n,a.device())), (K)0;   // torch::scalar_to_tensor doesn't make variable(yet)
    else
     return r=b.defined() ? f(a,b) : fn(a,n), (p ? kten(r) : kget(r));
   } else {

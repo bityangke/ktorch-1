@@ -862,6 +862,7 @@ KAPI Uniform(K x)     {return kprob(x, Prob::uniform);}
 // grad = return gradient data or empty, if ptr enlisted, return gradient ptr (must free)
 // tensorback - backprop given tensor, optional tensor & sym for retain/create gradient graph
 // detach - detach tensor, with optional flag to perform the detach in place
+// same - given two tensors, compares underlying ptr, returns true if same
 // ------------------------------------------------------------------------------------------
 void tensorcopy(Tensor &tgt,const Tensor &src,B async) {
  if(src.dtype() != tgt.dtype()) {
@@ -914,6 +915,14 @@ KAPI detach(K x) {
  KCATCH("detach");
 }
 
+KAPI same(K x) {
+ KTRY
+  Tensor *a,*b;
+  TORCH_CHECK((a=xten(x,0)) && ((b=xten(x,1))), "same: expects two tensors");
+  return kb((*a).is_same(*b));
+ KCATCH("same");
+}
+
 // ----------------------------------
 // tensor fns defined in k namespace
 // ----------------------------------
@@ -921,6 +930,7 @@ void tensorfn(K x) {
  fn(x, "tensor",      KFN(tensor), 1);
  fn(x, "grad",        KFN(grad), 1);
  fn(x, "detach",      KFN(detach), 1);
+ fn(x, "same",        KFN(same), 1);
  fn(x, "vector",      KFN(vector), 1);
  fn(x, "options",     KFN(options), 1);
  fn(x, "shuffle",     KFN(kshuffle), 1);

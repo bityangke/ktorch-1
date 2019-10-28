@@ -450,7 +450,7 @@ K optstate(Ktag *g,K x) {
 
 // ---------------------------------------------------------------------------------------
 // opt - main optimizer interface function for q
-// step
+// step - given model or optimizer, perform an optimizer step unless closure required
 // lr - query or set learning rate from k given pre-allocated optimizer ptr, or ptr & rate
 // ---------------------------------------------------------------------------------------
 KAPI opt(K x) {
@@ -478,10 +478,15 @@ KAPI opt(K x) {
 
 KAPI kstep(K x) {
  KTRY
-  Kopt *o;
-  TORCH_CHECK(o=xoptim(x), "step not implemented for ", kname(x));
-  TORCH_CHECK(o->c != Cast::lbfgs, "LBFGS optimizer requires model, loss & inputs");
-  ((Optimizer*)o->get())->step();
+  Cast c; OptimizerBase *o;
+  if(auto* a=xoptim(x))
+   c=a->c, o=a->get();
+  else if(auto* a=xmodel(x))
+   c=a->oc, o=a->o.get();
+  else
+   AT_ERROR("step not implemented for ", kname(x));
+  TORCH_CHECK(c != Cast::lbfgs, "LBFGS optimizer requires model, loss & inputs");
+  ((Optimizer*)o)->step();
   return (K)0;
  KCATCH("step");
 }

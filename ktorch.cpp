@@ -1265,6 +1265,22 @@ KAPI       size(K x) {return attr(x,  KJ, Attr::size);}
 KAPI     stride(K x) {return attr(x,  KJ, Attr::stride);}
 
 // -----------------------------------------------------------------------------------------
+//  pt
+// -----------------------------------------------------------------------------------------
+KAPI pt(K x) {
+ KTRY
+  S s; Tensor t;
+  if(xsym(x,s)) {
+   torch::load(t,s[0]==':' ? ++s : s);
+   return kget(t);
+  } else if (xsym(x,0,s) && xten(x,1,t)) {
+   torch::save(t,s[0]==':' ? ++s : s);
+  }
+  return (K)0;
+ KCATCH("pt");
+}
+
+// -----------------------------------------------------------------------------------------
 // initialize globals: device counts, device sym-int mapping, etc.
 // kinit - called when shared library is first opened
 // -----------------------------------------------------------------------------------------

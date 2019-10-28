@@ -46,6 +46,9 @@ class TORCH_API BCELoss : public BasicLoss {
  torch::Tensor forward(const torch::Tensor& x,const torch::Tensor& y,const torch::Tensor& w={}) {
   return torch::binary_cross_entropy(x,y,w,options.reduce());
  }
+ torch::Tensor forward(const torch::Tensor& x,const torch::Tensor& y) {
+  return torch::binary_cross_entropy(x,y,{},options.reduce());
+ }
 };
 
 class TORCH_API KLDivLoss : public BasicLoss {

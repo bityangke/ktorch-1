@@ -86,26 +86,33 @@ KAPI Trunc(K x)      {return math1(x, torch::trunc,       torch::trunc_out,     
 //KAPI Bernoulli(K x)  {return math1(x, torch::bernoulli,  torch::bernoulli_out,  &Tensor::bernoulli_,  "bernoulli");}
 // inverse has no inverse_ method
 //KAPI Inverse(K x)    {return math1(x, torch::inverse,    torch::inverse_out,    &Tensor::inverse_,    "matrix inverse");}
+
 // ---------------------------------------------------------------------------------------------
 // point-wise functions with arg of (input1;input2;optional output tensor), input2 may be scalar
 // ---------------------------------------------------------------------------------------------
-static Tensor atan2err(const Tensor& a,Scalar s) {
- AT_ERROR("atan2 with 2nd scalar argument not implemented in pytorch");
-}
-
-static K math2(K x,Ftt f,Fts fn,Gtt g,cS s) {
+static K math2(K x,Ftt f,Fts fn,Gtt g,Tt m,Ts mn,cS s) {
  KTRY
-  B p; Scalar n; Tensor a,b,r;
-  if(2 == (xten(x,2,r) ? x->n-1 : xlen(x))) {
+  B e,p; Scalar n; Tensor a,b,r;
+  if(2 == (((e=xempty(x,2)) || xten(x,2,r)) ? x->n-1 : xlen(x))) {
    if(xnum(x,1,n)) {
-    if(!(p=xten(x,0,a))) a=kput(x,0);
+    if(!(p=xten(x,0,a)))
+     a=kput(x,0);
+    if(!fn || !mn || r.defined())   // need to convert scalar to tensor if no scalar fn or method or if using output tensor
+     b=torch::autograd::make_variable(torch::scalar_to_tensor(n,a.device()));
    } else {
     p=xtenarg(x,a,b);
    }
-   if(r.defined())
-    return g(r,a,b.defined() ? b : torch::autograd::make_variable(torch::scalar_to_tensor(n,a.device()))), (K)0;
-   else
+   if(e) {
+    if(b.defined())
+     (a.*m)(b);
+    else
+     (a.*mn)(n);
+    return xptr(x,0) ? (K)0 : kget(a);
+   } else if(r.defined()) {
+    return g(r,a,b), (K)0;
+   } else {
     return r=b.defined() ? f(a,b) : fn(a,n), (p ? kten(r) : kget(r));
+   }
   } else {
    AT_ERROR(s,": expects args of(input1;input2;optional output tensor), input1 is array or tensor, input2 may also be a number");
    return KERR(s);
@@ -113,11 +120,11 @@ static K math2(K x,Ftt f,Fts fn,Gtt g,cS s) {
  KCATCH(s);
 }
 
-KAPI Atan2(K x)     {return math2(x, torch::atan2,     atan2err,         torch::atan2_out,     "arctangent 2");}
-KAPI Div(K x)       {return math2(x, torch::div,       torch::div,       torch::div_out,       "divide");}
-KAPI Fmod(K x)      {return math2(x, torch::fmod,      torch::fmod,      torch::fmod_out,      "floating point remainder(fmod)");}
-KAPI Mul(K x)       {return math2(x, torch::mul,       torch::mul,       torch::mul_out,       "multiply");}
-KAPI Remainder(K x) {return math2(x, torch::remainder, torch::remainder, torch::remainder_out, "remainder");}
+KAPI Atan2(K x)     {return math2(x, torch::atan2,     nullptr,          torch::atan2_out,     &Tensor::atan2_,     nullptr,             "arctangent 2");}
+KAPI Div(K x)       {return math2(x, torch::div,       torch::div,       torch::div_out,       &Tensor::div_,       &Tensor::div_,       "divide");}
+KAPI Fmod(K x)      {return math2(x, torch::fmod,      torch::fmod,      torch::fmod_out,      &Tensor::fmod_,      &Tensor::fmod_,      "fmod");}
+KAPI Mul(K x)       {return math2(x, torch::mul,       torch::mul,       torch::mul_out,       &Tensor::mul_,       &Tensor::mul_,       "multiply");}
+KAPI Remainder(K x) {return math2(x, torch::remainder, torch::remainder, torch::remainder_out, &Tensor::remainder_, &Tensor::remainder_, "remainder");}
 
 // --------------------------------------------------------------------------------------------
 // add - handle ambiguity of syntax w'3 args (a;s;b) vs (a;s;output) using (a;s;();output)

@@ -856,10 +856,47 @@ KAPI Random(K x)      {return kprob(x, Prob::random);}
 KAPI Uniform(K x)     {return kprob(x, Prob::uniform);}
 
 // ------------------------------------------------------------------------------------------
-// tensor utility fns: 
+// zero - zero out tensor in place (if array, array-> tensor -> zero out -> return array)
+// fill - fill 
+// ------------------------------------------------------------------------------------------
+KAPI zero(K x) {
+ KTRY
+  if(auto* t=xten(x))
+   return t->zero_(), (K)0;
+  else
+   return kget(kput(x).zero_());
+ KCATCH("zero");
+}
+
+KAPI fill(K x) {
+ KTRY
+  Scalar s;
+  if(xnum(x,1,s) && x->n==2)
+   if(auto *t=xten(x,0))
+    return t->fill_(s), (K)0;
+   else
+    return kget(kput(x,0).fill_(s));
+  else
+   AT_ERROR("fill expects (tensor/array;fill element)");
+ KCATCH("fill");
+}
+
+KAPI filldiagonal(K x) {
+ KTRY
+  B w=false; Scalar s;
+  if(xnum(x,1,s) && (x->n==2 || (x->n==3 && xbool(x,2,w))))
+   if(auto *t=xten(x,0))
+    return t->fill_diagonal_(s,w), (K)0;
+   else
+    return kget(kput(x,0).fill_diagonal_(s,w));
+  else
+   AT_ERROR("fill diagonal expects (tensor/array;fill element;optional wrap flag)");
+ KCATCH("fill diagonal");
+}
+
 // ------------------------------------------------------------------------------------------
 // tensorcopy - tgt <- src values, must have same type & device, tgt resized if src larger
-// grad = return gradient data or empty, if ptr enlisted, return gradient ptr (must free)
+// grad - return gradient data or empty, if ptr enlisted, return gradient ptr (must free)
 // tensorback - backprop given tensor, optional tensor & sym for retain/create gradient graph
 // detach - detach tensor, with optional flag to perform the detach in place
 // same - given two tensors, compares underlying ptr, returns true if same
@@ -927,25 +964,28 @@ KAPI same(K x) {
 // tensor fns defined in k namespace
 // ----------------------------------
 void tensorfn(K x) {
- fn(x, "tensor",      KFN(tensor), 1);
- fn(x, "grad",        KFN(grad), 1);
- fn(x, "detach",      KFN(detach), 1);
- fn(x, "same",        KFN(same), 1);
- fn(x, "vector",      KFN(vector), 1);
- fn(x, "options",     KFN(options), 1);
- fn(x, "shuffle",     KFN(kshuffle), 1);
- fn(x, "batch",       KFN(batch), 1);
- fn(x, "restore",     KFN(restore), 1);
- fn(x, "narrow",      KFN(narrow), 1);
- fn(x, "transpose",   KFN(transpose), 1);
- fn(x, "resize",      KFN(resize), 1);
- fn(x, "reshape",     KFN(reshape), 1);
- fn(x, "View",        KFN(view), 1);
- fn(x, "cauchy",      KFN(Cauchy), 1);
- fn(x, "exponential", KFN(Exponential), 1);
- fn(x, "geometric",   KFN(Geometric), 1);
- fn(x, "lognormal",   KFN(Lognormal), 1);
- fn(x, "normal",      KFN(Normal), 1);
- fn(x, "random",      KFN(Random), 1);
- fn(x, "uniform",     KFN(Uniform), 1);
+ fn(x, "tensor",       KFN(tensor), 1);
+ fn(x, "zero",         KFN(zero), 1);
+ fn(x, "fill",         KFN(fill), 1);
+ fn(x, "filldiagonal", KFN(filldiagonal), 1);
+ fn(x, "grad",         KFN(grad), 1);
+ fn(x, "detach",       KFN(detach), 1);
+ fn(x, "same",         KFN(same), 1);
+ fn(x, "vector",       KFN(vector), 1);
+ fn(x, "options",      KFN(options), 1);
+ fn(x, "shuffle",      KFN(kshuffle), 1);
+ fn(x, "batch",        KFN(batch), 1);
+ fn(x, "restore",      KFN(restore), 1);
+ fn(x, "narrow",       KFN(narrow), 1);
+ fn(x, "transpose",    KFN(transpose), 1);
+ fn(x, "resize",       KFN(resize), 1);
+ fn(x, "reshape",      KFN(reshape), 1);
+ fn(x, "View",         KFN(view), 1);
+ fn(x, "cauchy",       KFN(Cauchy), 1);
+ fn(x, "exponential",  KFN(Exponential), 1);
+ fn(x, "geometric",    KFN(Geometric), 1);
+ fn(x, "lognormal",    KFN(Lognormal), 1);
+ fn(x, "normal",       KFN(Normal), 1);
+ fn(x, "random",       KFN(Random), 1);
+ fn(x, "uniform",      KFN(Uniform), 1);
 }

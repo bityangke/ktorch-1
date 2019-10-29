@@ -1230,7 +1230,6 @@ void mopt(Module &g,B a,K &v,J i) { //g:generic module, a:true if all options, v
  } else if(auto* m=g.as<Softplus>())   { c=Cast::softplus;   setting2(a,c,x,m->options.beta(),      m->options.threshold());
  } else if(auto* m=g.as<Threshold>())  { c=Cast::threshold;  setting2(a,c,x,m->options.threshold(), m->options.value());
 
- } else if(auto* m=g.as<torch::nn::Functional>()) { c=Cast::relu;
  } else { AT_ERROR("Unrecognized module: ",g.name());
  }
  S s=msym(c);J j=v->n==3 ? 0 : 1;

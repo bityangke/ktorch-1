@@ -23,53 +23,68 @@ using Fmm     = Tensor  (*)(const Tensor&, const Tensor&, const Tensor&, Scalar,
 using Gmm     = Tensor& (*)(Tensor&, const Tensor&, const Tensor&, const Tensor&, Scalar, Scalar);
 
 // -----------------------------------------------------------------------------------------
-// point-wise & other math fns with arg(s) of tensor, (tensor;output tensor) or k array
+// tensor methods (used for in-place methods, e.g. abs_)
 // -----------------------------------------------------------------------------------------
-static K math1(K x, Ft f, Gt g, cS e) {
+using Tm = Tensor& (Tensor::*)() const;
+using Ts = Tensor& (Tensor::*)(Scalar) const;
+using Tt = Tensor& (Tensor::*)(const Tensor&) const;
+
+// -----------------------------------------------------------------------------------------
+// point-wise & other math fns, returning new tensor, operating in place or -> output tensor
+// -----------------------------------------------------------------------------------------
+static K math1(K x,Ft f,Gt g,Tm m,cS e) {
  KTRY
   Tensor t,r;
-  if(xten(x,t))                                     // tensor
+  if(xten(x,t)) {                                     // operate on tensor, return new tensor
    return kten(f(t));
-  else if(xten(x,1,r) && x->n==2)                   // (array/tensor;output tensor)
+  } else if(xten(x,0,t) && xempty(x,1) && x->n==2) {  // operate via in-place method on tensor
+   return (&t->*m)(), (K)0;
+  } else if(xten(x,1,r) && x->n==2) {                 // array/tensor -> output tensor
    return g(r,xten(x,0,t) ? t : kput(x,0)), (K)0;
-  else                                              // k array
+  } else {                                            // k array -> tensor -> fn(tensor) -> back to k array
    return kget(f(kput(x)));
+  }
  KCATCH(e);
 }
 
-KAPI Abs(K x)        {return math1(x, torch::abs,        torch::abs_out,        "absolute value");}
-KAPI Acos(K x)       {return math1(x, torch::acos,       torch::acos_out,       "arccosine");}
-KAPI Asin(K x)       {return math1(x, torch::asin,       torch::asin_out,       "arcsine");}
-KAPI Atan(K x)       {return math1(x, torch::atan,       torch::atan_out,       "arctangent");}
-KAPI Ceil(K x)       {return math1(x, torch::ceil,       torch::ceil_out,       "ceiling");}
-KAPI Cos(K x)        {return math1(x, torch::cos,        torch::cos_out,        "cosine");}
-KAPI Cosh(K x)       {return math1(x, torch::cosh,       torch::cosh_out,       "hyperbolic cosine");}
-KAPI Digamma(K x)    {return math1(x, torch::digamma,    torch::digamma_out,    "log derivative of gamma");}
-KAPI Erf(K x)        {return math1(x, torch::erf,        torch::erf_out,        "error function");}
-KAPI Erfc(K x)       {return math1(x, torch::erfc,       torch::erfc_out,       "complimentary error function");}
-KAPI Erfinv(K x)     {return math1(x, torch::erfinv,     torch::erfinv_out,     "inverse error function");}
-KAPI Exp(K x)        {return math1(x, torch::exp,        torch::exp_out,        "exponential");}
-KAPI Expm1(K x)      {return math1(x, torch::expm1,      torch::expm1_out,      "exponential minus 1");}
-KAPI Floor(K x)      {return math1(x, torch::floor,      torch::floor_out,      "floor");}
-KAPI Frac(K x)       {return math1(x, torch::frac,       torch::frac_out,       "fractional");}
-KAPI Inverse(K x)    {return math1(x, torch::inverse,    torch::inverse_out,    "matrix inverse");}
-KAPI Log(K x)        {return math1(x, torch::log,        torch::log_out,        "log");}
-KAPI Log10(K x)      {return math1(x, torch::log10,      torch::log10_out,      "log10");}
-KAPI Log1p(K x)      {return math1(x, torch::log1p,      torch::log1p_out,      "log1p");}
-KAPI Log2(K x)       {return math1(x, torch::log2,       torch::log2_out,       "log2");}
-KAPI Neg(K x)        {return math1(x, torch::neg,        torch::neg_out,        "negative");}
-KAPI Reciprocal(K x) {return math1(x, torch::reciprocal, torch::reciprocal_out, "reciprocal");}
-KAPI Round(K x)      {return math1(x, torch::round,      torch::round_out,      "round");}
-KAPI Rsqrt(K x)      {return math1(x, torch::rsqrt,      torch::rsqrt_out,      "reciprocal square root");}
-KAPI Ksigmoid(K x)   {return math1(x, torch::sigmoid,    torch::sigmoid_out,    "sigmoid");}
-KAPI Sign(K x)       {return math1(x, torch::sign,       torch::sign_out,       "sign");}
-KAPI Sin(K x)        {return math1(x, torch::sin,        torch::sin_out,        "sine");}
-KAPI Sinh(K x)       {return math1(x, torch::sinh,       torch::sinh_out,       "hyperbolic sine");}
-KAPI Sqrt(K x)       {return math1(x, torch::sqrt,       torch::sqrt_out,       "square root");}
-KAPI Tan(K x)        {return math1(x, torch::tan,        torch::tan_out,        "tangent");}
-KAPI Ktanh(K x)      {return math1(x, torch::tanh,       torch::tanh_out,       "hyperbolic tangent");}
-KAPI Trunc(K x)      {return math1(x, torch::trunc,      torch::trunc_out,      "truncate");}
+KAPI Abs(K x)        {return math1(x, torch::abs,         torch::abs_out,         &Tensor::abs_,         "absolute value");}
+KAPI Acos(K x)       {return math1(x, torch::acos,        torch::acos_out,        &Tensor::acos_,        "arccosine");}
+KAPI Asin(K x)       {return math1(x, torch::asin,        torch::asin_out,        &Tensor::asin_,        "arcsine");}
+KAPI Atan(K x)       {return math1(x, torch::atan,        torch::atan_out,        &Tensor::atan_,        "arctangent");}
+KAPI Bitwisenot(K x) {return math1(x, torch::bitwise_not, torch::bitwise_not_out, &Tensor::bitwise_not_, "bitwise not");}
+KAPI Ceil(K x)       {return math1(x, torch::ceil,        torch::ceil_out,        &Tensor::ceil_,        "ceiling");}
+KAPI Cos(K x)        {return math1(x, torch::cos,         torch::cos_out,         &Tensor::cos_,         "cosine");}
+KAPI Cosh(K x)       {return math1(x, torch::cosh,        torch::cosh_out,        &Tensor::cosh_,        "hyperbolic cosine");}
+KAPI Digamma(K x)    {return math1(x, torch::digamma,     torch::digamma_out,     &Tensor::digamma_,     "log derivative of gamma");}
+KAPI Erf(K x)        {return math1(x, torch::erf,         torch::erf_out,         &Tensor::erf_,         "error function");}
+KAPI Erfc(K x)       {return math1(x, torch::erfc,        torch::erfc_out,        &Tensor::erfc_,        "complimentary error function");}
+KAPI Erfinv(K x)     {return math1(x, torch::erfinv,      torch::erfinv_out,      &Tensor::erfinv_,      "inverse error function");}
+KAPI Exp(K x)        {return math1(x, torch::exp,         torch::exp_out,         &Tensor::exp_,         "exponential");}
+KAPI Expm1(K x)      {return math1(x, torch::expm1,       torch::expm1_out,       &Tensor::expm1_,       "exponential minus 1");}
+KAPI Floor(K x)      {return math1(x, torch::floor,       torch::floor_out,       &Tensor::floor_,       "floor");}
+KAPI Frac(K x)       {return math1(x, torch::frac,        torch::frac_out,        &Tensor::frac_,        "fractional");}
+KAPI Log(K x)        {return math1(x, torch::log,         torch::log_out,         &Tensor::log_,         "log");}
+KAPI Log10(K x)      {return math1(x, torch::log10,       torch::log10_out,       &Tensor::log10_,       "log10");}
+KAPI Log1p(K x)      {return math1(x, torch::log1p,       torch::log1p_out,       &Tensor::log1p_,       "log1p");}
+KAPI Log2(K x)       {return math1(x, torch::log2,        torch::log2_out,        &Tensor::log2_,        "log2");}
+KAPI Neg(K x)        {return math1(x, torch::neg,         torch::neg_out,         &Tensor::neg_,         "negative");}
+KAPI Not(K x)        {return math1(x, torch::logical_not, torch::logical_not_out, &Tensor::logical_not_, "logical not");}
+KAPI Reciprocal(K x) {return math1(x, torch::reciprocal,  torch::reciprocal_out,  &Tensor::reciprocal_,  "reciprocal");}
+KAPI Round(K x)      {return math1(x, torch::round,       torch::round_out,       &Tensor::round_,       "round");}
+KAPI Rsqrt(K x)      {return math1(x, torch::rsqrt,       torch::rsqrt_out,       &Tensor::rsqrt_,       "reciprocal square root");}
+KAPI Ksigmoid(K x)   {return math1(x, torch::sigmoid,     torch::sigmoid_out,     &Tensor::sigmoid_,     "sigmoid");}
+KAPI Sign(K x)       {return math1(x, torch::sign,        torch::sign_out,        &Tensor::sign_,        "sign");}
+KAPI Sin(K x)        {return math1(x, torch::sin,         torch::sin_out,         &Tensor::sin_,         "sine");}
+KAPI Sinh(K x)       {return math1(x, torch::sinh,        torch::sinh_out,        &Tensor::sinh_,        "hyperbolic sine");}
+KAPI Sqrt(K x)       {return math1(x, torch::sqrt,        torch::sqrt_out,        &Tensor::sqrt_,        "square root");}
+KAPI Tan(K x)        {return math1(x, torch::tan,         torch::tan_out,         &Tensor::tan_,         "tangent");}
+KAPI Ktanh(K x)      {return math1(x, torch::tanh,        torch::tanh_out,        &Tensor::tanh_,        "hyperbolic tangent");}
+KAPI Trunc(K x)      {return math1(x, torch::trunc,       torch::trunc_out,       &Tensor::trunc_,       "truncate");}
 
+//KAPI Xor(K x)        {return math1(x, torch::logical_xor, torch::logical_xor_out, &Tensor::logical_xor_, "logical xor");}
+//KAPI Bernoulli(K x)  {return math1(x, torch::bernoulli,  torch::bernoulli_out,  &Tensor::bernoulli_,  "bernoulli");}
+// inverse has no inverse_ method
+//KAPI Inverse(K x)    {return math1(x, torch::inverse,    torch::inverse_out,    &Tensor::inverse_,    "matrix inverse");}
 // ---------------------------------------------------------------------------------------------
 // point-wise functions with arg of (input1;input2;optional output tensor), input2 may be scalar
 // ---------------------------------------------------------------------------------------------
@@ -87,7 +102,7 @@ static K math2(K x,Ftt f,Fts fn,Gtt g,cS e) {
     p=xtenarg(x,a,b);
    }
    if(r.defined())
-    return g(r,a,b.defined() ? b : torch::full({},n,a.device())), (K)0;   // torch::scalar_to_tensor doesn't make variable(yet)
+    return g(r,a,b.defined() ? b : torch::autograd::make_variable(torch::scalar_to_tensor(n,a.device()))), (K)0;
    else
     return r=b.defined() ? f(a,b) : fn(a,n), (p ? kten(r) : kget(r));
   } else {
@@ -520,33 +535,38 @@ KAPI   Mode(K x) {return kmed(x, false, "mode");}
 
 // ----------------------------------------------------------------------------------------
 // comparison fns with arg of (input1;input2;optional output tensor), input2 may be scalar
+// if output tensor is empty, e.g. ge(t;0;[]), operates in-place, like t.ge_(0)
 // ----------------------------------------------------------------------------------------
-static K compare2(K x,Ftt f,Fts fn,Gtt g,Gts gn,cS e) {
+static K compare2(K x,Ftt f,Fts fn,Gtt g,Gts gn,Tt m,Ts mn,cS s) {
  KTRY
-  B p; Scalar n; Tensor a,b,r;
-  if(2 == (xten(x,2,r) ? x->n-1 : xlen(x))) {
+  B p,e=xempty(x,2); Scalar n; Tensor a,b,r;
+  if(2 == ((e || xten(x,2,r)) ? x->n-1 : xlen(x))) {
    if(xnum(x,1,n)) {
     if(!(p=xten(x,0,a))) a=kput(x,0);
    } else {
-    p=xtenarg(x,a,b);
+    if(x->t)
+     a=kput(x), b=a[1],a=a[0],p=false;
+    else
+     p=xtenarg(x,a,b);
    }
-   if(r.defined())
+   if(e)
+    return b.defined() ? (&a->*m)(b) : (&a->*mn)(n), (K)0;
+   else if(r.defined())
     return (b.defined() ? g(r,a,b) : gn(r,a,n)), (K)0;
    else
     return r=b.defined() ? f(a,b) : fn(a,n), (p ? kten(r) : kget(r));
   } else {
-   AT_ERROR(e,": expects args of(input1;input2;optional output tensor), input1 is array or tensor, input2 may also be a number");
-   return KERR(e);
+   AT_ERROR(s,": expects args of(input1;input2;optional output tensor), input1 is array or tensor, input2 may also be a scalar");
   }
- KCATCH(e);
+ KCATCH(s);
 }
 
-KAPI Eq(K x)  {return compare2(x, torch::eq,  torch::eq,  torch::eq_out,  torch::eq_out, "eq()");}
-KAPI Ge(K x)  {return compare2(x, torch::ge,  torch::ge,  torch::ge_out,  torch::ge_out, "ge()");}
-KAPI GT(K x)  {return compare2(x, torch::gt,  torch::gt,  torch::gt_out,  torch::gt_out, "gt()");}
-KAPI Le(K x)  {return compare2(x, torch::le,  torch::le,  torch::le_out,  torch::le_out, "le()");}
-KAPI Lt(K x)  {return compare2(x, torch::lt,  torch::lt,  torch::lt_out,  torch::lt_out, "lt()");}
-KAPI Ne(K x)  {return compare2(x, torch::ne,  torch::ne,  torch::ne_out,  torch::ne_out, "ne()");}
+KAPI Eq(K x)  {return compare2(x, torch::eq, torch::eq, torch::eq_out, torch::eq_out, &Tensor::eq_, &Tensor::eq_, "eq");}
+KAPI Ge(K x)  {return compare2(x, torch::ge, torch::ge, torch::ge_out, torch::ge_out, &Tensor::ge_, &Tensor::ge_, "ge");}
+KAPI GT(K x)  {return compare2(x, torch::gt, torch::gt, torch::gt_out, torch::gt_out, &Tensor::gt_, &Tensor::gt_, "gt");}
+KAPI Le(K x)  {return compare2(x, torch::le, torch::le, torch::le_out, torch::le_out, &Tensor::le_, &Tensor::le_, "le");}
+KAPI Lt(K x)  {return compare2(x, torch::lt, torch::lt, torch::lt_out, torch::lt_out, &Tensor::lt_, &Tensor::lt_, "lt");}
+KAPI Ne(K x)  {return compare2(x, torch::ne, torch::ne, torch::ne_out, torch::ne_out, &Tensor::ne_, &Tensor::ne_, "ne");}
 
 // -------------------------------------------------------------------------------------------
 // comparison functions that return single boolean if arrays are equal or approx. equal
@@ -1570,8 +1590,10 @@ void mathfn(K x) {
  fn(x, "atan2",              KFN(Atan2),              1);
  fn(x, "baddbmm",            KFN(Baddbmm),            1);
  fn(x, "bartlett",           KFN(Bartlett),           1);
+// fn(x, "bernoulli",          KFN(Bernoulli),          1);
  fn(x, "blackman",           KFN(Blackman),           1);
  fn(x, "bincount",           KFN(Bincount),           1);
+ fn(x, "bitwisenot",         KFN(Bitwisenot),         1);
  fn(x, "bmm",                KFN(Bmm),                1);
  fn(x, "ceil",               KFN(Ceil),               1);
  fn(x, "cholesky",           KFN(Cholesky),           1);
@@ -1613,7 +1635,7 @@ void mathfn(K x) {
  fn(x, "hann",               KFN(Hann),               1);
  fn(x, "hamming",            KFN(Hamming),            1);
  fn(x, "histc",              KFN(Histc),              1);
- fn(x, "inverse",            KFN(Inverse),            1);
+ //fn(x, "inverse",            KFN(Inverse),            1);
  fn(x, "ifft",               KFN(Ifft),               1);
  fn(x, "irfft",              KFN(Irfft),              1);
  fn(x, "isfinite",           KFN(Isfinite),           1);
@@ -1652,6 +1674,7 @@ void mathfn(K x) {
  fn(x, "mvlgamma",           KFN(Mvlgamma),           1);
  fn(x, "ne",                 KFN(Ne),                 1);
  fn(x, "Neg",                KFN(Neg),                1);
+ fn(x, "Not",                KFN(Not),                1);
  fn(x, "nnorm",              KFN(Nnorm),              1);
  fn(x, "orgqr",              KFN(Orgqr),              1);
  fn(x, "ormqr",              KFN(Ormqr),              1);

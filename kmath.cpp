@@ -26,6 +26,7 @@ using Gmm     = Tensor& (*)(Tensor&, const Tensor&, const Tensor&, const Tensor&
 // tensor methods (used for in-place methods, e.g. abs_)
 // -----------------------------------------------------------------------------------------
 using Tm = Tensor& (Tensor::*)() const;
+using Tn = Tensor& (Tensor::*)(int64_t) const;
 using Ts = Tensor& (Tensor::*)(Scalar) const;
 using Tt = Tensor& (Tensor::*)(const Tensor&) const;
 
@@ -38,7 +39,7 @@ static K math1(K x,Ft f,Gt g,Tm m,cS e) {
   if(xten(x,t)) {                                     // operate on tensor, return new tensor
    return kten(f(t));
   } else if(xten(x,0,t) && xempty(x,1) && x->n==2) {  // operate via in-place method on tensor
-   return (&t->*m)(), (K)0;
+   return (t.*m)(), (K)0;
   } else if(xten(x,1,r) && x->n==2) {                 // array/tensor -> output tensor
    return g(r,xten(x,0,t) ? t : kput(x,0)), (K)0;
   } else {                                            // k array -> tensor -> fn(tensor) -> back to k array
@@ -92,7 +93,7 @@ static Tensor atan2err(const Tensor& a,Scalar s) {
  AT_ERROR("atan2 with 2nd scalar argument not implemented in pytorch");
 }
 
-static K math2(K x,Ftt f,Fts fn,Gtt g,cS e) {
+static K math2(K x,Ftt f,Fts fn,Gtt g,cS s) {
  KTRY
   B p; Scalar n; Tensor a,b,r;
   if(2 == (xten(x,2,r) ? x->n-1 : xlen(x))) {
@@ -106,10 +107,10 @@ static K math2(K x,Ftt f,Fts fn,Gtt g,cS e) {
    else
     return r=b.defined() ? f(a,b) : fn(a,n), (p ? kten(r) : kget(r));
   } else {
-   AT_ERROR(e,": expects args of(input1;input2;optional output tensor), input1 is array or tensor, input2 may also be a number");
-   return KERR(e);
+   AT_ERROR(s,": expects args of(input1;input2;optional output tensor), input1 is array or tensor, input2 may also be a number");
+   return KERR(s);
   }
- KCATCH(e);
+ KCATCH(s);
 }
 
 KAPI Atan2(K x)     {return math2(x, torch::atan2,     atan2err,         torch::atan2_out,     "arctangent 2");}
@@ -322,7 +323,7 @@ KAPI Mvlgamma(K x) {
 KAPI Pow(K x) {
  KTRY
   Scalar s; Tensor a,b,r;
-  B p; J m,n=xten(x,2,r) ? x->n-1 : xlen(x);
+  B p,e; J m,n=((e=xempty(x,2)) || xten(x,2,r)) ? x->n-1 : xlen(x);
   if(n != 2) {             m=-1;
   } else if(xnum(x,0,s)) { m=0; if(!(p=xten(x,1,b))) b=kput(x,1);
   } else if(xnum(x,1,s)) { m=1; if(!(p=xten(x,0,a))) a=kput(x,0);
@@ -331,6 +332,11 @@ KAPI Pow(K x) {
   }
   if(m<0) {
    return KERR("pow expects input arrays/tensors a,b or scalar s: (a;b), (a;s), (s;b) w'optional output tensor as 3rd arg");
+  } else if(e) {
+   if     (m==1) a.pow_(s);
+   else if(m==2) a.pow_(b);
+   else AT_ERROR("pow cannot be called in-place on a scalar");
+   return xptr(x,0) ? (K)0 : kget(a);
   } else if(r.defined()) {
    if     (m==0) torch::pow_out(r,s,b);
    else if(m==1) torch::pow_out(r,a,s);
@@ -950,32 +956,39 @@ KAPI Trace(K x) {
 // -------------------------------------------------------------------------------------
 // fns dealing with diagonals, upper & lower triangles
 // -------------------------------------------------------------------------------------
-static K diagfns(K x, Fti f, Gti g, cS e) {
+static K diagfns(K x,Fti f,Gti g,Tn m,cS s) {
  KTRY
-  B p; J d=0; Tensor r,t;
-  if((x->n==2 && (xlong(x,1,d) || xten(x,1,r))) ||  // (input;diag) or (input;output tensor)
-     (x->n==3 &&  xlong(x,1,d) && xten(x,2,r))) {   // (input;diag;output tensor)
+  TORCH_CHECK(x->t>=0, s,": not implemented for ",kname(x->t));
+  B p,e=false; int64_t d=0; Tensor r,t;
+  if((x->n==2 && (xint64(x,1,d) ||  xten(x,1,r) || (e=xempty(x,1)))) ||  // (input;diag) or (input;output tensor)
+     (x->n==3 &&  xint64(x,1,d) && (xten(x,2,r) || (e=xempty(x,2))))) {  // (input;diag;output tensor)
    if(!(p=xten(x,0,t))) t=kput(x,0);
   } else if(xten(x,t) || !xmixed(x,3)) {            // input tensor or vector/matrix
    if(!(p=t.defined())) t=kput(x);
   } else {
-   AT_ERROR(e," expects vector/matrix/tensor a, optional diagonal d, optional output tensor r: a, (a;d), (a;r) or (a;d;r)");
+   AT_ERROR(s," expects vector/matrix/tensor a, optional diagonal d, optional output tensor r: a, (a;d), (a;r) or (a;d;r)");
   }
-  if(r.defined())
+  if(e && p) {
+   if(m) 
+    return (t.*m)(d), (K)0;
+   else
+    AT_ERROR(s,": no in-place option");
+  } else if(r.defined()) {
    return g(r,t,d), (K)0;
-  else
+  } else {
    return r=f(t,d), p ? kten(r) : kget(r);
- KCATCH(e);
+  }
+ KCATCH(s);
 }
 
 static Tensor& diagflat_out(Tensor& r, const Tensor& t, int64_t d) {
  AT_ERROR("Error: diagflat() not implemented with output tensor");
 }
 
-KAPI Diag(K x)     {return diagfns(x, torch::diag,     torch::diag_out,  "Diagonal diag()");}
-KAPI Diagflat(K x) {return diagfns(x, torch::diagflat, diagflat_out,     "Diagonal fill diagflat()");}
-KAPI Tril(K x)     {return diagfns(x, torch::tril,     torch::tril_out,  "Lower triangle tril()");}
-KAPI Triu(K x)     {return diagfns(x, torch::triu,     torch::triu_out,  "Upper triangle triu()");}
+KAPI Diag(K x)     {return diagfns(x, torch::diag,     torch::diag_out,  nullptr,        "Diagonal diag()");}
+KAPI Diagflat(K x) {return diagfns(x, torch::diagflat, diagflat_out,     nullptr,        "Diagonal fill diagflat()");}
+KAPI Tril(K x)     {return diagfns(x, torch::tril,     torch::tril_out,  &Tensor::tril_, "Lower triangle tril()");}
+KAPI Triu(K x)     {return diagfns(x, torch::triu,     torch::triu_out,  &Tensor::triu_, "Upper triangle triu()");}
 
 KAPI Diagonal(K x) {  //extract diagonal elements, optional offset & dimensions i,j
  KTRY

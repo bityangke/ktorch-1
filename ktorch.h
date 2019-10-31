@@ -401,7 +401,7 @@ Tensor kput(K);
 Tensor kput(K,J);
 K kten(const Tensor&);
 K kvec(const TensorVector&);
-K kresult(B,const Tensor&);
+inline K kresult(B p,const Tensor& t) {return p ? kten(t) : kget(t);}
 K tento(Kten*,const TensorOptions&,B,B);
 K vecto(Kvec*,const TensorOptions&,B);
 K ktenpair(B,Tensor&,Tensor&);

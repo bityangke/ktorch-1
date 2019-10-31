@@ -76,13 +76,10 @@ K kget(const TensorDeque& v) {
 }
 
 // -------------------------------------------------------------------------------
-// kresult - given ptr flag (true if tensor supplied) & tensor return ptr or array
 // tento - change tensor device/type, return new tensor if copy flag set
 // ktenpair - given a pair of tensors return pair of pointers or array
 // kten3 - given a triplet of tensors return triplet of pointers or array
 // -------------------------------------------------------------------------------
-K kresult(B p,const Tensor& t) {return p ? kten(t) : kget(t);}
-
 K tento(Kten* t,const TensorOptions& o,B a,B b) {
  auto r=t->t.to(o,a,b);
  if(b)                 // if copy flag set

@@ -91,10 +91,10 @@ int64_t reduce(cS s,K x,J i) { // check argument(s) for sym or named pair/dict, 
 
 static K kloss(K a,Lf f,cS s) {
  KTRY
-  Tensor x,y;
+  B b; Tensor x,y;
   if(!a->t && (a->n==2 || a->n==3)) {
-   auto r=reduce(s,a,2);
-   return xtenarg(a,x,y) ? kten(f(x,y,r)) : kget(f(x,y,r));
+   b=xtenarg(a,x,y);
+   return kresult(b, f(x,y,reduce(s,a,2)));
   } else if(0 < a->t && a->t<20 && a->n==2) {
    return x=kput(a), kget(f(x[0],x[1],reduce()));
   } else {
@@ -195,7 +195,7 @@ KAPI multisoft(K x) {return wtloss(x, Cast::multisoft, "multi-label soft margin"
 // ---------------------------------------------------------------------------------------
 static K bceloss(K a,B b,cS s) {  //a:args, b:true if batch wts
  KTRY
-  B p=false; J i=2+b,j; int64_t r; Tensor l,x,y,bw,w;
+  B p=false; J i=2+b,j; int64_t r; Tensor x,y,bw,w;
   if(a->t) {
    AT_ERROR(s," loss not implemented for ",kname(a->t));
   } else if(a->n < i) {
@@ -205,8 +205,7 @@ static K bceloss(K a,B b,cS s) {  //a:args, b:true if batch wts
   wtargs(Cast::bcelogits,s,a,i,w,j,r);
   p=xtenarg(a,x,y);
   if(b && !xten(a,2,bw)) bw=kput(a,2);
-  l=torch::binary_cross_entropy_with_logits(x,y,bw,w,r);
-  return p ? kten(l) : kget(l);
+  return kresult(p, torch::binary_cross_entropy_with_logits(x,y,bw,w,r));
  KCATCH(s)
 }
 
@@ -282,12 +281,11 @@ static void multiargs(K x,J i,Scalar &pw,Scalar& m,Tensor& w,int64_t &r) {
 
 KAPI multimargin(K a) {
  KTRY
-  B b; Tensor l,x,y,w; Scalar p,m; int64_t r; 
+  B b; Tensor x,y,w; Scalar p,m; int64_t r; 
   if(a->t || a->n<2 || a->n>6)
    AT_ERROR("multi-margin loss expects 2-6 args: at minimum (input;target) up to (input;target;p;margin;weight;reduction)");
   multiargs(a,2,p,m,w,r); b=xtenarg(a,x,y);
-  l=torch::multi_margin_loss(x,y,p,m,w,r);
-  return b ? kten(l) : kget(l);
+  return kresult(b, torch::multi_margin_loss(x,y,p,m,w,r));
  KCATCH("multi-margin");
 }
 
@@ -319,15 +317,15 @@ static void triargs(K x,J i,double& m,double& pw,double& e,bool& s,int64_t& r) {
 
 KAPI triplet(K a) {
  KTRY
-  B b,s; F e,m,p; Tensor l,x,y,z; int64_t r; 
+  B b,s; F e,m,p; Tensor x,y,z; int64_t r; 
   if(a->t) {
    AT_ERROR("triplet margin loss not implemented for ",kname(a->t));
   } else if(a->n < 3) {
    AT_ERROR("triplet margin loss expects at least 3 args, (anchor;positive;negative)");
   }
-  triargs(a,3,m,p,e,s,r); b=xtenarg(a,x,y,z);
-  l=torch::triplet_margin_loss(x,y,z,m,p,e,s,r);
-  return b ? kten(l) : kget(l);
+  triargs(a,3,m,p,e,s,r);
+  b=xtenarg(a,x,y,z);
+  return kresult(b, torch::triplet_margin_loss(x,y,z,m,p,e,s,r));
  KCATCH("triplet margin");
 }
 
@@ -357,15 +355,14 @@ static void poissonargs(K x,J i,bool& l,bool& f,double& e,int64_t& r) {
 
 KAPI poissonloss(K a) {
  KTRY
-  B p,ln,f; F e; Tensor l,x,y; int64_t r; 
+  B p,ln,f; F e; Tensor x,y; int64_t r; 
   if(a->t) {
    AT_ERROR("poisson nll loss not implemented for ",kname(a->t));
   } else if(a->n < 2) {
    AT_ERROR("poisson nll loss expects at least 2 args, (input;target)");
   }
   poissonargs(a,2,ln,f,e,r); p=xtenarg(a,x,y);
-  l=torch::poisson_nll_loss(x,y,ln,f,e,r);
-  return p ? kten(l) : kget(l);
+  return kresult(p, torch::poisson_nll_loss(x,y,ln,f,e,r));
  KCATCH("poisson nll loss");
 }
 
@@ -404,7 +401,7 @@ static B ctc2(K a,J i,Tensor& x,Tensor& y,Tensor& nx,Tensor& ny,IntArrayRef& jx,
 
 KAPI ctc(K a) {
  KTRY
-  B p,z; IntArrayRef jx,jy; Tensor l,x,y,nx,ny; int64_t b,r; 
+  B p,z; IntArrayRef jx,jy; Tensor x,y,nx,ny; int64_t b,r; 
   if(a->t) {
    AT_ERROR("CTC loss not implemented for ",kname(a->t));
   } else if(a->n < 4) {
@@ -412,8 +409,7 @@ KAPI ctc(K a) {
   }
   ctc1(a,4,b,z,r); 
   p=ctc2(a,0,x,y,nx,ny,jx,jy);
-  l=nx.defined() ? torch::ctc_loss(x,y,nx,ny,b,r,z) : torch::ctc_loss(x,y,jx,jy,b,r,z);
-  return p ? kten(l) : kget(l);
+  return kresult(p, nx.defined() ? torch::ctc_loss(x,y,nx,ny,b,r,z) : torch::ctc_loss(x,y,jx,jy,b,r,z));
  KCATCH("CTC loss");
 }
 

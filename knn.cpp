@@ -382,7 +382,7 @@ KAPI klinear(K x) {
    r=torch::linear(a ? *a : kput(x,0), w ? *w : kput(x,1));
   else
    r=torch::linear(a ? *a : kput(x,0), w ? *w : kput(x,1), b ? *b : kput(x,2));
-  return a||w||b ? kten(r) : kget(r);
+  return kresult(a||w||b, r);
  KCATCH("linear");
 }
 
@@ -475,7 +475,7 @@ static K maxpool(K x,Cast c) {
    case Cast::maxpool3d: r=torch::nn::functional::max_pool3d(t ? *t : kput(x,0), maxpool<3>(x,1,c)); break;
    default: AT_ERROR("Unrecognized max pooling function");
   }
-  return t ? kten(r) : kget(r);
+  return kresult(t,r);
  KCATCH("maxpool");
 }
 
@@ -535,7 +535,7 @@ static K avgpool(K x,Cast c) {
    case Cast::avgpool3d: r=torch::nn::functional::avg_pool3d(t ? *t : kput(x,0), avgpool<3>(x,1,c)); break;
    default: AT_ERROR("Unrecognized avg pooling function");
   }
-  return t ? kten(r) : kget(r);
+  return kresult(t,r);
  KCATCH("avgpool");
 }
 
@@ -581,7 +581,7 @@ static K adapt(K x,Cast c) {
    case Cast::adaptavg3d: r=torch::nn::functional::adaptive_avg_pool3d(t ? *t : kput(x,0), adapt<3,torch::nn::AdaptiveAvgPool3dOptions>(x,1,c)); break;
    default: AT_ERROR("Unrecognized avg pooling function");
   }
-  return t ? kten(r) : kget(r);
+  return kresult(t,r);
  KCATCH("adaptive pooling");
 }
 
@@ -791,8 +791,8 @@ using Ft = Tensor (*)(const Tensor&);
 
 static K noarg(cS s,Ft f, K x) {
  KTRY
-  Tensor t;
-  return xten(x,t) ? kten(f(t)) : kget(f(kput(x)));
+  Tensor t; B p=xten(x,t);
+  return kresult(p, f(p ? t : kput(x)));
  KCATCH(s);
 }
 
@@ -947,7 +947,7 @@ static K fn2(Cast c,cS s,K x,Ftss f) {
    arg2(r,c,s,x,1,b,v1,v2);                                           // check that args are valid
    if(!p) t=kput(x,0);                                                // if no tensor ptr, tensor from array
    Tensor a = r ? torch::rrelu(t,v1,v2,b) : f(t,v1,v2);               // special handling for rrelu w'train=true
-   return p ? kten(a) : kget(a);
+   return kresult(p,a);
   } else {
    default2(c,k1,k2,v1,v2);                                           // no tensor ptr, use defaults
    return kget(f(kput(x),v1,v2));                                     // return k value from given k input
@@ -965,15 +965,14 @@ KAPI kthreshold(K x) {return fn2(Cast::threshold, "threshold", x, torch::thresho
 // parameterized relu as function requires weight directly rather than module's count & initial value
 KAPI kprelu(K x) {
  KTRY
-  B p; Tensor r,t,w;
+  B p; Tensor t,w;
   if(!x->t && x->n==2)
    p=xtenarg(x,t,w);
   else if(0<x->t && x->t<98 && x->n==2)
-   p=false, r=kput(x), t=r[0], w=r[1];
+   p=false, t=kput(x), w=t[1], t=t[0];
   else
    AT_ERROR("prelu expects 2 args: input & weight, received ",kname(x->t),", count: ",xlen(x));
-  r=torch::prelu(t,w);
-  return p ? kten(r) : kget(r);
+  return kresult(p, torch::prelu(t,w));
  KCATCH("prelu");
 }
 

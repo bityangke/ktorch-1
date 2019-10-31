@@ -75,11 +75,14 @@ K kget(const TensorDeque& v) {
  return x;
 }
 
-// -------------------------------------------------------------------------
+// -------------------------------------------------------------------------------
+// kresult - given ptr flag (true if tensor supplied) & tensor return ptr or array
 // tento - change tensor device/type, return new tensor if copy flag set
 // ktenpair - given a pair of tensors return pair of pointers or array
 // kten3 - given a triplet of tensors return triplet of pointers or array
-// -------------------------------------------------------------------------
+// -------------------------------------------------------------------------------
+K kresult(B p,const Tensor& t) {return p ? kten(t) : kget(t);}
+
 K tento(Kten* t,const TensorOptions& o,B a,B b) {
  auto r=t->t.to(o,a,b);
  if(b)                 // if copy flag set
@@ -794,68 +797,6 @@ int64_t fullsize(TensorVector& v,int64_t d) {
 }
 
 // ------------------------------------------------------------------------------------------
-// probablity distribution methods: given tensor, fill w'random vars from chosen distribution
-// ------------------------------------------------------------------------------------------
-static S prob(Prob p) {
- for(auto& m:env().prob) if(std::get<1>(m)==p) return std::get<0>(m);
- AT_ERROR("Unrecognized probability distribution: ",(I)p);
-}
-
-static K kprob(K x,Prob p) {
- KTRY
-  Tensor *t; Scalar a,b;
-  TORCH_CHECK((t=xten(x)) || (t=xten(x,0)), prob(p)," requires tensor as 1st arg");
-  if(x->n==1) {
-   switch(p) {
-    case Prob::cauchy:      t->cauchy_(); break;
-    case Prob::exponential: t->exponential_(); break;
-    case Prob::geometric:   AT_ERROR(prob(p)," requires a probability argument"); break;
-    case Prob::lognormal:   t->log_normal_(); break;
-    case Prob::normal:      t->normal_(); break;
-    case Prob::random:      t->random_(); break;
-    case Prob::uniform:     t->uniform_(); break;
-   }
-  } else if(x->n==2) {
-   TORCH_CHECK(xnum(x,1,a), prob(p),": invalid number for 2nd arg");
-   TORCH_CHECK(p != Prob::random || a.isIntegral(false), prob(p),": requires integer arg for high limit");
-   switch(p) {
-    case Prob::cauchy:      t->cauchy_(a.toDouble()); break;
-    case Prob::exponential: t->exponential_(a.toDouble()); break;
-    case Prob::geometric:   t->geometric_(a.toDouble()); break;
-    case Prob::lognormal:   t->log_normal_(a.toDouble()); break;
-    case Prob::normal:      t->normal_(a.toDouble()); break;
-    case Prob::random:      t->random_(a.toLong()); break;
-    case Prob::uniform:     t->uniform_(a.toDouble()); break;
-   }
-  } else if(x->n==3) {
-   TORCH_CHECK(xnum(x,1,a), prob(p),": invalid number for 2nd arg");
-   TORCH_CHECK(xnum(x,2,b), prob(p),": invalid number for 3rd arg");
-   TORCH_CHECK(p != Prob::random || (a.isIntegral(false) && b.isIntegral(false)), prob(p),": requires integer args for low & high limits");
-   switch(p) {
-    case Prob::cauchy:      t->cauchy_(a.toDouble(),b.toDouble()); break;
-    case Prob::exponential:
-    case Prob::geometric:   AT_ERROR(prob(p),": tales up to 2 args, ",x->n," supplied"); break;
-    case Prob::lognormal:   t->log_normal_(a.toDouble(),b.toDouble()); break;
-    case Prob::normal:      t->normal_(a.toDouble(),b.toDouble()); break;
-    case Prob::random:      t->random_(a.toLong(),b.toLong()); break;
-    case Prob::uniform:     t->uniform_(a.toDouble(),b.toDouble()); break;
-   }
-  } else {
-    AT_ERROR(prob(p)," accepts no more than ",(p==Prob::exponential || p==Prob::geometric) ? 2 : 3," args, ",x->n," supplied");
-  }
-  return (K)0;
- KCATCH("probability");
-}
-
-KAPI Cauchy(K x)      {return kprob(x, Prob::cauchy);}
-KAPI Exponential(K x) {return kprob(x, Prob::exponential);}
-KAPI Geometric(K x)   {return kprob(x, Prob::geometric);}
-KAPI Lognormal(K x)   {return kprob(x, Prob::lognormal);}
-KAPI Normal(K x)      {return kprob(x, Prob::normal);}
-KAPI Random(K x)      {return kprob(x, Prob::random);}
-KAPI Uniform(K x)     {return kprob(x, Prob::uniform);}
-
-// ------------------------------------------------------------------------------------------
 // zero - zero out tensor in place (if array, array-> tensor -> zero out -> return array)
 // fill - fill 
 // ------------------------------------------------------------------------------------------
@@ -964,28 +905,21 @@ KAPI same(K x) {
 // tensor fns defined in k namespace
 // ----------------------------------
 void tensorfn(K x) {
- fn(x, "tensor",       KFN(tensor), 1);
- fn(x, "zero",         KFN(zero), 1);
- fn(x, "fill",         KFN(fill), 1);
- fn(x, "filldiagonal", KFN(filldiagonal), 1);
- fn(x, "grad",         KFN(grad), 1);
- fn(x, "detach",       KFN(detach), 1);
- fn(x, "same",         KFN(same), 1);
- fn(x, "vector",       KFN(vector), 1);
- fn(x, "options",      KFN(options), 1);
- fn(x, "shuffle",      KFN(kshuffle), 1);
- fn(x, "batch",        KFN(batch), 1);
- fn(x, "restore",      KFN(restore), 1);
- fn(x, "narrow",       KFN(narrow), 1);
- fn(x, "transpose",    KFN(transpose), 1);
- fn(x, "resize",       KFN(resize), 1);
- fn(x, "reshape",      KFN(reshape), 1);
- fn(x, "View",         KFN(view), 1);
- fn(x, "cauchy",       KFN(Cauchy), 1);
- fn(x, "exponential",  KFN(Exponential), 1);
- fn(x, "geometric",    KFN(Geometric), 1);
- fn(x, "lognormal",    KFN(Lognormal), 1);
- fn(x, "normal",       KFN(Normal), 1);
- fn(x, "random",       KFN(Random), 1);
- fn(x, "uniform",      KFN(Uniform), 1);
+ fn(x, "tensor",       KFN(tensor),        1);
+ fn(x, "zero",         KFN(zero),          1);
+ fn(x, "fill",         KFN(fill),          1);
+ fn(x, "filldiagonal", KFN(filldiagonal),  1);
+ fn(x, "grad",         KFN(grad),          1);
+ fn(x, "detach",       KFN(detach),        1);
+ fn(x, "same",         KFN(same),          1);
+ fn(x, "vector",       KFN(vector),        1);
+ fn(x, "options",      KFN(options),       1);
+ fn(x, "shuffle",      KFN(kshuffle),      1);
+ fn(x, "batch",        KFN(batch),         1);
+ fn(x, "restore",      KFN(restore),       1);
+ fn(x, "narrow",       KFN(narrow),        1);
+ fn(x, "transpose",    KFN(transpose),     1);
+ fn(x, "resize",       KFN(resize),        1);
+ fn(x, "reshape",      KFN(reshape),       1);
+ fn(x, "View",         KFN(view),          1);
 }

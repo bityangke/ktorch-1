@@ -33,19 +33,20 @@ using Tt = Tensor& (Tensor::*)(const Tensor&) const;
 // -----------------------------------------------------------------------------------------
 // point-wise & other math fns, returning new tensor, operating in place or -> output tensor
 // -----------------------------------------------------------------------------------------
-static K math1(K x,Ft f,Gt g,Tm m,cS e) {
+static K math1(K x,Ft f,Gt g,Tm m,cS s) {
  KTRY
   Tensor t,r;
   if(xten(x,t)) {                                     // operate on tensor, return new tensor
    return kten(f(t));
   } else if(xten(x,0,t) && xempty(x,1) && x->n==2) {  // operate via in-place method on tensor
+   TORCH_CHECK(m, s,": no in-place method");
    return (t.*m)(), (K)0;
   } else if(xten(x,1,r) && x->n==2) {                 // array/tensor -> output tensor
    return g(r,xten(x,0,t) ? t : kput(x,0)), (K)0;
   } else {                                            // k array -> tensor -> fn(tensor) -> back to k array
    return kget(f(kput(x)));
   }
- KCATCH(e);
+ KCATCH(s);
 }
 
 KAPI Abs(K x)        {return math1(x, torch::abs,         torch::abs_out,         &Tensor::abs_,         "absolute value");}
@@ -64,6 +65,7 @@ KAPI Exp(K x)        {return math1(x, torch::exp,         torch::exp_out,       
 KAPI Expm1(K x)      {return math1(x, torch::expm1,       torch::expm1_out,       &Tensor::expm1_,       "exponential minus 1");}
 KAPI Floor(K x)      {return math1(x, torch::floor,       torch::floor_out,       &Tensor::floor_,       "floor");}
 KAPI Frac(K x)       {return math1(x, torch::frac,        torch::frac_out,        &Tensor::frac_,        "fractional");}
+KAPI Inverse(K x)    {return math1(x, torch::inverse,     torch::inverse_out,     nullptr,               "matrix inverse");}
 KAPI Log(K x)        {return math1(x, torch::log,         torch::log_out,         &Tensor::log_,         "log");}
 KAPI Log10(K x)      {return math1(x, torch::log10,       torch::log10_out,       &Tensor::log10_,       "log10");}
 KAPI Log1p(K x)      {return math1(x, torch::log1p,       torch::log1p_out,       &Tensor::log1p_,       "log1p");}
@@ -83,9 +85,6 @@ KAPI Ktanh(K x)      {return math1(x, torch::tanh,        torch::tanh_out,      
 KAPI Trunc(K x)      {return math1(x, torch::trunc,       torch::trunc_out,       &Tensor::trunc_,       "truncate");}
 
 //KAPI Xor(K x)        {return math1(x, torch::logical_xor, torch::logical_xor_out, &Tensor::logical_xor_, "logical xor");}
-//KAPI Bernoulli(K x)  {return math1(x, torch::bernoulli,  torch::bernoulli_out,  &Tensor::bernoulli_,  "bernoulli");}
-// inverse has no inverse_ method
-//KAPI Inverse(K x)    {return math1(x, torch::inverse,    torch::inverse_out,    &Tensor::inverse_,    "matrix inverse");}
 
 // ---------------------------------------------------------------------------------------------
 // point-wise functions with arg of (input1;input2;optional output tensor), input2 may be scalar
@@ -111,7 +110,7 @@ static K math2(K x,Ftt f,Fts fn,Gtt g,Tt m,Ts mn,cS s) {
    } else if(r.defined()) {
     return g(r,a,b), (K)0;
    } else {
-    return r=b.defined() ? f(a,b) : fn(a,n), (p ? kten(r) : kget(r));
+    return kresult(p, b.defined() ? f(a,b) : fn(a,n));
    }
   } else {
    AT_ERROR(s,": expects args of(input1;input2;optional output tensor), input1 is array or tensor, input2 may also be a number");
@@ -159,7 +158,7 @@ KAPI Add(K x) {
   if(r.defined())
    return torch::add_out(r,a,b.defined() ? b : torch::ones({},a.dtype()),m), (K)0;
   else
-   return r=(s && x->n==2) ? torch::add(a,m) : torch::add(a,b,m), (p ? kten(r) :  kget(r));
+   return kresult(p, (s && x->n==2) ? torch::add(a,m) : torch::add(a,b,m));
  KCATCH("add");
 }
 
@@ -179,7 +178,7 @@ static K addc(K x,Fttts f,Gttts g,cS e) {
    if(r.defined())
     return g(r,a,b,c,m), (K)0;
    else
-    return r=f(a,b,c,m), (p ? kten(r) : kget(r));
+    return kresult(p, f(a,b,c,m));
   } else {
     AT_ERROR(e," expects tensor/array a,b,c & multiplier m, (a;b;c), (a;m;b;c), (a;b;c;output), or (a;m;b;c;output)");
     return KERR(e);
@@ -204,13 +203,13 @@ static K prodsum(K x,B b,cS e) { // b:true -> prod, false -> sum
    if(r.defined())
      return (b ? torch::prod_out(r,t.flatten(),0) : torch::sum_out(r,t,d)), (K)0;
    else 
-    return r=b ? torch::prod(t) : torch::sum(t), (p ? kten(r) : kget(r));
+    return kresult(p, b ? torch::prod(t) : torch::sum(t));
   } else if(xtype(x,1,s) && n==2) {             // (input;type)
    if(!(p=xten(x,0,t))) t=kput(x,0);
    if(r.defined())
     return (b ? torch::prod_out(r,t.flatten(),0,k,s) : torch::sum_out(r,t,d,k,s)), (K)0;
    else
-    return r=b ? torch::prod(t,s) : torch::sum(t,s), (p ? kten(r) : kget(r));
+    return kresult(p, b ? torch::prod(t,s) : torch::sum(t,s));
   } else if(xsize(x,1,d) &&
     (n==2 ||                                       // (input;dim)
     (xtype(x,2,s) &&  n==3)||                      // (input;dim;type)
@@ -221,7 +220,7 @@ static K prodsum(K x,B b,cS e) { // b:true -> prod, false -> sum
    if(r.defined())
     return (b ? torch::prod_out(r,t,d[0],k,s) : torch::sum_out(r,t,d,k,s)), (K)0;
    else
-    return r=b ? torch::prod(t,d[0],k,s) : torch::sum(t,d,k,s), (p ? kten(r) : kget(r));
+    return kresult(p, b ? torch::prod(t,d[0],k,s) : torch::sum(t,d,k,s));
   } else {
    if(b) {
     AT_ERROR("prod expects input, (input;type), (input;dim;type), (input;dim;keepdim) or (input;dim;keepdim;type) w'optional output tensor");
@@ -248,7 +247,7 @@ static K cprodsum(K x,B b,cS e) { // b:true -> prod, false -> sum
    if(r.defined())
     return (b ? torch::cumprod_out(r,t,d,s) : torch::cumsum_out(r,t,d,s)), (K)0;
    else
-    return r=b ? torch::cumprod(t,d,s) : torch::cumsum(t,d,s), (p ? kten(r) : kget(r));
+    return kresult(p, b ? torch::cumprod(t,d,s) : torch::cumsum(t,d,s));
   } else {
    AT_ERROR(e," expects (input;dim) or (input;dim;type) w'optional output tensor as additional final argument");
    return KERR(e);
@@ -267,7 +266,7 @@ KAPI Logsumexp(K x) {
    if(r.defined())
     return torch::logsumexp_out(r,t,d,k), (K)0;
    else
-    return r=torch::logsumexp(t,d,k), (p ? kten(r) : kget(r));
+    return kresult(p, torch::logsumexp(t,d,k));
   } else {
    return KERR("logsumxp expects args of (input;dim) or (input;dim;keepdim) w'optional output tensor as additional final argument");
   }
@@ -294,7 +293,7 @@ KAPI Clamp(K x) {
   if(r.defined())
    return torch::clamp_out(r,t,lo,hi), (K)0;
   else
-   return r=torch::clamp(t,lo,hi), p ? kten(r) : kget(r);
+   return kresult(p,torch::clamp(t,lo,hi));
  KCATCH("clamp");
 }
 
@@ -308,7 +307,7 @@ KAPI Lerp(K x) {
     if(r.defined())
      return torch::lerp_out(r,a,b,w), (K)0;
     else
-     return r=torch::lerp(a,b,w), p ? kten(r) : kget(r);
+     return kresult(p,torch::lerp(a,b,w));
   } else {
    return KERR("lerp expects array/tensor inputs a,b and wt w: (a;b;w) or (a;b;w;output tensor)");
   }
@@ -320,7 +319,7 @@ KAPI Mvlgamma(K x) {
   B p; J d; Tensor t,r;
   if(xlong(x,1,d) && x->n==2) {
    if(!(p=xten(x,0,t))) t=kput(x,0);
-   return r=mvlgamma(t,d), p ? kten(r) : kget(r);
+   return kresult(p,mvlgamma(t,d));
   } else {
    return KERR("mvlgamma expects input array/tensor and integer dimemsion, e.g. (input;dim)");
   }
@@ -353,7 +352,7 @@ KAPI Pow(K x) {
    if     (m==0) r=torch::pow(s,b);
    else if(m==1) r=torch::pow(a,s);
    else if(m==2) r=torch::pow(a,b);
-   return p ? kten(r) : kget(r);
+   return kresult(p,r);
   }
  KCATCH("Power function");
 }
@@ -366,7 +365,7 @@ KAPI Pow(K x) {
 // ---------------------------------------------------------------------
 KAPI Dist(K x) {
  KTRY
-  Scalar n=2; Tensor a,b;
+  B p; Scalar n=2; Tensor a,b;
   if(x->t<0) {
    AT_ERROR("dist not implemented for ",kname(x->t));
   } else if(!(x->n==2 || (x->n==3 && (x->t || xnum(x,2,n))))) {
@@ -375,7 +374,7 @@ KAPI Dist(K x) {
   if(x->t)
    return a=kput(x), kget(torch::dist(a[0],a[1],(x->n==2) ? n : a[2].item()));
   else
-   return xtenarg(x,a,b) ? kten(torch::dist(a,b,n)) : kget(torch::dist(a,b,n));
+   return p=xtenarg(x,a,b), kresult(p, torch::dist(a,b,n));
  KCATCH("dist");
 }
 
@@ -453,8 +452,7 @@ static K variance(K x,B v) {
   } else if(xbool(x,1,u)) {
    if(x->n==2) {
     if(!(b=xten(x,0,t))) t=kput(x,0);
-    r=v ? torch::var(t,u) : torch::std(t,u);
-    return b ? kten(r) : kget(r);
+    return kresult(b, v ? torch::var(t,u) : torch::std(t,u));
    } else if(x->n==3 && xten(x,2,r)) {
     return (v ? torch::var_out(r,t.flatten(),0,u,k) : torch::std_out(r,t.flatten(),0,u,k)), (K)0;
    } else {
@@ -466,8 +464,7 @@ static K variance(K x,B v) {
     if(!(b=xten(x,0,t))) t=kput(x,0);
     if(r.defined())
      return (v ? torch::var_out(r,t,d,k,u) : torch::std_out(r,t,d,k,u)), (K)0;
-    r=v ? torch::var(t,d,k,u) : torch::std(t,d,k,u);
-    return b ? kten(r) : kget(r);
+    return kresult(b, v ? torch::var(t,d,k,u) : torch::std(t,d,k,u));
    } else {
     return KERR("Expected args: (input;dim) or some subset of (input;dim;keepdim;unbiased;output)");
    }
@@ -495,13 +492,13 @@ KAPI Mean(K x) {
    if(r.defined())
      return torch::mean_out(r,t.flatten(),0), (K)0;
    else
-    return r=torch::mean(t), (p ? kten(r) : kget(r));
+    return kresult(p, torch::mean(t));
   } else if(xtype(x,1,s) && n==2) {             // (input;type)
    if(!(p=xten(x,0,t))) t=kput(x,0);
    if(r.defined())
     return torch::mean_out(r,t.flatten(),0,k,s), (K)0;
    else
-    return r=torch::mean(t,s), (p ? kten(r) : kget(r));
+    return kresult(p, torch::mean(t,s));
   } else if(xsize(x,1,d) &&
     (n==2 ||                                       // (input;dim)
     (xtype(x,2,s) &&  n==3)||                      // (imput;dim;type)
@@ -511,7 +508,7 @@ KAPI Mean(K x) {
    if(r.defined())
     return torch::mean_out(r,t,d,k,s), (K)0;
    else
-    return r=torch::mean(t,d,k,s), (p ? kten(r) : kget(r));
+    return kresult(p, torch::mean(t,d,k,s));
   } else {
    AT_ERROR("mean expects input, (input;type), (input;dim(s);type), (input;dim(s);keepdim) or (input;dim(s);keepdim;type) w'optional output tensor");
    return KERR("mean");
@@ -527,7 +524,7 @@ static K kmed(K x,B m,cS e) {  //m-true if median, else mode
    if(v.defined())
      return (m ? torch::median_out(v,i,t,d,k) : torch::mode_out(v,i,t,d,k)), (K)0;
    else if(m)
-     return v=torch::median(t), p ? kten(v) : kget(v);
+     return kresult(p, torch::median(t));
    else
      return std::tie(v,i)=torch::mode(t), ktenpair(p,v,i);
   } else if(xlong(x,1,d) && (n==2 || (n==3 && xbool(x,2,k)))) {
@@ -567,7 +564,7 @@ static K compare2(K x,Ftt f,Fts fn,Gtt g,Gts gn,Tt m,Ts mn,cS s) {
    else if(r.defined())
     return (b.defined() ? g(r,a,b) : gn(r,a,n)), (K)0;
    else
-    return r=b.defined() ? f(a,b) : fn(a,n), (p ? kten(r) : kget(r));
+    return kresult(p, b.defined() ? f(a,b) : fn(a,n));
   } else {
    AT_ERROR(s,": expects args of(input1;input2;optional output tensor), input1 is array or tensor, input2 may also be a scalar");
   }
@@ -624,7 +621,7 @@ static K special(K x, I m, cS e) {
    case 2:  r = t.is_floating_point() ? t.abs()==wf               : torch::ones_like(t,torch::dtype(torch::kBool)); break;
    case 3:  r = t != t; break;
   }
-  return b ? kten(r) : kget(r);
+  return kresult(b,r);
  KCATCH(e);
 }
 
@@ -661,7 +658,7 @@ static K minmax1(K x,I m,cS e) {
   case 3: r=torch::argmax(t); break;
   default: minmaxerr(m,e); break;
  }
- return p ? kten(r) : kget(r);
+ return kresult(p,r);
 }
 
 static K minmax2(K x,I m,Tensor &r,cS e) {
@@ -671,7 +668,7 @@ static K minmax2(K x,I m,Tensor &r,cS e) {
   case 1: if(o) torch::max_out(r,a,b); else r=torch::max(a,b); break;
   default: minmaxerr(m,e); break;
  }
- return o ? (K)0 : (p ? kten(r) : kget(r));
+ return o ? (K)0 : kresult(p,r);
 }
 
 static K minmaxdim(K x,I m,J d,B k,Tensor &v,Tensor &i,cS e) {
@@ -688,7 +685,7 @@ static K minmaxdim(K x,I m,J d,B k,Tensor &v,Tensor &i,cS e) {
  }
  if(o)        return (K)0;
  else if(m<2) return ktenpair(p,v,i);
- else         return p ? kten(v) : kget(v);
+ else         return kresult(p,v);
 }
 
 static J minmaxout(K x,I m,B b,Tensor& v,Tensor& i) {
@@ -747,7 +744,7 @@ static K ksort(K x,B a,cS e) {  //x:arg(s), a:flag for argsort() call (only retu
    return torch::sort_out(v,i,t,d,b), (K)0;
   } else {
    std::tie(v,i)=torch::sort(t,d,b);
-   return a ? (p ? kten(i) : kget(i)) : ktenpair(p,v,i);
+   return a ? kresult(p,i) : ktenpair(p,v,i);
   }
  KCATCH(e);
 }
@@ -871,7 +868,7 @@ static K kfft(K x,I m,cS e) {
     case 3: r=torch::irfft(t,d,b1,b2,s); break;
     default: AT_ERROR("Unrecognized fft mode, expecting 0-3, received: ",m); break;
    }
-   return p ? kten(r) : kget(r);
+   return kresult(p,r);
   } else {
    switch(m) {
     case 0:
@@ -924,8 +921,7 @@ KAPI Bincount(K x) {
   } else {
    AT_ERROR("bincount expects input, (input;min bins), (input;weight) or (input;weight;min bins)");
   }
-  r=torch::bincount(t,w,m);
-  return p ? kten(r) : kget(r);
+  return kresult(p, torch::bincount(t,w,m));
  KCATCH("bincount");
 }
 
@@ -983,7 +979,7 @@ static K diagfns(K x,Fti f,Gti g,Tn m,cS s) {
   } else if(r.defined()) {
    return g(r,t,d), (K)0;
   } else {
-   return r=f(t,d), p ? kten(r) : kget(r);
+   return kresult(p, f(t,d));
   }
  KCATCH(s);
 }
@@ -999,7 +995,7 @@ KAPI Triu(K x)     {return diagfns(x, torch::triu,     torch::triu_out,  &Tensor
 
 KAPI Diagonal(K x) {  //extract diagonal elements, optional offset & dimensions i,j
  KTRY
-  B p; J o=0,i=0,j=1; Tensor r,t;
+  B p; J o=0,i=0,j=1; Tensor t;
   if(x->t) {
    AT_ERROR("diagonal not implemented for ",kname(x->t));
   } else if(xlong(x,1,o) && (x->n==2 || (xlong(x,2,i) && (x->n==3 || (x->n==4 && xlong(x,3,j)))))) {
@@ -1007,8 +1003,7 @@ KAPI Diagonal(K x) {  //extract diagonal elements, optional offset & dimensions 
   } else {
    if(!(p=xten(x,t))) t=kput(x);
   }
-  r=torch::diagonal(t,o,i,j);
-  return p ? kten(r) : kget(r);
+  return kresult(p, torch::diagonal(t,o,i,j));
  KCATCH("diagonal");
 }
 
@@ -1035,7 +1030,7 @@ KAPI Histc(K x) {
   if(r.defined())
    return torch::histc_out(r,t,b,lo,hi), (K)0;
   else
-   return r=torch::histc(t,b,lo,hi), p ? kten(r) : kget(r);
+   return kresult(p, torch::histc(t,b,lo,hi));
  KCATCH("histc");
 }
 
@@ -1048,34 +1043,31 @@ KAPI Cross(K x) {
   if(r.defined()) {
    return torch::cross_out(r,a,b,d), (K)0;
   } else {
-   r=torch::cross(a,b,d);
-   return p ? kten(r) : kget(r);
+   return kresult(p, torch::cross(a,b,d));
   }
  KCATCH("cross");
 }
 
 KAPI Renorm(K x) {
  KTRY
-  B k; J d; Scalar p,m; Tensor r,t;
-  if( !(xnum(x,1,p) && xlong(x,2,d) && xnum(x,3,m) && (x->n==4 || (x->n==5 && xten(x,4,r)))) )
+  B b; J d; Scalar p,m; Tensor r,t;
+  if(!(xnum(x,1,p) && xlong(x,2,d) && xnum(x,3,m) && (x->n==4 || (x->n==5 && xten(x,4,r)))))
    AT_ERROR("Unexpected arg(s) for renorm, expected (tensor/array; power; dim; maxnorm; optional output tensor)");
-  if((k=!xten(x,0,t))) t=kput(x,0);
+  if(!(b=xten(x,0,t))) t=kput(x,0);
   if(r.defined()) {
    return torch::renorm_out(r,t,p,d,m), (K)0;
   } else {
-   r=torch::renorm(t,p,d,m);
-   return k ? kget(r) : kten(r);
+   return kresult(b, torch::renorm(t,p,d,m));
   }
  KCATCH("renorm");
 }
 
 KAPI Roll(K x) {
  KTRY
-  B p; IntArrayRef s,d; Tensor r,t;
+  B p; IntArrayRef s,d; Tensor t;
   if(xsize(x,1,s) && (x->n==2 || (xsize(x,2,d) && x->n==3))) {
    if(!(p=xten(x,0,t))) t=kput(x,0);
-   r=x->n==2 ? torch::roll(t,s) : torch::roll(t,s,d);
-   return p ? kten(r) : kget(r);
+   return kresult(p, x->n==2 ? torch::roll(t,s) : torch::roll(t,s,d));
   } else {
    return KERR("roll expects (tensor/array input; shift(s); optional dimension(s))");
   }
@@ -1084,7 +1076,7 @@ KAPI Roll(K x) {
 
 KAPI Tensordot(K x) {
  KTRY
-  J d=2; IntArrayRef i,j; Tensor a,b,r;
+  J d=2; IntArrayRef i,j; Tensor a,b;
   if(x->t<0) {
    AT_ERROR("tensor dot is not implemented for ",kname(x->t));
   } else if(x->t && (x->n==2 || x->n==3)) {
@@ -1099,8 +1091,7 @@ KAPI Tensordot(K x) {
     for(I k=0;k<d;++k) s1.push_back(k-d), s2.push_back(k);
     i=s1; j=s2;
    }
-   r=torch::tensordot(a,b,i,j);
-   return p ? kten(r) : kget(r);
+   return kresult(p, torch::tensordot(a,b,i,j));
   } else {
    AT_ERROR("tensor args: (array/tensor; array/tensor) with optional dim or (dimension list;dimension list)");
    return KERR("tensordot");
@@ -1112,7 +1103,7 @@ static K uniqres(B p,B bi,B bc,Tensor &u,Tensor &i, Tensor &c) {
  if(bi && bc)return kten3(p,u,i,c);
  else if(bi) return ktenpair(p,u,i);
  else if(bc) return ktenpair(p,u,c);
- else        return p ? kten(u) : kget(u);
+ else        return kresult(p,u);
 }
 
 KAPI Unique(K x) {
@@ -1176,7 +1167,7 @@ static K kaddmm(K x,Fmm f,Gmm g,cS e) {
    if(r.defined())
     return g(r,t,t1,t2,b,a), (K)0;
    else
-    return r=f(t,t1,t2,b,a), (p ? kten(r) : kget(r));
+    return kresult(p, f(t,t1,t2,b,a));
   }
   AT_ERROR(e," expects 3 tensor or array inputs, followed by optional beta,alpha & output tensor(if both beta & alpha, supply beta first)");
   return KERR(e);
@@ -1232,7 +1223,7 @@ KAPI Lu_solve(K x) {
    if(r.defined())
     return torch::lu_solve_out(r,t,d,v), (K)0;
    else
-    return t=torch::lu_solve(t,d,v), (p ? kten(r) : kget(r));
+    return kresult(p, torch::lu_solve(t,d,v));
   } else {
    return KERR("lu_solve expects three input tensors/arrays and optional output tensor");
   }
@@ -1292,7 +1283,7 @@ KAPI Matrix_power(K x) {
   B p; J n; Tensor r,t;
   if(xlong(x,1,n)) {
    if(!(p=xten(x,0,t))) t=kput(x,0);
-   return r=torch::matrix_power(t,n), (p ? kten(r) : kget(r));
+   return kresult(p, torch::matrix_power(t,n));
   } else {
    return KERR("matrix_power expects arguments of (array/tensor;long n)");
   }
@@ -1306,10 +1297,10 @@ KAPI Matrix_rank(K x) {
    return kten(torch::matrix_rank(t));
   } else if(xbool(x,1,s) && x->n==2) {
    if(!(p=xten(x,0,t))) t=kput(x,0);
-   return r=torch::matrix_rank(t,s), (p ? kten(r) : kget(r));
+   return kresult(p, torch::matrix_rank(t,s));
   } else if(xdouble(x,1,f) && (x->n==2 || (x->n==3 && xbool(x,2,s)))) {
    if(!(p=xten(x,0,t))) t=kput(x,0);
-   return r=torch::matrix_rank(t,f,s), (p ? kten(r) : kget(r));
+   return kresult(p, torch::matrix_rank(t,f,s));
   } else {
    return kget(torch::matrix_rank(kput(x)));
   }
@@ -1327,8 +1318,7 @@ static K kdet(K x,I m,cS e) { //x:arg, m:mode 0-det,1-logdet,2-slogdet, e:errmsg
    std::tie(s,d)=torch::slogdet(a);
    return ktenpair(p,s,d);
   } else {
-   d=m ? torch::logdet(a) : torch::det(a);
-   return p ? kten(d) : kget(d);
+   return kresult(p, m ? torch::logdet(a) : torch::det(a));
   }
  KCATCH(e);
 }
@@ -1348,7 +1338,7 @@ static K blas2(K x, Ftt f, Gtt g, cS e) {
    if(r.defined())
     return g(r,a,b), (K)0;
    else
-    return p ? kten(f(a,b)) : kget(f(a,b));
+    return kresult(p, f(a,b));
   } else {
   if(x->t) {
    AT_ERROR(e," not implemented for single ",kname(x->t));
@@ -1392,7 +1382,7 @@ KAPI Pinverse(K x) {
   if (xten(x,t))
    return kten(torch::pinverse(t));
   else if (xdouble(x,1,f))
-   return r=torch::pinverse((p=xten(x,0,t)) ? t : kput(x,0), f), (p ? kten(r) : kget(r));
+   return p=xten(x,0,t), kresult(p, torch::pinverse(p ? t : kput(x,0), f));
   else
    return kget(torch::pinverse(kput(x)));
  KCATCH("Psuedo-inverse");
@@ -1445,7 +1435,7 @@ KAPI Ormqr(K x) {
    if(r.defined())
     return torch::ormqr_out(r,a,b,c,l,t), (K)0;
    else
-    return r=torch::ormqr(a,b,c,l,t), (p ? kten(r) : kget(r));
+    return kresult(p, torch::ormqr(a,b,c,l,t));
   } else {
    return KERR("ormqr expects 3 input arrays/tensors, one or two optional boolean flags and an optional output tensor");
   }
@@ -1537,7 +1527,7 @@ KAPI Choleskysolve(K x) {
    if(r.defined())
     return torch::cholesky_solve_out(r,a,b,u), (K)0;
    else
-    return r=torch::cholesky_solve(a,b,u), (p ? kten(r) : kget(r));
+    return kresult(p, torch::cholesky_solve(a,b,u));
   } else {
    AT_ERROR("Unexpected args for cholesky_solve, expected (matrix;matrix;optional upper flag;optional output tensor)");
    return KERR("Cholesky solve");
@@ -1588,6 +1578,107 @@ KAPI Symeig(K x) {
  KCATCH("Eigenvalues of a symmetric matrix");
 }
 
+// ------------------------------------------------------------------------------------------
+// probablity distribution methods: given tensor, fill w'random vars from chosen distribution
+// ------------------------------------------------------------------------------------------
+static S prob(Prob p) {
+ for(auto& m:env().prob) if(std::get<1>(m)==p) return std::get<0>(m);
+ AT_ERROR("Unrecognized probability distribution: ",(I)p);
+}
+
+static K kprob(K x,Prob p) {
+ KTRY
+  Tensor *t; Scalar a,b;
+  TORCH_CHECK((t=xten(x)) || (t=xten(x,0)), prob(p)," requires tensor as 1st arg");
+  if(x->n==1) {
+   switch(p) {
+    case Prob::cauchy:      t->cauchy_(); break;
+    case Prob::exponential: t->exponential_(); break;
+    case Prob::geometric:   AT_ERROR(prob(p)," requires a probability argument"); break;
+    case Prob::lognormal:   t->log_normal_(); break;
+    case Prob::normal:      t->normal_(); break;
+    case Prob::random:      t->random_(); break;
+    case Prob::uniform:     t->uniform_(); break;
+   }
+  } else if(x->n==2) {
+   TORCH_CHECK(xnum(x,1,a), prob(p),": invalid number for 2nd arg");
+   TORCH_CHECK(p != Prob::random || a.isIntegral(false), prob(p),": requires integer arg for high limit");
+   switch(p) {
+    case Prob::cauchy:      t->cauchy_(a.toDouble()); break;
+    case Prob::exponential: t->exponential_(a.toDouble()); break;
+    case Prob::geometric:   t->geometric_(a.toDouble()); break;
+    case Prob::lognormal:   t->log_normal_(a.toDouble()); break;
+    case Prob::normal:      t->normal_(a.toDouble()); break;
+    case Prob::random:      t->random_(a.toLong()); break;
+    case Prob::uniform:     t->uniform_(a.toDouble()); break;
+   }
+  } else if(x->n==3) {
+   TORCH_CHECK(xnum(x,1,a), prob(p),": invalid number for 2nd arg");
+   TORCH_CHECK(xnum(x,2,b), prob(p),": invalid number for 3rd arg");
+   TORCH_CHECK(p != Prob::random || (a.isIntegral(false) && b.isIntegral(false)), prob(p),": requires integer args for low & high limits");
+   switch(p) {
+    case Prob::cauchy:      t->cauchy_(a.toDouble(),b.toDouble()); break;
+    case Prob::exponential:
+    case Prob::geometric:   AT_ERROR(prob(p),": tales up to 2 args, ",x->n," supplied"); break;
+    case Prob::lognormal:   t->log_normal_(a.toDouble(),b.toDouble()); break;
+    case Prob::normal:      t->normal_(a.toDouble(),b.toDouble()); break;
+    case Prob::random:      t->random_(a.toLong(),b.toLong()); break;
+    case Prob::uniform:     t->uniform_(a.toDouble(),b.toDouble()); break;
+   }
+  } else {
+    AT_ERROR(prob(p)," accepts no more than ",(p==Prob::exponential || p==Prob::geometric) ? 2 : 3," args, ",x->n," supplied");
+  }
+  return (K)0;
+ KCATCH("probability");
+}
+
+KAPI Cauchy(K x)      {return kprob(x, Prob::cauchy);}
+KAPI Exponential(K x) {return kprob(x, Prob::exponential);}
+KAPI Geometric(K x)   {return kprob(x, Prob::geometric);}
+KAPI Lognormal(K x)   {return kprob(x, Prob::lognormal);}
+KAPI Normal(K x)      {return kprob(x, Prob::normal);}
+KAPI Random(K x)      {return kprob(x, Prob::random);}
+KAPI Uniform(K x)     {return kprob(x, Prob::uniform);}
+
+// -------------------------------------------------------------------------------------
+// bernoulli - function or in-place method, taking args of input a, prob b, output o
+//             args: a, (a;p), (a;o), (a;p;o)  a can be k scalar/array or tensor
+// -------------------------------------------------------------------------------------
+/*
+Tensor  bernoulli(                  const Tensor & self)
+Tensor  bernoulli(                  const Tensor & self, double p)
+Tensor& bernoulli_out(Tensor & out, const Tensor & self)
+Tensor& Tensor::bernoulli_(const Tensor &p)
+Tensor& Tensor::bernoulli_(double p)
+*/
+
+KAPI Bernoulli(K x) {
+ KTRY
+  B p; F f; Tensor a,b;
+  if(x->t || xten(x,a)) {               // simple list or single tensor
+   return p=a.defined(), kresult(p, torch::bernoulli(p ? a : kput(x)));
+  } else if(xnum(x,1,f)) {              // (input;prob;..)
+   if(!(p=xten(x,0,a))) a=kput(x,0);
+   if(x->n==2)
+    return kresult(p,torch::bernoulli(a,f));
+   else if(x->n==3 && xempty(x,2)) 
+    return a.bernoulli_(f), p ? (K)0 : kget(a);
+   else
+    AT_ERROR("bernoulli with scalar probability as 2nd arg expects (input;prob) or (input;prob;[]) for in-place");
+  } else if(xten(x,1,b)) {              // (input;tensor;..)
+   if(!(p=xten(x,0,a))) a=kput(x,0);
+   if(x->n==2)
+    return torch::bernoulli_out(b,a), (K)0;
+   else if(x->n==3 && xempty(x,2))
+    return a.bernoulli_(b), p ? (K)0 : kget(a);
+   else
+    AT_ERROR("bernoulli with tensor as 2nd arg expects (input;output tensor) or (input;tensor;[]) for in-place");
+  } else {
+   return kget(torch::bernoulli(kput(x)));
+  }
+ KCATCH("bernoulli");
+}
+
 // -------------------------------------------------------------------------------------
 // map api function to name in q session, upper case for 1st letter if reserved in k
 // -------------------------------------------------------------------------------------
@@ -1610,11 +1701,12 @@ void mathfn(K x) {
  fn(x, "atan2",              KFN(Atan2),              1);
  fn(x, "baddbmm",            KFN(Baddbmm),            1);
  fn(x, "bartlett",           KFN(Bartlett),           1);
-// fn(x, "bernoulli",          KFN(Bernoulli),          1);
+ fn(x, "bernoulli",          KFN(Bernoulli),          1);
  fn(x, "blackman",           KFN(Blackman),           1);
  fn(x, "bincount",           KFN(Bincount),           1);
  fn(x, "bitwisenot",         KFN(Bitwisenot),         1);
  fn(x, "bmm",                KFN(Bmm),                1);
+ fn(x, "cauchy",             KFN(Cauchy),             1);
  fn(x, "ceil",               KFN(Ceil),               1);
  fn(x, "cholesky",           KFN(Cholesky),           1);
  fn(x, "choleskyinverse",    KFN(Choleskyinverse),    1);
@@ -1641,6 +1733,7 @@ void mathfn(K x) {
  fn(x, "erfinv",             KFN(Erfinv),             1);
  fn(x, "Exp",                KFN(Exp),                1);
  fn(x, "expm1",              KFN(Expm1),              1);
+ fn(x, "exponential",        KFN(Exponential),        1);
  fn(x, "fft",                KFN(Fft),                1);
  fn(x, "flatten",            KFN(Flatten),            1);
  fn(x, "Flip",               KFN(Flip),               1);
@@ -1649,13 +1742,14 @@ void mathfn(K x) {
  fn(x, "fnorm",              KFN(Fnorm),              1);
  fn(x, "frac",               KFN(Frac),               1);
  fn(x, "ge",                 KFN(Ge),                 1);
+ fn(x, "geometric",          KFN(Geometric),          1);
  fn(x, "geqrf",              KFN(Geqrf),              1);
  fn(x, "ger",                KFN(Ger),                1);
  fn(x, "gt",                 KFN(GT),                 1);
  fn(x, "hann",               KFN(Hann),               1);
  fn(x, "hamming",            KFN(Hamming),            1);
  fn(x, "histc",              KFN(Histc),              1);
- //fn(x, "inverse",            KFN(Inverse),            1);
+ fn(x, "inverse",            KFN(Inverse),            1);
  fn(x, "ifft",               KFN(Ifft),               1);
  fn(x, "irfft",              KFN(Irfft),              1);
  fn(x, "isfinite",           KFN(Isfinite),           1);
@@ -1669,6 +1763,7 @@ void mathfn(K x) {
  fn(x, "log1p",              KFN(Log1p),              1);
  fn(x, "log2",               KFN(Log2),               1);
  fn(x, "logdet",             KFN(Logdet),             1);
+ fn(x, "lognormal",          KFN(Lognormal),          1);
  fn(x, "logsumexp",          KFN(Logsumexp),          1);
  fn(x, "lstsq",              KFN(Lstsq),              1);
  fn(x, "lt",                 KFN(Lt),                 1);
@@ -1696,6 +1791,7 @@ void mathfn(K x) {
  fn(x, "Neg",                KFN(Neg),                1);
  fn(x, "Not",                KFN(Not),                1);
  fn(x, "nnorm",              KFN(Nnorm),              1);
+ fn(x, "normal",             KFN(Normal),             1);
  fn(x, "orgqr",              KFN(Orgqr),              1);
  fn(x, "ormqr",              KFN(Ormqr),              1);
  fn(x, "pinverse",           KFN(Pinverse),           1);
@@ -1703,6 +1799,7 @@ void mathfn(K x) {
  fn(x, "pow",                KFN(Pow),                1);
  fn(x, "prod",               KFN(Prod),               1);
  fn(x, "qr",                 KFN(Qr),                 1);
+ fn(x, "random",             KFN(Random),             1);
  fn(x, "Reciprocal",         KFN(Reciprocal),         1);
  fn(x, "remainder",          KFN(Remainder),          1);
  fn(x, "roll",               KFN(Roll),               1);
@@ -1731,6 +1828,7 @@ void mathfn(K x) {
  fn(x, "triu",               KFN(Triu),               1);
  fn(x, "trisolve",           KFN(Triangular_solve),   1);
  fn(x, "trunc",              KFN(Trunc),              1);
+ fn(x, "uniform",            KFN(Uniform),            1);
  fn(x, "unique",             KFN(Unique),             1);
  fn(x, "uniquec",            KFN(Uniquec),            1);
  fn(x, "Var",                KFN(Var),                1);

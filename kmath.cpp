@@ -84,8 +84,6 @@ KAPI Tan(K x)        {return math1(x, torch::tan,         torch::tan_out,       
 KAPI Ktanh(K x)      {return math1(x, torch::tanh,        torch::tanh_out,        &Tensor::tanh_,        "hyperbolic tangent");}
 KAPI Trunc(K x)      {return math1(x, torch::trunc,       torch::trunc_out,       &Tensor::trunc_,       "truncate");}
 
-//KAPI Xor(K x)        {return math1(x, torch::logical_xor, torch::logical_xor_out, &Tensor::logical_xor_, "logical xor");}
-
 // ---------------------------------------------------------------------------------------------
 // point-wise functions with arg of (input1;input2;optional output tensor), input2 may be scalar
 // ---------------------------------------------------------------------------------------------
@@ -119,11 +117,19 @@ static K math2(K x,Ftt f,Fts fn,Gtt g,Tt m,Ts mn,cS s) {
  KCATCH(s);
 }
 
-KAPI Atan2(K x)     {return math2(x, torch::atan2,     nullptr,          torch::atan2_out,     &Tensor::atan2_,     nullptr,             "arctangent 2");}
-KAPI Div(K x)       {return math2(x, torch::div,       torch::div,       torch::div_out,       &Tensor::div_,       &Tensor::div_,       "divide");}
-KAPI Fmod(K x)      {return math2(x, torch::fmod,      torch::fmod,      torch::fmod_out,      &Tensor::fmod_,      &Tensor::fmod_,      "fmod");}
-KAPI Mul(K x)       {return math2(x, torch::mul,       torch::mul,       torch::mul_out,       &Tensor::mul_,       &Tensor::mul_,       "multiply");}
-KAPI Remainder(K x) {return math2(x, torch::remainder, torch::remainder, torch::remainder_out, &Tensor::remainder_, &Tensor::remainder_, "remainder");}
+KAPI Atan2(K x)     {return math2(x, torch::atan2,       nullptr,          torch::atan2_out,       &Tensor::atan2_,       nullptr,             "arctangent 2");}
+KAPI Div(K x)       {return math2(x, torch::div,         torch::div,       torch::div_out,         &Tensor::div_,         &Tensor::div_,       "divide");}
+KAPI Fmod(K x)      {return math2(x, torch::fmod,        torch::fmod,      torch::fmod_out,        &Tensor::fmod_,        &Tensor::fmod_,      "fmod");}
+KAPI Mul(K x)       {return math2(x, torch::mul,         torch::mul,       torch::mul_out,         &Tensor::mul_,         &Tensor::mul_,       "multiply");}
+KAPI Remainder(K x) {return math2(x, torch::remainder,   torch::remainder, torch::remainder_out,   &Tensor::remainder_,   &Tensor::remainder_, "remainder");}
+KAPI Xor(K x)       {return math2(x, torch::logical_xor, nullptr,          torch::logical_xor_out, &Tensor::logical_xor_, nullptr,             "xor");}
+
+/*
+Tensor logical_xor(const Tensor & self, const Tensor & other);
+Tensor& logical_xor_out(Tensor & out, const Tensor & self, const Tensor & other);
+Tensor Tensor::logical_xor(const Tensor & other)
+Tensor& Tensor::logical_xor_(const Tensor & other) 
+*/
 
 // --------------------------------------------------------------------------------------------
 // add - handle ambiguity of syntax w'3 args (a;s;b) vs (a;s;output) using (a;s;();output)
@@ -1641,22 +1647,14 @@ KAPI Random(K x)      {return kprob(x, Prob::random);}
 KAPI Uniform(K x)     {return kprob(x, Prob::uniform);}
 
 // -------------------------------------------------------------------------------------
-// bernoulli - function or in-place method, taking args of input a, prob b, output o
-//             args: a, (a;p), (a;o), (a;p;o)  a can be k scalar/array or tensor
+// bernoulli - function or in-place method, taking args of input a, prob p, output o
+//             args: a, (a;p), (a;o), (a;p;[])  a can be k scalar/array or tensor
 // -------------------------------------------------------------------------------------
-/*
-Tensor  bernoulli(                  const Tensor & self)
-Tensor  bernoulli(                  const Tensor & self, double p)
-Tensor& bernoulli_out(Tensor & out, const Tensor & self)
-Tensor& Tensor::bernoulli_(const Tensor &p)
-Tensor& Tensor::bernoulli_(double p)
-*/
-
 KAPI Bernoulli(K x) {
  KTRY
-  B p; F f; Tensor a,b;
-  if(x->t || xten(x,a)) {               // simple list or single tensor
-   return p=a.defined(), kresult(p, torch::bernoulli(p ? a : kput(x)));
+  B p=false; F f; Tensor a,b;
+  if(x->t || (p=xten(x,a))) {           // simple list or single tensor
+   return kresult(p, torch::bernoulli(p ? a : kput(x)));
   } else if(xnum(x,1,f)) {              // (input;prob;..)
    if(!(p=xten(x,0,a))) a=kput(x,0);
    if(x->n==2)
@@ -1665,7 +1663,7 @@ KAPI Bernoulli(K x) {
     return a.bernoulli_(f), p ? (K)0 : kget(a);
    else
     AT_ERROR("bernoulli with scalar probability as 2nd arg expects (input;prob) or (input;prob;[]) for in-place");
-  } else if(xten(x,1,b)) {              // (input;tensor;..)
+  } else if(xten(x,1,b)) {              // (input;output tensor) or (input;prob;[])
    if(!(p=xten(x,0,a))) a=kput(x,0);
    if(x->n==2)
     return torch::bernoulli_out(b,a), (K)0;
@@ -1673,6 +1671,14 @@ KAPI Bernoulli(K x) {
     return a.bernoulli_(b), p ? (K)0 : kget(a);
    else
     AT_ERROR("bernoulli with tensor as 2nd arg expects (input;output tensor) or (input;tensor;[]) for in-place");
+  } else if(xten(x,0,a)) {
+   b=kput(x,1);
+   if(x->n==2)
+    return a=torch::empty_like(a), a.bernoulli_(b), kten(a);
+   else if(x->n==3 && xempty(x,2))
+    return a.bernoulli_(b), (K)0;
+   else
+    AT_ERROR("bernoulli with 1st arg of tensor expects (tensor;prob), (tensor;output tensor)");
   } else {
    return kget(torch::bernoulli(kput(x)));
   }
@@ -1832,4 +1838,5 @@ void mathfn(K x) {
  fn(x, "unique",             KFN(Unique),             1);
  fn(x, "uniquec",            KFN(Uniquec),            1);
  fn(x, "Var",                KFN(Var),                1);
+ fn(x, "xor",                KFN(Xor),                1);
 }

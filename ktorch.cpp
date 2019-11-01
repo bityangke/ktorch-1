@@ -869,7 +869,6 @@ K kexpand(J n,const F       *e) {return kex<F>      (n,e) ? kf(e[0]) : klist(n,e
 // -----------------------------------------------------------------------------------------
 // kfree - free allocated object and remove from active pointer set
 // Kfree - k-api fn to free a previously allocated object or all allocated objects
-// kobj - k-api fn returns table of ptr & object
 // -----------------------------------------------------------------------------------------
 B kfree(K x) {
  if(auto *a=xtag(x))
@@ -892,15 +891,70 @@ KAPI Kfree(K x){
  KCATCH("free");
 }
 
+// -----------------------------------------------------------------------------------------
+// objdevice - return tensor device, or first device found if object w'multiple tensors
+// objsize - size vector of tensor, else count of parameters/modules
+// objnum - number of elements in tensor or sum of elements across tensors
+// kobj - k api fn returns table of ptr,object,device,dtype,size,number of elements
+// -----------------------------------------------------------------------------------------
+static S objdevice(const Tensor& t) {return tensorsym(t,Attr::device);}
+static S objdevice(const TensorVector& v,S s) {return v.size() ? objdevice(v[0]) : s;}
+
+static S objdevice(Ktag *g) {
+ S s=cs("");
+ switch(g->a) {
+  case Class::tensor:     return objdevice(((Kten*)g)->t);
+  case Class::vector:     return objdevice(((Kvec*)g)->v, s);
+  case Class::sequential: return objdevice(((Kseq*)g)->q->parameters(), s);
+  case Class::optimizer:  return objdevice(((Kopt*)g)->o->parameters(), s);
+  case Class::model:      return objdevice(((Kmodel*)g)->q->parameters(), s);
+  default: return s;
+ }
+}
+
+static K objsize(Ktag *g) {
+ switch(g->a) {
+  case Class::tensor:     return tensorsize(((Kten*)g)->t, Attr::size);
+  case Class::vector:     return kj(((Kvec*)g)->v.size());
+  case Class::sequential: return kj(((Kseq*)g)->q->modules(false).size());
+  case Class::optimizer:  return kj(((Kopt*)g)->o->size());
+  case Class::model:      return kj(((Kmodel*)g)->q->modules(false).size());
+  default: return ktn(0,0);
+ }
+}
+
+static J objnum(const TensorVector &v) {J n=0; for(auto& t:v) n+=t.numel(); return n;}
+static J objnum(const Sequential &q) {return objnum(q->parameters());}
+
+static J objnum(Ktag *g) {
+ switch(g->a) {
+  case Class::tensor:     {auto& a=((Kten*)g)->t; return a.numel();}
+  case Class::vector:     {auto& a=((Kvec*)g)->v; return objnum(a);}
+  case Class::sequential: {auto& a=((Kseq*)g)->q; return objnum(a);}
+  case Class::model:      {auto* a=(Kmodel*)g; return objnum(a->q);}
+  default: return nj;
+ }
+}
+
 KAPI kobj(K x) {
  KTRY
   TORCH_CHECK(xempty(x), "obj: empty arg expected");
-  K k=ktn(KS,2),v=ktn(0,2); auto n=pointer().size(); size_t i=0;
-  kS(k)[0]=cs("ptr"); kS(k)[1]=cs("obj");
-  kK(v)[0]=ktn(0,n); kK(v)[1]=ktn(KS,n);
+  K k=ktn(KS,6),v=ktn(0,6); auto n=pointer().size(); size_t i=0;
+  kS(k)[0]=cs("ptr");     kK(v)[0]=ktn(0,n);
+  kS(k)[1]=cs("obj");     kK(v)[1]=ktn(KS,n);
+  kS(k)[2]=cs("device");  kK(v)[2]=ktn(KS,n);
+  kS(k)[3]=cs("dtype");   kK(v)[3]=ktn(KS,n);
+  kS(k)[4]=cs("size");    kK(v)[4]=ktn(0,n);
+  kS(k)[5]=cs("numel");   kK(v)[5]=ktn(KJ,n);
   for(auto j:pointer()) {
-   kK(kK(v)[0])[i]   = knk(1,kj(j));
-   kS(kK(v)[1])[i++] = mapclass(((Ktag*)j)->a);
+   auto *g=(Ktag*)j;
+   kK(kK(v)[0])[i] = knk(1,kj(j));
+   kS(kK(v)[1])[i] = mapclass(g->a);
+   kS(kK(v)[2])[i] = objdevice(g);
+   kS(kK(v)[3])[i] = g->a == Class::tensor ? tensorsym(((Kten*)g)->t, Attr::dtype)  : cs("");
+   kK(kK(v)[4])[i] = objsize(g);
+   kJ(kK(v)[5])[i] = objnum(g);
+   ++i;
   }
   return xT(xD(k,v));
  KCATCH("obj");

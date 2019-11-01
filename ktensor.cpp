@@ -401,7 +401,7 @@ static J storlong(const Storage& s,Attr a) {
  }
 }
 
-static J tensorlong(const Tensor& t,Attr a) {
+J tensorlong(const Tensor& t,Attr a) {
  switch(a) {
   case Attr::dim:         return t.dim();
   case Attr::elementsize: return t.is_sparse() ? tensorlong(t.values(),a) : storlong(t.storage(),a);
@@ -416,7 +416,7 @@ static J tensorlong(const Tensor& t,Attr a) {
  }
 }
 
-static S tensorsym(const Tensor& t,Attr a) {
+S tensorsym(const Tensor& t,Attr a) {
  switch(a) {
   case Attr::device:   return optsym(t.device());
   case Attr::dtype:    return optsym(t.dtype());
@@ -438,7 +438,7 @@ static B tensorflag(const Tensor &t,Attr a) {
  }
 }
 
-static K tensorsize(const Tensor &t,Attr a) {
+K tensorsize(const Tensor &t,Attr a) {
  switch(a) {
   case Attr::size:    return klist(t.dim(),t.sizes().data());
   case Attr::stride:  return t.is_sparse() ? ktn(0,0) : klist(t.dim(),t.strides().data());

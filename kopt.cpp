@@ -20,7 +20,7 @@ using SGDOptions     = torch::optim::SGDOptions;
 // oset - optimizer settings, map sym <-> enum
 // osize - size of buffers required (not counting trailing parameters without gradients)
 // --------------------------------------------------------------------------------------
-K kopt(Cast x,const std::shared_ptr<OptimizerBase>& y) {return kptr(new Kopt(x,y));}
+K kopt(Cast x,const Optptr& y) {return kptr(new Kopt(x,y));}
 
 static void omap(S s,Cast &c,double &r) {
  for(auto& m:env().opt)
@@ -411,7 +411,7 @@ static K optinit(S s,K x,K y) {
   case Cast::sgd:     {auto a=SGDOptions(r);     sgd(x,i,a);     o=sgd(w,a,y);     break;}
   default: AT_ERROR("Unrecognized optimizer: ",s); break;
  }
- return kptr(new Kopt(c,o));
+ return kopt(c,o);
 }
 
 K optstate(B a,B b,Cast c,OptimizerBase *o) {
@@ -519,6 +519,7 @@ KAPI lr(K x) {
 // ---------------------------------------------------------------------------------------
 K optattr(const Optptr& o,A k,Attr a) {
  switch(a) {
+  case Attr::ptr:     return kj((intptr_t)o.get());
   case Attr::ref:     return kj(o.use_count());
   default: AT_ERROR(mapattr(a),": not implemented for optimizers");
  }

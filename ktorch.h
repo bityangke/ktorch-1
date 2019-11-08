@@ -69,6 +69,7 @@ template<size_t D,typename T=double>  using Exdouble=torch::ExpandingArray<D,T>;
 using ScalarType=torch::ScalarType;
 using TypeMeta=caffe2::TypeMeta;
 using TensorOptions=torch::TensorOptions;
+using TensorList=torch::TensorList;
 using Module=torch::nn::Module;
 using Sequential=torch::nn::Sequential;
 using OptimizerBase=torch::optim::detail::OptimizerBase;
@@ -435,10 +436,12 @@ K kseq(const Sequential&);
 K seqto(Kseq*,const TensorOptions&,B);
 K mtable(const Sequential& q,B a,B b=true);
 K seqforward(Sequential&,K);
+K seqattr(const Sequential&,A,Attr);
 void nnfn(K);
 K mstate(K);
 
 // loss functions:
+K kloss(Cast,const Lossptr&);
 K lossdict(Ktag*,K);
 K lossdict(B,B,Cast,Loss*);
 K lossto(Kloss*,const TensorOptions&,B);
@@ -446,6 +449,7 @@ K lossattr(const Lossptr&,A,Attr);
 void lossfn(K);
 
 // optimization functions:
+K kopt(Cast,const Optptr&);
 K optstate(Ktag*,K);
 K optstate(B,B,Cast,OptimizerBase*);
 K optattr(const Optptr&,A,Attr);

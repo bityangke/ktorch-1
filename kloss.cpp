@@ -9,11 +9,14 @@ using Lw  = Tensor (*)(const Tensor&, const Tensor&, const Tensor&, int64_t);   
 using Lwi = Tensor (*)(const Tensor&, const Tensor&, const Tensor&, int64_t, int64_t);  // loss w'wts & ignore ind
 
 // ------------------------------------------------------------------------------------------------------
+// kloss - given loss type & shared pointer to newly created loss module, return kptr
 // lmap - map to/from sym to loss function name, e.g. `mse <-> Cast::mse
 // lset - map to/from sym to loss setting enum, e.g. `reduce <-> Setting::reduce
 // rmsg,rmap - message and mapping for loss reduction to/from sym and enumeration
 // xreduce - check if sym, if matches loss reduction, set int, e.g. `none -> 0, `mean -> 1, `sum -> 2
 // ------------------------------------------------------------------------------------------------------
+K kloss(Cast x,const Lossptr& y) {return kptr(new Kloss(x,y));}
+
 static Cast lmap(S s) {
  for(auto&m:env().loss)
   if(std::get<0>(m)==s) return std::get<1>(m);
@@ -448,7 +451,7 @@ static K lossinit(S s,K x,J i) {
   case Cast::ctc:         {B z;int64_t b; ctc1(x,i,b,z,r);      a=std::make_shared<CTCLoss>(b,z,r); break;}
   default: AT_ERROR("Unrecognized loss function: ",s); break;
  }
- return kptr(new Kloss(c,a));
+ return kloss(c,a);
 }
 
 static K lossopt(B a,Cast c,Loss *l) {

@@ -867,9 +867,24 @@ K kexpand(J n,const int64_t *e) {return kex<int64_t>(n,e) ? kj(e[0]) : klist(n,e
 K kexpand(J n,const F       *e) {return kex<F>      (n,e) ? kf(e[0]) : klist(n,e);}
 
 // -----------------------------------------------------------------------------------------
+// addref - add a new kptr to a shared tensor/module/optimizer, incrementing reference count
 // kfree - free allocated object and remove from active pointer set
 // Kfree - k-api fn to free a previously allocated object or all allocated objects
 // -----------------------------------------------------------------------------------------
+KAPI addref(K x) {
+ KTRY
+  auto *g=xtag(x);
+  TORCH_CHECK(g, "addref not implemented for ",kname(x->t));
+  switch(g->a) {
+   case Class::tensor:     return kten(((Kten*)g)->t);
+   case Class::sequential: return kseq(((Kseq*)g)->q);
+   case Class::loss:       return kloss(g->c, ((Kloss*)g)->l);
+   case Class::optimizer:  return  kopt(g->c,  ((Kopt*)g)->o);
+   default: AT_ERROR("addref not implemented for ",mapclass(g->a));
+  }
+ KCATCH("addref");
+}
+
 B kfree(K x) {
  if(auto *a=xtag(x))
    return delete a, pointer().erase(kK(x)[0]->j), true;
@@ -1019,7 +1034,7 @@ KAPI info1(K x) {return kinfo(x, false, "info");}
 KAPI info2(K x) {return kinfo(x, true,  "detail");}
 
 // -----------------------------------------------------------------------------------------
-// zerograd - return dictionary of attributes of given object and level of detail
+// zerograd - zero gradients on tensor, vector of tensors, optimizer, sequential or model
 // forward - forward calcs on sequential module or model
 // backward - backward calcs on tensor or model(uses model loss(model output,target) )
 // -----------------------------------------------------------------------------------------
@@ -1288,10 +1303,11 @@ static K attr(K x,A k,Attr a) {
   auto* g=xtag(x);
   TORCH_CHECK(g, mapattr(a),": unrecognized arg(s) - ",kname(x->t));
   switch(g->a) {
-   case Class::tensor:    return tensorattr(((Kten*)g)->t,k,a);
-   case Class::vector:    return vectorattr(((Kvec*)g)->v,k,a);
-   case Class::loss:      return  lossattr(((Kloss*)g)->l,k,a);
-   case Class::optimizer: return    optattr(((Kopt*)g)->o,k,a);
+   case Class::tensor:     return tensorattr(((Kten*)g)->t,k,a);
+   case Class::vector:     return vectorattr(((Kvec*)g)->v,k,a);
+   case Class::loss:       return  lossattr(((Kloss*)g)->l,k,a);
+   case Class::optimizer:  return    optattr(((Kopt*)g)->o,k,a);
+   case Class::sequential: return    seqattr(((Kseq*)g)->q,k,a);
    default: AT_ERROR(mapattr(a),": not implemented for ",mapclass(g->a));
   }
  KCATCH("attr");
@@ -1365,6 +1381,7 @@ void fn(K x,cS s,void *f,I n){dictadd(x,s,dl(f,n));}
 
 KAPI fns(K x){
  x=xD(ktn(KS,0),ktn(0,0));
+ fn(x, "addref",      KFN(addref),      1);
  fn(x, "free",        KFN(Kfree),       1);
  fn(x, "obj",         KFN(kobj),        1);
  fn(x, "to",          KFN(to),          1);

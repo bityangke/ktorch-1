@@ -334,7 +334,7 @@ KAPI tensor(K x) {
 // vecinit - initialize vector of tensors from k array, tensor ptr(s) or some mix of both
 // vector - create vector of tensors, or return vector or vector element, or replace element
 // ------------------------------------------------------------------------------------------
-K vecinit(K x) {
+static TensorVector vecinit(K x) {
  TensorVector v;
  if(x->t) {
   Tensor t=kput(x);
@@ -353,7 +353,7 @@ K vecinit(K x) {
    else
     v.emplace_back(kput(x,i));
  }
- return kvec(v);
+ return v;
 }
 
 KAPI vector(K x) {
@@ -369,7 +369,7 @@ KAPI vector(K x) {
       if(auto* t=xten(x,2))         // replace vector element
        v->at(i)=*t, kfree(x,2);     // and free if tensor
       else 
-       v->at(i)=kput(x,2);          // else convert k array to tensor and add to vector
+       v->at(i)=kput(x,2);          // else convert k array to tensor replace vector element
       return (K)0;
     }
    }
@@ -377,7 +377,7 @@ KAPI vector(K x) {
    // v.insert(v.end(), w.begin(), w.end()), (K)0;
    AT_ERROR("vector: unrecognized arg(s)");
   } else {
-   return vecinit(x);
+   return kvec(vecinit(x));
   }
  KCATCH("vector");
 }

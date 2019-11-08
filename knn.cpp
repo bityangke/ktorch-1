@@ -1371,6 +1371,17 @@ K seqforward(Sequential& q,K x) {
  return kten(q->forward(t ? *t : kput(x,1)));
 }
 
+// ---------------------------------------------------------------------------------------
+// seqattr - return requested attribute of given sequential module
+// ---------------------------------------------------------------------------------------
+K seqattr(const Sequential& q,A k,Attr a) {
+ switch(a) {
+  case Attr::ptr:     return kj((intptr_t)q.get());
+  case Attr::ref:     return kj(q.ptr().use_count());
+  default: AT_ERROR(mapattr(a),": not implemented for sequential module");
+ }
+}
+
 // ----------------------------------
 // module fns defined in k namespace
 // ----------------------------------

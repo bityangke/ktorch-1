@@ -41,60 +41,6 @@ KAPI cudamem(K x) {
  KCATCH("cuda memory");
 }
 
-using Fld = Tensor  (*)(         TensorList, int64_t);
-using Gld = Tensor& (*)(Tensor&, TensorList, int64_t);
-
-K kcatstack(K x,Fld f,Gld g,cS s) {
- KTRY
-  B p; int64_t d=0; Tensor r; TensorVector *v;
-  TORCH_CHECK(!x->t, s," not implemented for ",kname(x->t));
-  std::cerr << "x->n: " << x->n << "\n";
-  if((v=xvec(x)))
-   return kten(f(*v,d));
-
-  if(xint64(x,1,d)) {
-   if(x->n==2 || (x->n==3 && xten(x,2,r))) {
-    std::cerr << "detected dimension: " << d << "\n";
-    std::cerr << (r.defined() ? "with output vector\n" : "");
-   } else {
-    AT_ERROR(s,": expects ((a;b;..);dim) or ((a;b;..);dim;output tensor)");
-   }
-  }
-/*
-  if(xten(x,v) || (xten(x,0,v))
-   if((xint64(x,1,d) && (x->n==2 || (x->n==3 && xten(x,2,r)))) || (x->n==2 && xten(x,1,r))
-*/
-  return (K)0;
- KCATCH(s);
-}
-
-/*
-Tensor        cat(              TensorList tensors, int64_t dim=0);
-Tensor      stack(              TensorList tensors, int64_t dim=0);
-Tensor &  cat_out(Tensor & out, TensorList tensors, int64_t dim=0);
-Tensor& stack_out(Tensor & out, TensorList tensors, int64_t dim=0);
-*/
-
-KAPI cat(K x)   {return kcatstack(x, torch::cat,   torch::cat_out,   "cat");}
-KAPI stack(K x) {return kcatstack(x, torch::stack, torch::stack_out, "stack");}
-
-
-K kcat1(const TensorVector& v,Tensor& r,int64_t d,B p) {
- if(r.defined()) {
-  return torch::cat_out(r,v,d), (K)0;
- } else {
-  return kresult(p, torch::cat(v,d));
- }
-}
-
-KAPI kcat(K x) {
- KTRY
-  TensorVector *v=xvec(x);
-  TORCH_CHECK(v,"expecting vector");
-  return kten(torch::stack(*v));
- KCATCH("cat");
-}
-
 KAPI kdata(K x,K y) {
  KTRY
   int64_t i=0;

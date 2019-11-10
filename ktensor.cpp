@@ -331,10 +331,10 @@ KAPI tensor(K x) {
 // ------------------------------------------------------------------------------------------
 // tensor vector fns: 
 // ------------------------------------------------------------------------------------------
-// vecinit - initialize vector of tensors from k array, tensor ptr(s) or some mix of both
+// vec - initialize vector of tensors from k array, tensor ptr(s) or some mix of both
 // vector - create vector of tensors, or return vector or vector element, or replace element
 // ------------------------------------------------------------------------------------------
-static TensorVector vecinit(K x) {
+TensorVector vec(K x,B b) {   // b: true if any encounter tensor pointers to be de-referenced
  TensorVector v;
  if(x->t) {
   Tensor t=kput(x);
@@ -345,13 +345,15 @@ static TensorVector vecinit(K x) {
    v.emplace_back(t);
  } else if(auto *t=xten(x)) {
   v.emplace_back(*t);
-  kfree(x);
+  if(b) kfree(x);
  } else {
   for(J i=0;i<x->n;++i)
    if(auto *t=xten(x,i))
-    v.emplace_back(*t), kfree(x,i);
+    v.emplace_back(*t);
    else
     v.emplace_back(kput(x,i));
+  if(b)
+   for(J i=0;i<x->n;++i) if(xptr(x,i)) kfree(x,i);
  }
  return v;
 }
@@ -377,10 +379,52 @@ KAPI vector(K x) {
    // v.insert(v.end(), w.begin(), w.end()), (K)0;
    AT_ERROR("vector: unrecognized arg(s)");
   } else {
-   return kvec(vecinit(x));
+   return kvec(vec(x,true));
   }
  KCATCH("vector");
 }
+
+// ----------------------------------------------------------------------------------------------
+// kcat1 - check for tensor(s) at first level of a general list, e.g. cat(a;b)
+// kcat2 - check for (inputs;dim) or (inputs;dim;out tensor) or (inputs;out tensor)
+// kcat - handle args for cat/stack
+// cat - join arrays or tensors along given dimension (dim 0 if none given)
+// stack - join same-sized arrays along a new dimension (leading dim if none given)
+// ----------------------------------------------------------------------------------------------
+using Fld = Tensor  (*)(         TensorList, int64_t);
+using Gld = Tensor& (*)(Tensor&, TensorList, int64_t);
+
+B kcat1(K x) {for(J i=0;i<x->n;++i) if(xten(x,i)) return true; return false;}
+
+B kcat2(K x,int64_t& d, Tensor& r) {
+ if(!x->t && x->n>1 && !kK(x)[0]->t)
+  return (xint64(x,1,d) && (x->n==2 || (x->n==3 && xten(x,2,r)))) || (x->n==2 && xten(x,1,r));
+ else
+  return false;
+}
+
+K kcat(K x,Fld f,Gld g,cS s) {
+ KTRY
+  TORCH_CHECK(!x->t, s," not implemented for ",kname(x->t));
+  int64_t d=0; Tensor r; TensorVector *v;
+  if((v=xvec(x))){
+   return kten(f(*v,d));
+  } else if((v=xvec(x,0))) {
+   TORCH_CHECK(kcat2(x,d,r), s," expects vector, (vector;dim), (vector;dim;out tensor) or (vector;out tensor)");
+   return r.defined() ? (g(r,*v,d), (K)0) : kten(f(*v,d));
+  } else if(kcat1(x)) {
+   return kten(f(vec(x,false),d));
+  } else if((x->n==1 && !kK(x)[0]->t) || kcat2(x,d,r)) {
+   K y=kK(x)[0];
+   return r.defined() ? (g(r,vec(y,false),d), (K)0) : kresult(!y->t && kcat1(y),f(vec(y,false),d));
+  } else {
+   return kget(f(vec(x,false),d));
+  }
+ KCATCH(s);
+}
+
+KAPI cat(K x)   {return kcat(x, torch::cat,   torch::cat_out,   "cat");}
+KAPI stack(K x) {return kcat(x, torch::stack, torch::stack_out, "stack");}
 
 // ----------------------------------------------------------------------------------------------
 // tensorlong - tensor/vector attributes returned to k as long scalar
@@ -910,6 +954,8 @@ void tensorfn(K x) {
  fn(x, "detach",       KFN(detach),        1);
  fn(x, "same",         KFN(same),          1);
  fn(x, "vector",       KFN(vector),        1);
+ fn(x, "cat",          KFN(cat),           1);
+ fn(x, "stack",        KFN(stack),         1);
  fn(x, "options",      KFN(options),       1);
  fn(x, "shuffle",      KFN(kshuffle),      1);
  fn(x, "batch",        KFN(batch),         1);

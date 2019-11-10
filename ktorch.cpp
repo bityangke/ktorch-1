@@ -900,7 +900,7 @@ KAPI Kfree(K x){
    for(auto j:pointer()) delete (Ktag*)j;
    pointer().clear();
   } else {
-   TORCH_CHECK(kfree(x), "Not a pointer, unable to free");
+   TORCH_CHECK(kfree(x), "Not a recognized pointer, unable to free");
   }
   return (K)0;
  KCATCH("free");

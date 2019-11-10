@@ -75,7 +75,7 @@ static B xreduce(K x,J i,int64_t &r) {
 
 // ------------------------------------------------------------------------------------------------------
 // reduce - return default reduction mode, or process given arg(s) & offset to return reduction mode
-// kloss - call loss function with x,y tensors/arrays and optional reduction mode
+// lossfunc - call loss function with x,y tensors/arrays and optional reduction mode
 // bce - binary cross entropy has option of batch weights, so function parses (x;y) or (x;y;wt)
 // ------------------------------------------------------------------------------------------------------
 int64_t reduce() {return Reduction::Mean;}
@@ -92,7 +92,7 @@ int64_t reduce(cS s,K x,J i) { // check argument(s) for sym or named pair/dict, 
  return r;
 }
 
-static K kloss(K a,Lf f,cS s) {
+static K lossfunc(K a,Lf f,cS s) {
  KTRY
   B b; Tensor x,y;
   if(!a->t && (a->n==2 || a->n==3)) {
@@ -106,12 +106,12 @@ static K kloss(K a,Lf f,cS s) {
  KCATCH(s)
 }
 
-KAPI kl(K x)          {return kloss(x, torch::kl_div,                 "KL divergence");}
-KAPI l1(K x)          {return kloss(x, torch::l1_loss,                "l1");}
-KAPI mse(K x)         {return kloss(x, torch::mse_loss,               "mse");}
-KAPI multilabel(K x)  {return kloss(x, torch::multilabel_margin_loss, "multi-label margin");}
-KAPI smoothl1(K x)    {return kloss(x, torch::smooth_l1_loss,         "smooth l1");}
-KAPI softmargin(K x)  {return kloss(x, torch::soft_margin_loss,       "soft margin");}
+KAPI kl(K x)          {return lossfunc(x, torch::kl_div,                 "KL divergence");}
+KAPI l1(K x)          {return lossfunc(x, torch::l1_loss,                "l1");}
+KAPI mse(K x)         {return lossfunc(x, torch::mse_loss,               "mse");}
+KAPI multilabel(K x)  {return lossfunc(x, torch::multilabel_margin_loss, "multi-label margin");}
+KAPI smoothl1(K x)    {return lossfunc(x, torch::smooth_l1_loss,         "smooth l1");}
+KAPI softmargin(K x)  {return lossfunc(x, torch::soft_margin_loss,       "soft margin");}
 
 static B bcearg(K x) {return x->t==-KS || x->t==KS || xempty(x) || xdict(x);}  // true if arg is a setting (rather than wt tensor)
 

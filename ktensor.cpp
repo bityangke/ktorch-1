@@ -766,34 +766,65 @@ KAPI transpose(K x) {
 }
 
 // -------------------------------------------------------------------------------------------
-// kresize - handle inputs for resize/View/reshape
+// inferflag - return true if a dimension needs to be derived (resize_ does not infer)
+// infersize - if one dim is -1, infer size from other sizes and overall number of elements
+// kresize1 - handle different methods for resizing, also allow inferred dim for resize_
+// kresize2 - handle inputs for resize/View/reshape
 // resize - resize tensor in place given size or tensor w'size to use, also allow k array input
 //          will reallocate storage if larger size required, elements will be uninitialized
 // view - attempt to create a new tensor that is view of existing tensor (shares storage)
 //        error if view size is not compatible with input tensor's size and stride 
 // reshape - like view, but will create new storage for new tensor if view not possible
 // -------------------------------------------------------------------------------------------
-static K kresize(K x,I m,cS e) {
+static B inferflag(const IntArrayRef& s) {for(auto i:s) if(i<0)return true; return false;}
+
+static std::vector<int64_t> infersize(IntArrayRef s, int64_t m) {
+  int64_t n=1; auto r=s.vec(); auto i=c10::optional<int64_t>();
+  for (int64_t d=0, ndim = s.size(); d != ndim; d++) {
+    if (s[d] == -1) {
+      if (i)
+        throw std::runtime_error("only one dimension can be inferred");
+      i=d;
+    } else if(s[d] >= 0) {
+      n *= s[d];
+    } else {
+      AT_ERROR("invalid shape dimension ", s[d]);
+    }
+  }
+  if (m == n || (i && n > 0 && m % n == 0)) {
+    if (i) {
+      TORCH_CHECK(n != 0, "cannot reshape tensor of 0 elements into shape ", s,
+                  " because the unspecified dimension size -1 can be any value and is ambiguous");
+      r[*i] = m / n;
+    }
+    return r;
+  }
+  AT_ERROR("shape ",s," is invalid for input of size ",m);
+}
+
+static K kresize1(I m,B p,Tensor&& t, const IntArrayRef& s) {
+ switch(m) {
+  case 0:  t.resize_(inferflag(s) ? infersize(s,t.numel()) : s);
+           return p ? (K)0 : kget(t);
+  case 1:  return kresult(p,t.reshape(s));
+  case 2:  return kresult(p,t.view(s));
+  default: return KERR("invalid resize/reshape mode");
+ }
+}
+
+static K kresize2(K x,I m,cS e) {
  KTRY
   IntArrayRef n; Tensor *t=xten(x,0),*s=xten(x,1);
   TORCH_CHECK(!x->t,   e," not implemented for ",kname(x->t));
   TORCH_CHECK(x->n==2, e," expects (array/tensor;new size/tensor w'size to use)");
   TORCH_CHECK(s || xsize(x,1,n), e," expects 2nd arg of size or tensor w'size to use");
-  switch(m) {
-   case 0: if(t) return t->resize_(s ? s->sizes() : n), (K)0;
-           else  return kget(kput(x,0).resize_(s ? s->sizes() : n));
-   case 1: if(t) return kten(t->reshape(s ? s->sizes() : n));
-           else  return kget(kput(x,0).reshape(s ? s->sizes() : n));
-   case 2: if(t) return kten(t->view(s ? s->sizes() : n));
-           else  return kget(kput(x,0).view(s ? s->sizes() : n));
-   default: return KERR("invalid resize/reshape mode");
-  }
+  return kresize1(m, t, t ? *t : kput(x,0), s ? s->sizes() : n);
  KCATCH(e);
 }
 
-KAPI resize(K x)  {return kresize(x, 0, "resize");}
-KAPI reshape(K x) {return kresize(x, 1, "reshape");}
-KAPI view(K x)    {return kresize(x, 2, "view");}
+KAPI resize(K x)  {return kresize2(x, 0, "resize");}
+KAPI reshape(K x) {return kresize2(x, 1, "reshape");}
+KAPI view(K x)    {return kresize2(x, 2, "view");}
 
 // -------------------------------------------------------------------------------------------
 // newsize - return new vector for tensor sizes, replacing size at dimension d with new value

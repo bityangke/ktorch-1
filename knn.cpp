@@ -1012,6 +1012,37 @@ KAPI kflatten(K x) {
 }
 
 // ----------------------------------------------------------------------------------------------------
+// squeeze/unsqueeze - squeeze works with/without a dimension specified, unsqueeze requires it
+// ----------------------------------------------------------------------------------------------------
+static SqueezeOptions squeeze(K x,J i,Cast c) {
+ SqueezeOptions o; Pairs p; B b; J n=xargc(x,i,p);
+ if(n==1) {
+  if(xbool(x,i,b))
+    o.inplace(b);
+  else
+    o.dim(int64n(x,i,c,Setting::dim));
+ } else if(n==2) {
+   o.dim(   int64n(x,i,   c, Setting::dim));
+   o.inplace(mbool(x,i+1, c, Setting::inplace));
+ } else if(n) {
+  AT_ERROR(msym(c), ": unrecognized positional arg(s), expecting dim, inplace flag, or (dim;inplace flag)");
+ }
+ while(xpair(p))
+  switch(mset(p.k)) {
+   case Setting::dim:     o.dim(int64n(p,c)); break;
+   case Setting::inplace: o.inplace(mbool(p,c)); break;
+   default: AT_ERROR(msym(c)," option: ",p.k," not recognized");
+  }
+ TORCH_CHECK(c==Cast::squeeze || o.dim().has_value(), msym(c),": no dimension given");
+ return o;
+}
+
+static void squeeze(B a,K x,const SqueezeOptions& o) {
+ if(o.dim().has_value()) OPTION(x, dim,     kj(o.dim().value()));
+ if(a || o.inplace())    OPTION(x, inplace, kb(o.inplace()));
+}
+
+// ----------------------------------------------------------------------------------------------------
 // mparms - set parameters/buffers in a defined module from k values in dictionary with matching names
 // mdefine - define module and add to a sequence, reading options (and sometimes parms/buffers) from k
 // ----------------------------------------------------------------------------------------------------
@@ -1111,6 +1142,8 @@ void mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) {
   case Cast::softmin:      PUSH(q,n,(soft<Softmin>   (s,x,i))); break;
   case Cast::logsoftmax:   PUSH(q,n,(soft<LogSoftmax>(s,x,i))); break;
   case Cast::flatten:      PUSH(q,n,Flatten(flatten(x,i))); break;
+  case Cast::squeeze:      PUSH(q,n,Squeeze(squeeze(x,i,c))); break;
+  case Cast::unsqueeze:    PUSH(q,n,Unsqueeze(squeeze(x,i,c))); break;
 
   case Cast::glu:          arg1(c,s,x,i,v); PUSH(q,n,GLU(v.toLong())); break;
   case Cast::elu:          arg1(c,s,x,i,v); PUSH(q,n,ELU(v)); break;
@@ -1215,6 +1248,8 @@ void mopt(Module &g,B a,K &v,J i) { //g:generic module, a:true if all options, v
  } else if(auto* m=g.as<Softmin>())    { c=Cast::softmin;    soft(a,x,m);
  } else if(auto* m=g.as<LogSoftmax>()) { c=Cast::logsoftmax; soft(a,x,m);
  } else if(auto* m=g.as<Flatten>())    { c=Cast::flatten;    flatten(a,x,m);
+ } else if(auto* m=g.as<Squeeze>())    { c=Cast::squeeze;    squeeze(a,x,m->options);
+ } else if(auto* m=g.as<Unsqueeze>())  { c=Cast::unsqueeze;  squeeze(a,x,m->options);
 
  } else if(auto* m=g.as<GLU>())        { c=Cast::glu;        setting1(a,c,x,m->options.dim());
  } else if(auto* m=g.as<ELU>())        { c=Cast::elu;        setting1(a,c,x,m->options.alpha());
@@ -1494,6 +1529,14 @@ KAPI anytest(K x) {
   Threshold(.1,20),
   Flatten(),
   Flatten(1),
-  Flatten(1,-1));
+  Flatten(1,-1),
+  Squeeze(),
+  Squeeze(SqueezeOptions().inplace(true)),
+  Squeeze(-1),
+  Squeeze(-1,true),
+  Unsqueeze(-1),
+  Unsqueeze(-1,true),
+  Unsqueeze(-1,false)
+ );
  return kseq(q);
 }

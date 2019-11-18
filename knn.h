@@ -692,3 +692,52 @@ class FlattenImpl : public torch::nn::Cloneable<FlattenImpl> {
   FlattenOptions options;
 };
 TORCH_MODULE(Flatten);
+
+// -------------------------------------------------------------
+//  squeeze - remove dimension(s) from tensor
+//  unsqueeze - add dimension to tensor
+// -------------------------------------------------------------
+struct TORCH_API SqueezeOptions {
+ SqueezeOptions(int64_t d,bool b=false) : dim_(d),inplace_(b) {}
+ SqueezeOptions() {}
+ TORCH_ARG(c10::optional<int64_t>, dim) = c10::nullopt;
+ TORCH_ARG(bool, inplace) = false;
+};
+
+class SqueezeImpl : public torch::nn::Cloneable<SqueezeImpl> {
+ public:
+  SqueezeImpl(int64_t d,bool b=false) : SqueezeImpl(SqueezeOptions(d,b)) {}
+  SqueezeImpl() : SqueezeImpl(SqueezeOptions()) {}
+  explicit SqueezeImpl(const SqueezeOptions& o) : options(o) {reset();}
+  void reset() override {}
+  torch::Tensor forward(const torch::Tensor& t) {
+   if(options.dim().has_value()) {
+    if(options.inplace())
+     return t.squeeze_(options.dim().value());
+    else
+     return t.squeeze(options.dim().value());
+   } else {
+    if(options.inplace())
+     return t.squeeze_();
+    else
+     return t.squeeze();
+   }
+  };
+  SqueezeOptions options;
+};
+TORCH_MODULE(Squeeze);
+
+class UnsqueezeImpl : public torch::nn::Cloneable<UnsqueezeImpl> {
+ public:
+  UnsqueezeImpl(int64_t d,bool b=false) : UnsqueezeImpl(SqueezeOptions(d,b)) {}
+  explicit UnsqueezeImpl(const SqueezeOptions& o) : options(o) {reset();}
+  void reset() override {TORCH_CHECK(options.dim().has_value(),"unsqueeze: no dimension given");}
+  torch::Tensor forward(const torch::Tensor& t) {
+   if(options.inplace())
+    return t.unsqueeze_(options.dim().value());
+   else
+    return t.unsqueeze(options.dim().value());
+  };
+  SqueezeOptions options;
+};
+TORCH_MODULE(Unsqueeze);

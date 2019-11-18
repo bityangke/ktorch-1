@@ -427,6 +427,67 @@ KAPI cat(K x)   {return kcat(x, torch::cat,   torch::cat_out,   "cat");}
 KAPI stack(K x) {return kcat(x, torch::stack, torch::stack_out, "stack");}
 
 // ----------------------------------------------------------------------------------------------
+// onehot - given tensor/array and optional number of classes return one-hot as extra dim
+// expand - expand tensor or array given sizes or tensor w'size to copy
+// squeeze/unsqueeze - remove or add dimension to input array/tensor, boolean in-place option
+// ----------------------------------------------------------------------------------------------
+KAPI onehot(K x) {
+ KTRY
+  int64_t n=-1; Tensor *t;
+  if((t=xten(x)) || ((t=xten(x,0)) && xint64(x,1,n)))
+   return kten(torch::one_hot(*t,n));
+  else if(xint64(x,1,n) && x->n==2)
+   return kget(torch::one_hot(kput(x,0),n));
+  else 
+   return kget(torch::one_hot(kput(x)));
+ KCATCH("onehot");
+}
+
+KAPI expand(K x) {
+ KTRY
+  IntArrayRef n; Tensor *t=xten(x,0),*s=xten(x,1);
+  if((s || xsize(x,1,n)) && x->n==2) {
+   if(t)
+    return kten(s ? t->expand(n) : t->expand_as(*s));
+   else
+    return kget(s ? kput(x,0).expand_as(*s) : kput(x,0).expand(n));
+  } else if(xsize(x,n) && n.size()==2) {
+    return kget(torch::scalar_to_tensor(n[0]).expand(n[1]));
+  } else {
+   AT_ERROR("expand expects (input array/tensor; size) or (input array/tensor; tensor w'size to match)");
+  }
+ KCATCH("expand");
+}
+
+K ksqueeze(K x,B a,cS s) {
+ KTRY
+  B b=false; int64_t d=nj; Tensor *t;
+  if((t=xten(x))) {
+   if(a) return kten(t->squeeze());
+   else  return KERR("unsqueeze requires 2nd arg specifying dimension to add");
+  } else if((xint64(x,1,d) && (x->n==2 || (x->n==3 && xbool(x,2,b)))) || (xbool(x,1,b) && x->n==2)) {
+   TORCH_CHECK(a || d != nj, s," requires 2nd arg specifying dimension to add");
+   if((t=xten(x,0))) {
+    if(!a)         return b ? t->unsqueeze_(d),(K)0 : kten(t->unsqueeze(d));
+    else if(d==nj) return b ? t->squeeze_(),   (K)0 : kten(t->squeeze());
+    else           return b ? t->squeeze_(d),  (K)0 : kten(t->squeeze(d));
+   } else {
+    if(!a)         return kget(kput(x,0).unsqueeze(d));
+    else if(d==nj) return kget(kput(x,0).squeeze());
+    else           return kget(kput(x,0).squeeze(d));
+   }
+  } else if(a) {
+   return kget(kput(x).squeeze());
+  } else {
+   AT_ERROR(s, ": unexpected arg(s), expects (input;dim;optional in-place flag)");
+  }
+ KCATCH(s);
+}
+
+KAPI squeeze(K x)   {return ksqueeze(x, true,  "squeeze");}
+KAPI unsqueeze(K x) {return ksqueeze(x, false, "unsqueeze");}
+
+// ----------------------------------------------------------------------------------------------
 // tensorlong - tensor/vector attributes returned to k as long scalar
 // tensorsym - tensor/vector attributes returned to k as a symbol, e.g. device
 // tensorflag - tensor/vector attributes returned to k as a boolean, e.g. leaf
@@ -772,6 +833,7 @@ KAPI transpose(K x) {
 // kresize2 - handle inputs for resize/View/reshape
 // resize - resize tensor in place given size or tensor w'size to use, also allow k array input
 //          will reallocate storage if larger size required, elements will be uninitialized
+//          inferflag/infersize used to allow resize_() to infer a dimension
 // view - attempt to create a new tensor that is view of existing tensor (shares storage)
 //        error if view size is not compatible with input tensor's size and stride 
 // reshape - like view, but will create new storage for new tensor if view not possible
@@ -987,6 +1049,10 @@ void tensorfn(K x) {
  fn(x, "vector",       KFN(vector),        1);
  fn(x, "cat",          KFN(cat),           1);
  fn(x, "stack",        KFN(stack),         1);
+ fn(x, "onehot",       KFN(onehot),        1);
+ fn(x, "expand",       KFN(expand),        1);
+ fn(x, "squeeze",      KFN(squeeze),       1);
+ fn(x, "unsqueeze",    KFN(unsqueeze),     1);
  fn(x, "options",      KFN(options),       1);
  fn(x, "shuffle",      KFN(kshuffle),      1);
  fn(x, "batch",        KFN(batch),         1);

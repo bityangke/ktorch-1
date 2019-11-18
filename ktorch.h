@@ -132,7 +132,8 @@ enum class Cast:char {
  sigmoid,     softmax,     softmin,
  softplus,    softshrink,  softsign,
  tanh,        tanhshrink,  threshold,
- flatten,
+ flatten,     squeeze,     unsqueeze,
+ reshape,     expand,
 
  bce,         bcelogits,   bcelogitw,      //loss fns
  ce,          cosineloss,  ctc,
@@ -555,7 +556,7 @@ typedef struct {
   std::make_tuple(cs("tanh"),torch::nn::RNNActivation::Tanh)
  }};
 
- std::array<std::tuple<S,Cast>,60> module = {{  // module sym -> enum
+ std::array<std::tuple<S,Cast>,64> module = {{  // module sym -> enum
   std::make_tuple(cs("adaptavg1d"),      Cast::adaptavg1d),
   std::make_tuple(cs("adaptavg2d"),      Cast::adaptavg2d),
   std::make_tuple(cs("adaptavg3d"),      Cast::adaptavg3d),
@@ -574,6 +575,7 @@ typedef struct {
   std::make_tuple(cs("dropout"),         Cast::dropout),
   std::make_tuple(cs("elu"),             Cast::elu),
   std::make_tuple(cs("embed"),           Cast::embed),
+  std::make_tuple(cs("expand"),          Cast::expand),
   std::make_tuple(cs("fdropout"),        Cast::fdropout),
   std::make_tuple(cs("fadrop"),          Cast::fadropout),
   std::make_tuple(cs("flatten"),         Cast::flatten),
@@ -603,6 +605,7 @@ typedef struct {
   std::make_tuple(cs("replicate1d"),     Cast::replicate1d),
   std::make_tuple(cs("replicate2d"),     Cast::replicate2d),
   std::make_tuple(cs("replicate3d"),     Cast::replicate3d),
+  std::make_tuple(cs("reshape"),         Cast::reshape),
   std::make_tuple(cs("rnn"),             Cast::rnn),
   std::make_tuple(cs("rrelu"),           Cast::rrelu),
   std::make_tuple(cs("selu"),            Cast::selu),
@@ -613,9 +616,11 @@ typedef struct {
   std::make_tuple(cs("softplus"),        Cast::softplus),
   std::make_tuple(cs("softshrink"),      Cast::softshrink),
   std::make_tuple(cs("softsign"),        Cast::softsign),
+  std::make_tuple(cs("squeeze"),         Cast::squeeze),
   std::make_tuple(cs("tanh"),            Cast::tanh),
   std::make_tuple(cs("tanhshrink"),      Cast::tanhshrink),
-  std::make_tuple(cs("threshold"),       Cast::threshold)
+  std::make_tuple(cs("threshold"),       Cast::threshold),
+  std::make_tuple(cs("unsqueeze"),       Cast::unsqueeze)
  }};
 
  std::array<std::tuple<S,Setting>,46> mset = {{      // module option sym -> enum

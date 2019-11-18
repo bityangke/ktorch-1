@@ -741,3 +741,31 @@ class UnsqueezeImpl : public torch::nn::Cloneable<UnsqueezeImpl> {
   SqueezeOptions options;
 };
 TORCH_MODULE(Unsqueeze);
+
+// -------------------------------------------------------------
+// expand & reshape - modules with size options
+// -------------------------------------------------------------
+struct TORCH_API SizeOptions {
+ SizeOptions(std::vector<int64_t> s) : size_(std::move(s)) {}
+ TORCH_ARG(std::vector<int64_t>, size);
+};
+
+class ExpandImpl : public torch::nn::Cloneable<ExpandImpl> {
+ public:
+ ExpandImpl(std::vector<int64_t> s) : ExpandImpl(SizeOptions(s)) {}
+ explicit ExpandImpl(const SizeOptions& o) : options(o) {reset();}
+ void reset() override {}
+ torch::Tensor forward(const torch::Tensor& t) { return t.expand(options.size());}
+ SizeOptions options;
+};
+TORCH_MODULE(Expand);
+
+class ReshapeImpl : public torch::nn::Cloneable<ReshapeImpl> {
+ public:
+ ReshapeImpl(std::vector<int64_t> s) : ReshapeImpl(SizeOptions(s)) {}
+ explicit ReshapeImpl(const SizeOptions& o) : options(o) {reset();}
+ void reset() override {}
+ torch::Tensor forward(const torch::Tensor& t) { return t.reshape(options.size());}
+ SizeOptions options;
+};
+TORCH_MODULE(Reshape);

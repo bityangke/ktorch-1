@@ -448,7 +448,7 @@ KAPI expand(K x) {
   IntArrayRef n; Tensor *t=xten(x,0),*s=xten(x,1);
   if((s || xsize(x,1,n)) && x->n==2) {
    if(t)
-    return kten(s ? t->expand(n) : t->expand_as(*s));
+    return kten(s ? t->expand_as(*s) : t->expand(n));
    else
     return kget(s ? kput(x,0).expand_as(*s) : kput(x,0).expand(n));
   } else if(xsize(x,n) && n.size()==2) {

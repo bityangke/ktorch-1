@@ -99,8 +99,8 @@ static K mvals(B b,J n) {
 // int64 - check positional args or name-value pairs for long int, else error w'module & option
 // int64n - int64 but returns optional, i.e. nullopt if k value is null
 // mdouble - check for double(or long) from positional or name-value pair arg
-// expand - check positional or name-value args for long(s), return expanding array,  else error
-// exdouble - similar to expand, but for double array
+// exarray - check positional or name-value args for long(s), return expanding array,  else error
+// exdouble - similar to exarray, but for double array
 // ----------------------------------------------------------------------------------------------------
 static B mbool(K x,J i,Cast c,Setting s) {
  B b;
@@ -138,23 +138,23 @@ static F mdouble(const Pairs& p,Cast c) {
  return pdouble(p);
 }
 
-template<size_t D> Expand<D> expand(K a,J i,Cast c,Setting s) {
+template<size_t D> ExpandingArray<D> exarray(K a,J i,Cast c,Setting s) {
  K x=kK(a)[i];
  TORCH_CHECK(x->t==-KJ || x->t==KJ, msym(c)," ",mset(s),": expected long(s), given ",kname(x->t));
  TORCH_CHECK(x->t==-KJ || x->n==D,  msym(c)," ",mset(s),": expected scalar or ",D,"-element input, given ",x->n,"-element list");
  if(x->t==-KJ)
-  return Expand<D>(x->j);
+  return ExpandingArray<D>(x->j);
  else
-  return Expand<D>(IntArrayRef((int64_t*)kJ(x),x->n));
+  return ExpandingArray<D>(IntArrayRef((int64_t*)kJ(x),x->n));
 }
 
-template<size_t D> Expand<D> expand(const Pairs& p,Cast c) {
+template<size_t D> ExpandingArray<D> exarray(const Pairs& p,Cast c) {
  TORCH_CHECK(p.t==-KJ || p.t==KJ,   msym(c)," ",p.k,": expected long(s), given ",kname(p.t));
  TORCH_CHECK(p.t==-KJ || p.v->n==D, msym(c)," ",p.k,": expected scalar or ",D,"-element input, given ",p.v->n,"-element list");
  if(p.t==-KJ)
-  return Expand<D>(p.j);
+  return ExpandingArray<D>(p.j);
  else
-  return Expand<D>(IntArrayRef((int64_t*)kJ(p.v),p.v->n));
+  return ExpandingArray<D>(IntArrayRef((int64_t*)kJ(p.v),p.v->n));
 }
 
 template<size_t D> Exdouble<D> exdouble(K a,J i,Cast c,Setting s) {
@@ -213,13 +213,13 @@ template<size_t D> static torch::nn::ConvOptions<D> conv(K x,J i,Cast c) {
  B in=false,out=false,sz=false; Pairs p; J n=xargc(x,i,p);
  for(J j=0;j<n;++j)
    switch(j) {
-    case 0: o.input_channels (int64(x,i+j,c,Setting::in));            in=true; break;
-    case 1: o.output_channels(int64(x,i+j,c,Setting::in));           out=true; break;
-    case 2: o.kernel_size    (expand<D>(x,i+j,c,Setting::size));      sz=true; break;
-    case 3: o.stride         (expand<D>(x,i+j,c,Setting::stride));    break;
-    case 4: o.padding        (expand<D>(x,i+j,c,Setting::pad));       break;
-    case 5: o.output_padding (expand<D>(x,i+j,c,Setting::outpad));    break;
-    case 6: o.dilation       (expand<D>(x,i+j,c,Setting::dilate));    break;
+    case 0: o.input_channels (int64(x,i+j,c,Setting::in));        in=true; break;
+    case 1: o.output_channels(int64(x,i+j,c,Setting::in));       out=true; break;
+    case 2: o.kernel_size    (exarray<D>(x,i+j,c,Setting::size)); sz=true; break;
+    case 3: o.stride         (exarray<D>(x,i+j,c,Setting::stride));   break;
+    case 4: o.padding        (exarray<D>(x,i+j,c,Setting::pad));      break;
+    case 5: o.output_padding (exarray<D>(x,i+j,c,Setting::outpad));   break;
+    case 6: o.dilation       (exarray<D>(x,i+j,c,Setting::dilate));   break;
     case 7: o.groups         (int64(x,i+j,c,Setting::groups));        break;
     case 8: o.with_bias      (mbool    (x,i+j,c,Setting::bias));      break;
     case 9: o.transposed     (mbool    (x,i+j,c,Setting::transpose)); break;
@@ -229,11 +229,11 @@ template<size_t D> static torch::nn::ConvOptions<D> conv(K x,J i,Cast c) {
   switch(mset(p.k)) {
    case Setting::in:        o.input_channels (int64(p,c));     in=true; break;
    case Setting::out:       o.output_channels(int64(p,c));    out=true; break;
-   case Setting::size:      o.kernel_size    (expand<D>(p,c)); sz=true; break;
-   case Setting::stride:    o.stride         (expand<D>(p,c)); break;
-   case Setting::pad:       o.padding        (expand<D>(p,c)); break;
-   case Setting::outpad:    o.output_padding (expand<D>(p,c)); break;
-   case Setting::dilate:    o.dilation       (expand<D>(p,c)); break;
+   case Setting::size:      o.kernel_size   (exarray<D>(p,c)); sz=true; break;
+   case Setting::stride:    o.stride        (exarray<D>(p,c)); break;
+   case Setting::pad:       o.padding       (exarray<D>(p,c)); break;
+   case Setting::outpad:    o.output_padding(exarray<D>(p,c)); break;
+   case Setting::dilate:    o.dilation      (exarray<D>(p,c)); break;
    case Setting::groups:    o.groups         (int64(p,c));     break;
    case Setting::bias:      o.with_bias      (mbool(p,c));     break;
    case Setting::transpose: o.transposed     (mbool(p,c));     break;
@@ -248,7 +248,7 @@ template<size_t D> static torch::nn::ConvOptions<D> conv(K x,J i,Cast c) {
 template<size_t D,typename M>
 static M conv(K x,J k) {
  B b=true,t=false; Pairs p; size_t d; J i=-1,j=-1,g=1,n=xargc(x,k,p);
- Expand<D> sz(-1),st(1),pd(0),po(0),dl(1);
+ ExpandingArray<D> sz(-1),st(1),pd(0),po(0),dl(1);
  if(!((!n && p.n) || (xlong(x,k,i) && (n==1 || (xlong(x,k+1,j) && (n==2 || (n==3 && XDIM(x,k+2,D,sz))))))))
   AT_ERROR("Unrecognized arguments for conv",D,"d module");
  while(xpair(p))
@@ -434,20 +434,20 @@ template<size_t D> static torch::nn::MaxPoolOptions<D> maxpool(K x,J i,Cast c) {
  B sz=false,st=false; Pairs p; J n=xargc(x,i,p);
  for(J j=0;j<n;++j) {
    switch(j) {
-    case 0: o.kernel_size(expand<D>(x,i+j,c,Setting::size));    sz=true; break;
-    case 1: o.stride     (expand<D>(x,i+j,c,Setting::stride));  st=true; break;
-    case 2: o.padding    (expand<D>(x,i+j,c,Setting::pad));     break;
-    case 3: o.dilation   (expand<D>(x,i+j,c,Setting::dilate));  break;
-    case 4: o.ceil_mode  (mbool    (x,i+j,c,Setting::ceiling)); break;
+    case 0: o.kernel_size(exarray<D>(x,i+j,c,Setting::size));    sz=true; break;
+    case 1: o.stride     (exarray<D>(x,i+j,c,Setting::stride));  st=true; break;
+    case 2: o.padding    (exarray<D>(x,i+j,c,Setting::pad));     break;
+    case 3: o.dilation   (exarray<D>(x,i+j,c,Setting::dilate));  break;
+    case 4: o.ceil_mode  (mbool     (x,i+j,c,Setting::ceiling)); break;
     default: AT_ERROR(msym(c),": up to 5 positional arguments expected, ",n," given");
   }
  }
  while(xpair(p))
   switch(mset(p.k)) {
-   case Setting::size:    o.kernel_size(expand<D>(p,c)); sz=true; break;
-   case Setting::stride:  o.stride     (expand<D>(p,c)); st=true; break;
-   case Setting::pad:     o.padding    (expand<D>(p,c)); break;
-   case Setting::dilate:  o.dilation   (expand<D>(p,c)); break;
+   case Setting::size:    o.kernel_size(exarray<D>(p,c)); sz=true; break;
+   case Setting::stride:  o.stride     (exarray<D>(p,c)); st=true; break;
+   case Setting::pad:     o.padding    (exarray<D>(p,c)); break;
+   case Setting::dilate:  o.dilation   (exarray<D>(p,c)); break;
    case Setting::ceiling: o.ceil_mode  (mbool(p,c)); break;
    default: AT_ERROR("Unrecognized max pooling option: ",p.k); break;
   }
@@ -491,9 +491,9 @@ template<size_t D> static torch::nn::AvgPoolOptions<D> avgpool(K x,J i,Cast c) {
  B sz=false,st=false; Pairs p; J n=xargc(x,i,p);
  for(J j=0;j<n;++j) {
    switch(j) {
-    case 0: o.kernel_size      (expand<D>(x,i+j,c,Setting::size));     sz=true; break;
-    case 1: o.stride           (expand<D>(x,i+j,c,Setting::stride));   st=true; break;
-    case 2: o.padding          (expand<D>(x,i+j,c,Setting::pad));      break;
+    case 0: o.kernel_size      (exarray<D>(x,i+j,c,Setting::size));   sz=true; break;
+    case 1: o.stride           (exarray<D>(x,i+j,c,Setting::stride)); st=true; break;
+    case 2: o.padding          (exarray<D>(x,i+j,c,Setting::pad));      break;
     case 3: o.ceil_mode        (mbool     (x,i+j,c,Setting::ceiling));  break;
     case 4: o.count_include_pad(mbool     (x,i+j,c,Setting::countpad)); break;
     case 5: o.divisor_override (int64n    (x,i+j,c,Setting::divisor));  break;
@@ -502,9 +502,9 @@ template<size_t D> static torch::nn::AvgPoolOptions<D> avgpool(K x,J i,Cast c) {
  }
  while(xpair(p))
   switch(mset(p.k)) {
-   case Setting::size:    o.kernel_size (expand<D>(p,c)); sz=true; break;
-   case Setting::stride:  o.stride      (expand<D>(p,c)); st=true; break;
-   case Setting::pad:     o.padding     (expand<D>(p,c)); break;
+   case Setting::size:    o.kernel_size (exarray<D>(p,c)); sz=true; break;
+   case Setting::stride:  o.stride      (exarray<D>(p,c)); st=true; break;
+   case Setting::pad:     o.padding     (exarray<D>(p,c)); break;
    case Setting::ceiling: o.ceil_mode        (mbool(p,c)); break;
    case Setting::countpad:o.count_include_pad(mbool(p,c)); break;
    case Setting::divisor: o.divisor_override(int64n(p,c)); break;
@@ -550,13 +550,13 @@ template<size_t D,typename T> static T adapt(K x,J i,Cast c) {
  T o(0); B sz=false; Pairs p; J n=xargc(x,i,p);
  for(J j=0;j<n;++j) {
    switch(j) {
-    case 0: o.output_size(expand<D>(x,i+j,c,Setting::size)); sz=true; break;
+    case 0: o.output_size(exarray<D>(x,i+j,c,Setting::size)); sz=true; break;
     default: AT_ERROR(msym(c),": 1 positional argument expected, ",n," given");
   }
  }
  while(xpair(p))
   switch(mset(p.k)) {
-   case Setting::size: o.output_size(expand<D>(p,c)); sz=true; break;
+   case Setting::size: o.output_size(exarray<D>(p,c)); sz=true; break;
    default: AT_ERROR("Unrecognized ",msym(c)," option: ",p.k); break;
   }
  TORCH_CHECK(sz, msym(c),": no output size given");
@@ -601,8 +601,8 @@ template<size_t D> static FractionalMaxPoolOptions<D> fpool(K x,J i,Cast c) {
  for(J j=0;j<n;++j) {
    e=xempty(x,i+j);
    switch(j) {
-    case 0: o.size(expand<D>(x,i+j,c,Setting::size)); sz=true; break;
-    case 1: if(e) o.outsize(c10::nullopt); else o.outsize(expand  <D>(x,i+j,c,Setting::outsize)); break;
+    case 0: o.size(exarray<D>(x,i+j,c,Setting::size)); sz=true; break;
+    case 1: if(e) o.outsize(c10::nullopt); else o.outsize(exarray  <D>(x,i+j,c,Setting::outsize)); break;
     case 2: if(e) o.ratio  (c10::nullopt); else o.ratio  (exdouble<D>(x,i+j,c,Setting::ratio));   break;
     case 3: o.indices(mbool(x,i+j,c,Setting::indices)); break;
     default: AT_ERROR(msym(c),": up to 4 positional arguments expected, ",n," given");
@@ -611,8 +611,8 @@ template<size_t D> static FractionalMaxPoolOptions<D> fpool(K x,J i,Cast c) {
  while(xpair(p)) {
   e=pempty(p);
   switch(mset(p.k)) {
-   case Setting::size:    o.size(expand<D>(p,c)); sz=true; break;
-   case Setting::outsize: if(e) o.outsize(c10::nullopt); else o.outsize(expand  <D>(p,c)); break;
+   case Setting::size:    o.size(exarray<D>(p,c)); sz=true; break;
+   case Setting::outsize: if(e) o.outsize(c10::nullopt); else o.outsize(exarray  <D>(p,c)); break;
    case Setting::ratio:   if(e) o.ratio  (c10::nullopt); else o.ratio  (exdouble<D>(p,c)); break;
    case Setting::indices: o.indices(mbool(p,c)); break;
    default: AT_ERROR("Unrecognized ",msym(c)," option: ",p.k); break;
@@ -641,17 +641,17 @@ template<size_t D> static LPPoolOptions<D> lppool(K x,J i,Cast c) {
  for(J j=0;j<n;++j) {
    switch(j) {
     case 0: o.power      (mdouble(x,i+j,  c,Setting::power));   pw=true; break;
-    case 1: o.kernel_size(expand<D>(x,i+j,c,Setting::size));    sz=true; break;
-    case 2: o.stride     (expand<D>(x,i+j,c,Setting::stride));  st=true; break;
+    case 1: o.kernel_size(exarray<D>(x,i+j,c,Setting::size));   sz=true; break;
+    case 2: o.stride     (exarray<D>(x,i+j,c,Setting::stride)); st=true; break;
     case 3: o.ceil_mode  (mbool    (x,i+j,c,Setting::ceiling)); break;
     default: AT_ERROR(msym(c),": up to 4 positional arguments expected, ",n," given");
   }
  }
  while(xpair(p))
   switch(mset(p.k)) {
-   case Setting::power:   o.power      (mdouble  (p,c)); pw=true; break;
-   case Setting::size:    o.kernel_size(expand<D>(p,c)); sz=true; break;
-   case Setting::stride:  o.stride     (expand<D>(p,c)); st=true; break;
+   case Setting::power:   o.power      (mdouble   (p,c)); pw=true; break;
+   case Setting::size:    o.kernel_size(exarray<D>(p,c)); sz=true; break;
+   case Setting::stride:  o.stride     (exarray<D>(p,c)); st=true; break;
    case Setting::ceiling: o.ceil_mode  (mbool(p,c)); break;
    default: AT_ERROR("Unrecognized ",msym(c)," option: ",p.k); break;
   }
@@ -707,12 +707,12 @@ template<size_t D,typename M> static M rpad(K x,J i,Cast c) {
  B sz=false; Pairs p; J n=xargc(x,i,p);
  for(J j=0;j<n;++j)
    switch(j) {
-    case 0: o.padding(expand<D*2>(x,i+j,c,Setting::pad)); sz=true; break;
+    case 0: o.padding(exarray<D*2>(x,i+j,c,Setting::pad)); sz=true; break;
     default: AT_ERROR(msym(c),": only 1 positional argument expected, ",n," given");
   }
  while(xpair(p))
   switch(mset(p.k)) {
-   case Setting::pad: o.padding(expand<D*2>(p,c)); sz=true; break;
+   case Setting::pad: o.padding(exarray<D*2>(p,c)); sz=true; break;
    default: AT_ERROR("Unrecognized ",msym(c)," option: ",p.k); break;
   }
  TORCH_CHECK(sz, msym(c),": no padding sizes given");
@@ -1043,6 +1043,27 @@ static void squeeze(B a,K x,const SqueezeOptions& o) {
 }
 
 // ----------------------------------------------------------------------------------------------------
+// getsize - get size(s) for expand, reshape, ..
+// expand
+// reshape
+// ----------------------------------------------------------------------------------------------------
+static SizeOptions getsize(K x,J i,Cast c) {
+ IntArrayRef a; LongVector v; Pairs p; J n=xargc(x,i,p);
+ TORCH_CHECK(!n || (xsize(x,i,a) && n==1), msym(c)," expects size(s) as argument");
+ while(xpair(p))
+  switch(mset(p.k)) {
+   case Setting::size: psize(p,a); break;
+   default: AT_ERROR(msym(c)," option: ",p.k," not recognized");
+  }
+ for(auto j:a) v.push_back(j);
+ return SizeOptions(v);
+}
+
+static void getsize(B a,K x,const SizeOptions& o) {
+ OPTION(x, size, klist(o.size().size(),o.size().data()));
+}
+
+// ----------------------------------------------------------------------------------------------------
 // mparms - set parameters/buffers in a defined module from k values in dictionary with matching names
 // mdefine - define module and add to a sequence, reading options (and sometimes parms/buffers) from k
 // ----------------------------------------------------------------------------------------------------
@@ -1144,6 +1165,8 @@ void mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) {
   case Cast::flatten:      PUSH(q,n,Flatten(flatten(x,i))); break;
   case Cast::squeeze:      PUSH(q,n,Squeeze(squeeze(x,i,c))); break;
   case Cast::unsqueeze:    PUSH(q,n,Unsqueeze(squeeze(x,i,c))); break;
+  case Cast::expand:       PUSH(q,n,Expand(getsize(x,i,c))); break;
+  case Cast::reshape:      PUSH(q,n,Reshape(getsize(x,i,c))); break;
 
   case Cast::glu:          arg1(c,s,x,i,v); PUSH(q,n,GLU(v.toLong())); break;
   case Cast::elu:          arg1(c,s,x,i,v); PUSH(q,n,ELU(v)); break;
@@ -1250,6 +1273,8 @@ void mopt(Module &g,B a,K &v,J i) { //g:generic module, a:true if all options, v
  } else if(auto* m=g.as<Flatten>())    { c=Cast::flatten;    flatten(a,x,m);
  } else if(auto* m=g.as<Squeeze>())    { c=Cast::squeeze;    squeeze(a,x,m->options);
  } else if(auto* m=g.as<Unsqueeze>())  { c=Cast::unsqueeze;  squeeze(a,x,m->options);
+ } else if(auto* m=g.as<Expand>())     { c=Cast::expand;     getsize(a,x,m->options);
+ } else if(auto* m=g.as<Reshape>())    { c=Cast::reshape;    getsize(a,x,m->options);
 
  } else if(auto* m=g.as<GLU>())        { c=Cast::glu;        setting1(a,c,x,m->options.dim());
  } else if(auto* m=g.as<ELU>())        { c=Cast::elu;        setting1(a,c,x,m->options.alpha());

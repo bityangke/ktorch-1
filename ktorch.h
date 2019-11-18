@@ -64,7 +64,7 @@ using TensorVector=std::vector<Tensor>;
 using TensorDeque=std::deque<Tensor>;
 using LongVector=std::vector<int64_t>;
 using IntArrayRef=torch::IntArrayRef;
-template<size_t D,typename T=int64_t> using Expand  =torch::ExpandingArray<D,T>;
+template<size_t D,typename T=int64_t> using ExpandingArray=torch::ExpandingArray<D,T>;
 template<size_t D,typename T=double>  using Exdouble=torch::ExpandingArray<D,T>;
 using ScalarType=torch::ScalarType;
 using TypeMeta=caffe2::TypeMeta;

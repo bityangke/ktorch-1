@@ -179,7 +179,7 @@ Tensor kput(K x,J i) {
 // tensormode - determines whether a template tensor or output tensor given w'other args
 // tensorput - put k value(s) -> tensor, return new tensor ptr unless output tensor given
 // tensorget - given tensor ptr, return tensor as k array, accepts optional 1st dim index
-// vectorget - given vector ptr, return tensor arrays, or single array if index given
+// vectorptr - given vector ptr, return tensor pointers, or single pointer if index given
 // tensor - high level function to create/retrieve/move/recast tensor from k
 // --------------------------------------------------------------------------------------
 static void tensorlike(K x,Tensormode m,Tensor &t,Tensor &r) {  // t:input, r:result tensor
@@ -323,15 +323,6 @@ static K tensorget(Ktag *g,B b,J i) { // g-tag with tensor, b-true if index, i-i
  return kget(b ? t[i] : t);
 }
 
-static K vectorget(Ktag *g,B b,J i) {
- const auto &v=((Kvec*)g)->v;
- if(b)
-  return kget(v.at(i));
- i=0; K x=ktn(0,v.size());
- for(const auto& t:v) kK(x)[i++]=kget(t);
- return x;
-}
-
 static K vectorptr(Ktag *g,B b,J i) {
  const auto &v=((Kvec*)g)->v;
  if(b)
@@ -347,7 +338,7 @@ KAPI tensor(K x) {
   if((g=xtag(x)) || ((g=xtag(x,0)) && x->n==2 && xlong(x,1,i))) {
    switch(g->a) {
     case Class::tensor: return tensorget(g,x->n==2,i);
-    case Class::vector: return vectorget(g,x->n==2,i);
+    case Class::vector: return vectorptr(g,x->n==2,i);
     default: AT_ERROR("tensor not implemented for ",mapclass(g->a));
    }
   } else if(xmode(x,0,s,m)) {

@@ -178,6 +178,8 @@ Tensor kput(K x,J i) {
 // tensoropt - tensor creation routines where tensor size and option(s) given
 // tensormode - determines whether a template tensor or output tensor given w'other args
 // tensorput - put k value(s) -> tensor, return new tensor ptr unless output tensor given
+// tensorget - given tensor ptr, return tensor as k array, accepts optional 1st dim index
+// vectorget - given vector ptr, return tensor arrays, or single array if index given
 // tensor - high level function to create/retrieve/move/recast tensor from k
 // --------------------------------------------------------------------------------------
 static void tensorlike(K x,Tensormode m,Tensor &t,Tensor &r) {  // t:input, r:result tensor
@@ -316,16 +318,44 @@ static K tensorput(K x) {
  }
 }
 
+static K tensorget(Ktag *g,B b,J i) { // g-tag with tensor, b-true if index, i-index
+ const auto &t=((Kten*)g)->t;
+ return kget(b ? t[i] : t);
+}
+
+static K vectorget(Ktag *g,B b,J i) {
+ const auto &v=((Kvec*)g)->v;
+ if(b)
+  return kget(v.at(i));
+ i=0; K x=ktn(0,v.size());
+ for(const auto& t:v) kK(x)[i++]=kget(t);
+ return x;
+}
+
+static K vectorptr(Ktag *g,B b,J i) {
+ const auto &v=((Kvec*)g)->v;
+ if(b)
+  return kten(v.at(i));
+ i=0; K x=ktn(0,v.size());
+ for(const auto& t:v) kK(x)[i++]=kten(t);
+ return x;
+}
+
 KAPI tensor(K x) {
- S s; Tensormode m; Tensor t;
  KTRY
-  if(xten(x,t))
-   return kget(t);
-  else if(xmode(x,0,s,m))
+  J i=-1; S s; Tensormode m; Ktag *g;
+  if((g=xtag(x)) || ((g=xtag(x,0)) && x->n==2 && xlong(x,1,i))) {
+   switch(g->a) {
+    case Class::tensor: return tensorget(g,x->n==2,i);
+    case Class::vector: return vectorget(g,x->n==2,i);
+    default: AT_ERROR("tensor not implemented for ",mapclass(g->a));
+   }
+  } else if(xmode(x,0,s,m)) {
    return tensormode(x,s,m);
-  else
+  } else {
    return tensorput(x);
- KCATCH("Unable to complete tensor operation");
+  }
+ KCATCH("tensor");
 }
 
 // ------------------------------------------------------------------------------------------
@@ -334,7 +364,7 @@ KAPI tensor(K x) {
 // vec - initialize vector of tensors from k array, tensor ptr(s) or some mix of both
 // vector - create vector of tensors, or return vector or vector element, or replace element
 // ------------------------------------------------------------------------------------------
-TensorVector vec(K x,B b) {   // b: true if any encounter tensor pointers to be de-referenced
+TensorVector vec(K x,B b) {   // b: true if any encountered tensor ptr to be de-referenced
  TensorVector v;
  if(x->t) {
   Tensor t=kput(x);
@@ -369,9 +399,9 @@ KAPI vector(K x) {
      return kget(v->at(i));
     } else if(x->n==3) {            // if index and tensor/array supplied
       if(auto* t=xten(x,2))         // replace vector element
-       v->at(i)=*t, kfree(x,2);     // and free if tensor
+       v->at(i)=*t, kfree(x,2);     // and free if tensor arg supplied
       else 
-       v->at(i)=kput(x,2);          // else convert k array to tensor replace vector element
+       v->at(i)=kput(x,2);          // else convert k array to tensor and replace vector element
       return (K)0;
     }
    }
@@ -971,21 +1001,34 @@ KAPI filldiagonal(K x) {
 
 // ------------------------------------------------------------------------------------------
 // tensorcopy - tgt <- src values, must have same type & device, tgt resized if src larger
+// tensorcopy_ - copy in place method
+// ------------------------------------------------------------------------------------------
+void tensorcopy(Tensor &t,const Tensor &s,B a) {
+ if(s.dtype() != t.dtype()) {
+  AT_ERROR("Unable to copy values from ",s.dtype()," tensor to ",t.dtype()," tensor");
+ } else if(s.device() != t.device()) {
+  AT_ERROR("Unable to copy values across devices, from ",s.device()," to ",t.device());
+ } else {
+  t.resize_as_(s).copy_(s,a);
+ }
+}
+
+KAPI tensorcopy_(K x) {
+ KTRY
+  B a=false; Tensor *t=xten(x,0),*s=xten(x,1);
+  TORCH_CHECK(t, "copy expects 1st arg of tensor");
+  TORCH_CHECK(x->n==2 || (x->n==3 && xbool(x,2,a)), "copy expects (tensor;input;optional async flag)");
+  t->copy_(s ? *s : kput(x,1), a);
+  return (K)0;
+ KCATCH("copy");
+}
+
+// ------------------------------------------------------------------------------------------
 // grad - return gradient data or empty, if ptr enlisted, return gradient ptr (must free)
 // tensorback - backprop given tensor, optional tensor & sym for retain/create gradient graph
 // detach - detach tensor, with optional flag to perform the detach in place
 // same - given two tensors, compares underlying ptr, returns true if same
 // ------------------------------------------------------------------------------------------
-void tensorcopy(Tensor &tgt,const Tensor &src,B async) {
- if(src.dtype() != tgt.dtype()) {
-  AT_ERROR("Unable to copy values from ",src.dtype()," tensor to ",tgt.dtype()," tensor");
- } else if(src.device() != tgt.device()) {
-  AT_ERROR("Unable to copy values across devices, from ",src.device()," to ",tgt.device());
- } else {
-  tgt.resize_as_(src).copy_(src,async);
- }
-}
-
 KAPI grad(K x) {
  KTRY
   B p=false; Tensor t;
@@ -1043,6 +1086,7 @@ void tensorfn(K x) {
  fn(x, "zero",         KFN(zero),          1);
  fn(x, "fill",         KFN(fill),          1);
  fn(x, "filldiagonal", KFN(filldiagonal),  1);
+ fn(x, "copy",         KFN(tensorcopy_),   1);
  fn(x, "grad",         KFN(grad),          1);
  fn(x, "detach",       KFN(detach),        1);
  fn(x, "same",         KFN(same),          1);

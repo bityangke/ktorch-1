@@ -909,7 +909,7 @@ KAPI Kfree(K x){
 // -----------------------------------------------------------------------------------------
 // objdevice - return tensor device, or first device found if object w'multiple tensors
 // objsize - size vector of tensor, else count of parameters/modules
-// objnum - number of elements in tensor or sum of elements across tensors
+// objnum - number of elements in tensor's underlying storage or sum across tensors
 // kobj - k api fn returns table of ptr,object,device,dtype,size,number of elements
 // -----------------------------------------------------------------------------------------
 static S objdevice(const Tensor& t) {return tensorsym(t,Attr::device);}
@@ -938,12 +938,13 @@ static K objsize(Ktag *g) {
  }
 }
 
-static J objnum(const TensorVector &v) {J n=0; for(auto& t:v) n+=t.numel(); return n;}
+static J objnum(const Tensor &t) {return t.is_sparse() ? t.numel() : t.storage().size();}
+static J objnum(const TensorVector &v) {J n=0; for(auto& t:v) n+=objnum(t); return n;}
 static J objnum(const Sequential &q) {return objnum(q->parameters());}
 
 static J objnum(Ktag *g) {
  switch(g->a) {
-  case Class::tensor:     {auto& a=((Kten*)g)->t; return a.numel();}
+  case Class::tensor:     {auto& a=((Kten*)g)->t; return objnum(a);}
   case Class::vector:     {auto& a=((Kvec*)g)->v; return objnum(a);}
   case Class::sequential: {auto& a=((Kseq*)g)->q; return objnum(a);}
   case Class::model:      {auto* a=(Kmodel*)g; return objnum(a->q);}
@@ -960,7 +961,7 @@ KAPI kobj(K x) {
   kS(k)[2]=cs("device");  kK(v)[2]=ktn(KS,n);
   kS(k)[3]=cs("dtype");   kK(v)[3]=ktn(KS,n);
   kS(k)[4]=cs("size");    kK(v)[4]=ktn(0,n);
-  kS(k)[5]=cs("numel");   kK(v)[5]=ktn(KJ,n);
+  kS(k)[5]=cs("storage"); kK(v)[5]=ktn(KJ,n);
   for(auto j:pointer()) {
    auto *g=(Ktag*)j;
    kK(kK(v)[0])[i] = knk(1,kj(j));

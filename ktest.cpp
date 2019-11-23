@@ -371,9 +371,9 @@ KAPI sparse1(K x) {
 KAPI gan(K x) {
  const int64_t kNoiseSize = 100;
  const int64_t kBatchSize = 60;
- const int64_t kNumberOfEpochs = 100;
+ const int64_t kNumberOfEpochs = 30;
  const char*   kDataFolder = "/home/t/data/mnist";
- const int64_t kLogInterval = 938;
+ const int64_t kLogInterval = 1000;
 
  torch::manual_seed(1);
  using namespace torch;
@@ -392,7 +392,6 @@ KAPI gan(K x) {
    nn::Conv2d(nn::Conv2dOptions(64, 1, 4).stride(2).padding(1).with_bias(false).transposed(true)),
    nn::Functional(torch::tanh));
   generator->to(device);
-  //return mtable(generator,true,true);
 
   nn::Sequential discriminator(
       nn::Conv2d(nn::Conv2dOptions(1, 64, 4).stride(2).padding(1).with_bias(false)),
@@ -411,8 +410,8 @@ KAPI gan(K x) {
 
   auto dataset = torch::data::datasets::MNIST(kDataFolder).map(torch::data::transforms::Normalize<>(0.5, 0.5)).map(torch::data::transforms::Stack<>());
   const int64_t batches_per_epoch = std::ceil(dataset.size().value() / static_cast<double>(kBatchSize));
-//auto data_loader = torch::data::make_data_loader(std::move(dataset),torch::data::DataLoaderOptions().batch_size(kBatchSize).workers(2));
-  auto data_loader = torch::data::make_data_loader<torch::data::samplers::SequentialSampler>(std::move(dataset),torch::data::DataLoaderOptions().batch_size(kBatchSize).workers(2));
+  auto data_loader = torch::data::make_data_loader(std::move(dataset),torch::data::DataLoaderOptions().batch_size(kBatchSize).workers(2));
+//auto data_loader = torch::data::make_data_loader<torch::data::samplers::SequentialSampler>(std::move(dataset),torch::data::DataLoaderOptions().batch_size(kBatchSize).workers(2));
   torch::optim::Adam generator_optimizer    (    generator->parameters(), torch::optim::AdamOptions(2e-4).beta1(0.5));
   torch::optim::Adam discriminator_optimizer(discriminator->parameters(), torch::optim::AdamOptions(2e-4).beta1(0.5));
   auto losses=torch::zeros(kNumberOfEpochs*batches_per_epoch*2);
@@ -421,7 +420,7 @@ KAPI gan(K x) {
   for (int64_t epoch = 1; epoch <= kNumberOfEpochs; ++epoch) {
     int64_t batch_index = 0;
     for (torch::data::Example<>& batch : *data_loader) {
-      return kget(batch.data);
+      //return kget(batch.data);
       // Train discriminator with real images.
       discriminator->zero_grad();
       torch::Tensor real_images = batch.data.to(device);

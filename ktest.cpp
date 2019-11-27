@@ -1,6 +1,10 @@
 #include "ktorch.h"
 #include "knn.h"
 #include "kloss.h"
+
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
+
 //#include <c10/cuda/CUDAMacros.h>
 //#include <c10/cuda/CUDACachingAllocator.h>
 
@@ -39,6 +43,39 @@ KAPI cudamem(K x) {
   //return kj(n);
   return kj(nj);
  KCATCH("cuda memory");
+}
+
+Tensor makegrid(const Tensor& t,int64_t r,int64_t c,int64_t p,float v) {
+ int64_t n=t.size(0),h=t.size(2)+p,w=t.size(3)+p,i,j,k=0;
+ auto g=t.new_full({t.size(1),r*h+p,c*w+p},v);
+ for(i=0; i<r; ++i) {
+  for(j=0; j<c; ++j) {
+   if(k>=n) break;
+   g.narrow(1,i*h+p,h-p).narrow(2,j*w+p,w-p).copy_(t[k++]);
+  }
+ }
+ return g;
+}
+
+KAPI grid(K x) {
+ KTRY
+  Tensor *t;
+  if((t=xten(x)))
+   return kten(makegrid(*t,10,10,2,0));
+  else
+   return(K)0;
+ KCATCH("grid");
+}
+
+KAPI png(K x) {
+ KTRY
+  Tensor *t;
+  if((t=xten(x))) {
+   auto a=t->to(torch::kCPU,torch::kByte).permute({1,2,0}).flatten(1);
+   stbi_write_png("test.png",t->size(1),t->size(2),t->size(0),a.data_ptr(),t->size(0)*t->size(2));
+  }
+  return(K)0;
+ KCATCH("png");
 }
 
 KAPI kdata(K x,K y) {

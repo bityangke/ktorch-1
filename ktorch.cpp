@@ -1,4 +1,6 @@
 #include "ktorch.h"
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
 
 // --------------------------------------------------------------------------------------------------
 // krrbuf - copy msg to a buffer for signalling error to k
@@ -1337,6 +1339,7 @@ KAPI     stride(K x) {return attr(x,  KJ, Attr::stride);}
 
 // -----------------------------------------------------------------------------------------
 //  pt
+// png - write PNG file given name & array/tensor
 // -----------------------------------------------------------------------------------------
 KAPI pt(K x) {
  KTRY
@@ -1349,6 +1352,17 @@ KAPI pt(K x) {
   }
   return (K)0;
  KCATCH("pt");
+}
+
+KAPI png(K x) {
+ KTRY
+  S s; Tensor t;
+  TORCH_CHECK(xsym(x,0,s) && x->n==2, "png: unrecognized arg(s), expects (PNG file name; image array/tensor)");
+  if(!xten(x,1,t)) t=kput(x,1);
+  auto a=t.to(torch::kCPU,torch::kByte).permute({1,2,0}).flatten(1);
+  stbi_write_png(s[0]==':' ? ++s : s,t.size(2),t.size(1),t.size(0),a.data_ptr(),t.size(0)*t.size(2));
+  return(K)0;
+ KCATCH("png");
 }
 
 // -----------------------------------------------------------------------------------------
@@ -1398,6 +1412,7 @@ KAPI fns(K x){
  fn(x, "cudadevice",  KFN(cudadevice),  1);
  fn(x, "cudadevices", KFN(cudadevices), 1);
  fn(x, "seed",        KFN(kseed),       1);
+ fn(x, "png",         KFN(png),         1);
 
  fn(x, "dim",         KFN(dim),         1);
  fn(x, "numel",       KFN(numel),       1);
@@ -1406,17 +1421,14 @@ KAPI fns(K x){
  fn(x, "ref",         KFN(ref),         1);
  fn(x, "storage",     KFN(storage),     1);
  fn(x, "weakref",     KFN(weakref),     1);
-
  fn(x, "device",      KFN(device),      1);
  fn(x, "dtype",       KFN(dtype),       1);
  fn(x, "gradfn",      KFN(gradfn),      1);
  fn(x, "gradient",    KFN(gradient),    1);
  fn(x, "layout",      KFN(layout),      1);
-
  fn(x, "contiguous",  KFN(contiguous),  1);
  fn(x, "leaf",        KFN(leaf),        1);
  fn(x, "pinned",      KFN(pinned),      1);
-
  fn(x, "size",        KFN(size),        1);
  fn(x, "stride",      KFN(stride),      1);
 

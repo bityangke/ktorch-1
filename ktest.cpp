@@ -2,9 +2,6 @@
 #include "knn.h"
 #include "kloss.h"
 
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#include "stb_image_write.h"
-
 //#include <c10/cuda/CUDAMacros.h>
 //#include <c10/cuda/CUDACachingAllocator.h>
 
@@ -43,19 +40,6 @@ KAPI cudamem(K x) {
   //return kj(n);
   return kj(nj);
  KCATCH("cuda memory");
-}
-
-KAPI png(K x) {
- KTRY
-  Tensor *t;
-  if((t=xten(x))) {
-   //t->unsqueeze_(1);
-   auto a=t->to(torch::kCPU,torch::kByte).permute({1,2,0}).flatten(1);
-// stbi_write_png("test.png",t->size(1),t->size(2),t->size(0),a.data_ptr(),t->size(0)*t->size(2));
-   stbi_write_png("test.png",t->size(2),t->size(1),t->size(0),a.data_ptr(),t->size(0)*t->size(2));
-  }
-  return(K)0;
- KCATCH("png");
 }
 
 KAPI kdata(K x,K y) {

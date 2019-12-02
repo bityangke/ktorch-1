@@ -131,7 +131,7 @@ static void kdepth(K x,I i,A k,Ksize &s){
   if(x->n != s[i]) {              // check that dimensions are consistent
    AT_ERROR("Dimension mismatch at depth ",i,", ",s[i]," vs ",x->n);
   } else if(x->t != (i<j ? 0 : k)) {  // check for same data type at same depth
-   AT_ERROR("Type mismatch at depth ",i,", ",k,kname(k)," vs ",kname(x->t));
+   AT_ERROR("Type mismatch at depth ",i,", ",kname(i<j ? 0 : k)," vs ",kname(x->t));
   }
  } else {
   s.push_back(x->n);              // no error, no base type yet, accumulate sizes
@@ -953,7 +953,8 @@ int64_t fullsize(TensorVector& v,int64_t d) {
 
 // ------------------------------------------------------------------------------------------
 // zero - zero out tensor in place (if array, array-> tensor -> zero out -> return array)
-// fill - fill 
+// fill - fill  tensor/array with given element
+// filldiagonal - fill diagonal of matrix input with given value
 // ------------------------------------------------------------------------------------------
 KAPI zero(K x) {
  KTRY
@@ -988,6 +989,45 @@ KAPI filldiagonal(K x) {
   else
    AT_ERROR("fill diagonal expects (tensor/array;fill element;optional wrap flag)");
  KCATCH("fill diagonal");
+}
+
+// ------------------------------------------------------------------------------------------
+// imagegrid - rearrange input images into a single tensor w'images across given cols & rows
+// makegrid - api fn to accept array/tensor and rows,cols,padding,pad value -> grid of images
+// ------------------------------------------------------------------------------------------
+Tensor imagegrid(const Tensor& a,int64_t r,int64_t c,int64_t p,short v) {
+ Tensor t=a;
+ if(t.dim()==2) t=t.unsqueeze(0);           // single image H x W
+ if(t.dim()==3) {                           // single image C x H x W
+  if(t.size(0)==1) t=torch::cat({t,t,t},0); // if single-channel, convert to 3-channel
+  t=t.unsqueeze(0);
+ }
+ if(t.dim()==4 && t.size(1)==1)
+  t=torch::cat({t,t,t},1);                  // n single-channel images
+ int64_t n=t.size(0),h=t.size(2)+p,w=t.size(3)+p,i,j,k=0;
+ auto g=t.new_full({t.size(1),r*h+p,c*w+p},v);
+ for(i=0; i<r; ++i) {
+  for(j=0; j<c; ++j) {
+   if(k>=n) break;
+   g.narrow(1,i*h+p,h-p).narrow(2,j*w+p,w-p).copy_(t[k++]);
+  }
+ }
+ return g;
+}
+
+KAPI makegrid(K x,K y,K z) {
+ KTRY
+  B b; int64_t r=nj,c=nj,p=2,v=0; Tensor t;
+  if(xint64(x,1,r) && (x->n==2 || (xint64(x,2,c) && (x->n==3 || (xint64(x,3,p) && (x->n==4 || (xint64(x,4,v) && x->n==5))))))) {
+   if(!(b=xten(x,0,t))) t=kput(x,0);
+   TORCH_CHECK(t.dim()==3 || t.dim()==4, "makegrid: expecting 3 or 4-dimensional input, ",t.dim()," dimension(s) given");
+   TORCH_CHECK(r !=nj || c !=nj, "makegrid: both rows & columns cannot be null");
+   if(t.dim()==3) t=t.unsqueeze(1);
+   return kresult(b,imagegrid(t,r,c,p,v));
+  } else {
+   AT_ERROR("makegrid: unrecognized arg(s), expecting 2-5 args, (input array/tensor; rows; cols; padding; pad value)");
+  }
+ KCATCH("makegrid");
 }
 
 // ------------------------------------------------------------------------------------------
@@ -1077,6 +1117,7 @@ void tensorfn(K x) {
  fn(x, "zero",         KFN(zero),          1);
  fn(x, "fill",         KFN(fill),          1);
  fn(x, "filldiagonal", KFN(filldiagonal),  1);
+ fn(x, "makegrid",     KFN(makegrid),      1);
  fn(x, "copy",         KFN(tensorcopy_),   1);
  fn(x, "grad",         KFN(grad),          1);
  fn(x, "detach",       KFN(detach),        1);

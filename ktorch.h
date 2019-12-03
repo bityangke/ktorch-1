@@ -54,7 +54,6 @@
 #define cs(x) ss((S)x)
 
 using A=signed char;
-using B=bool;
 using cS=const char*;
 
 using Storage=torch::Storage;
@@ -80,6 +79,7 @@ using TensorDict = torch::OrderedDict<std::string, torch::Tensor>;
 class TORCH_API Loss;
 using Lossptr=std::shared_ptr<Loss>;
 using at::detail::computeStorageSize;
+//using at::Reduction::Reduction;
 
 typedef struct {
  A a = 0;  // type: 1-dict, 2-list of pairs, 3-general list, 4-sym list
@@ -89,11 +89,11 @@ typedef struct {
  S k = 0;  // name of an evaluated name,value pair
  K x = 0;  // k value with dict/pairs/list
  union {
-  B b;  // boolean value from last evaluated pair
-  J j;  // long value
-  F f;  // double value
-  S s;  // symbol value
-  K v;  // value (isn't sym or numeric scalar)
+  bool   b;  // boolean value from last evaluated pair
+  J      j;  // long value
+  double f;  // double value
+  S      s;  // symbol value
+  K      v;  // value (isn't sym or numeric scalar)
  };
 } Pairs;
 
@@ -232,14 +232,14 @@ struct TORCH_API Kmodel : public Ktag {
 S krrbuf(const char *);
 void dictadd(K,S,K);
 void dictadd(K,cS,K);
-B xind(K,J);
+bool xind(K,J);
 K kptr(void*);
-B xptr(K);
-B xptr(K,J);
+bool xptr(K);
+bool xptr(K,J);
 Ktag* xtag(K);
 Ktag* xtag(K,J);
 
-B match(const Scalar&,const Scalar&);
+bool match(const Scalar&,const Scalar&);
 K kscalar(const Scalar&);
 J xlen(K);
 J xlen(K,J);
@@ -256,53 +256,53 @@ K statekeys();
 J statefind(State,K);
 S statesym(State e,K x,J j=-1);
 K statedict(State e,K x,J j=-1);
-void stateparms(S,Module&,K,B);
+void stateparms(S,Module&,K,bool);
 
-B xnull(K);
-B xnull(K,J);
-B xempty(K);
-B xempty(K,J);
-B xmixed(K,J);
-B xsym(K,S&);
-B xsym(K,J,S&);
-B xsyms(K,S&);
-B xdev(K,torch::Device&);
-B xdev(K,J,torch::Device&);
+bool xnull(K);
+bool xnull(K,J);
+bool xempty(K);
+bool xempty(K,J);
+bool xmixed(K,J);
+bool xsym(K,S&);
+bool xsym(K,J,S&);
+bool xsyms(K,S&);
+bool xdev(K,torch::Device&);
+bool xdev(K,J,torch::Device&);
 
-B xint64(K,int64_t&);
-B xint64(K,J,int64_t&);
-B xlong(K,J&);
-B xlong(K,J,J&);
-B xlong(K,J&,J*&);
-B xlong(K,J,J&,J*&);
-B xdouble(K,F&);
-B xdouble(K,J,F&);
-B xdict(K);
-B xdict(K,J);
-B xstate(K);
-B xstate(K,J);
+bool xint64(K,int64_t&);
+bool xint64(K,J,int64_t&);
+bool xlong(K,J&);
+bool xlong(K,J,J&);
+bool xlong(K,J&,J*&);
+bool xlong(K,J,J&,J*&);
+bool xdouble(K,double&);
+bool xdouble(K,J,double&);
+bool xdict(K);
+bool xdict(K,J);
+bool xstate(K);
+bool xstate(K,J);
 
-B xsize(K,IntArrayRef&);
-B xsize(K,J,IntArrayRef&);
-B xsize(K,J,int64_t*);
-B xsize(K,J,F*);
-B xsize(K,J,J,int64_t*);
-B xsize(K,J,J,F*);
+bool xsize(K,IntArrayRef&);
+bool xsize(K,J,IntArrayRef&);
+bool xsize(K,J,int64_t*);
+bool xsize(K,J,double*);
+bool xsize(K,J,J,int64_t*);
+bool xsize(K,J,J,double*);
 
-B xten(K,Tensor&);
-B xten(K,J,Tensor&);
+bool xten(K,Tensor&);
+bool xten(K,J,Tensor&);
 Tensor* xten(K);
 Tensor* xten(K,J);
-B xtenpair(K,Tensor&,Tensor&);
-B xtenpair(K,J,Tensor&,Tensor&);
-B xten3(K,Tensor&,Tensor&,Tensor&);
-B xten3(K,J,Tensor&,Tensor&,Tensor&);
-B xtenarg(K,J,Tensor&,Tensor&);
-B xtenarg(K,J,Tensor&,Tensor&,Tensor&);
-B xtenarg(K,Tensor&,Tensor&);
-B xtenarg(K,Tensor&,Tensor&,Tensor&);
-B xseq(K,Sequential&);
-B xseq(K,J,Sequential&);
+bool xtenpair(K,Tensor&,Tensor&);
+bool xtenpair(K,J,Tensor&,Tensor&);
+bool xten3(K,Tensor&,Tensor&,Tensor&);
+bool xten3(K,J,Tensor&,Tensor&,Tensor&);
+bool xtenarg(K,J,Tensor&,Tensor&);
+bool xtenarg(K,J,Tensor&,Tensor&,Tensor&);
+bool xtenarg(K,Tensor&,Tensor&);
+bool xtenarg(K,Tensor&,Tensor&,Tensor&);
+bool xseq(K,Sequential&);
+bool xseq(K,J,Sequential&);
 Sequential* xseq(K);
 Sequential* xseq(K,J);
 Kloss* xloss(K);
@@ -314,61 +314,61 @@ Kmodel* xmodel(K,J);
 TensorVector* xvec(K);
 TensorVector* xvec(K,J);
 
-B xnum(K,F&);
-B xnum(K,J,F&);
-B xnum(K,Scalar&);
-B xnum(K,J,Scalar&);
-B xnumn(K,c10::optional<Scalar>&);
-B xnumn(K,J,c10::optional<Scalar>&);
-B xnumt(K,Scalar&);
-B xnumt(K,J,Scalar&);
-B xnumlist(K,J,Scalar&);
-B xbyte(K,Scalar&);
-B xbyte(K,J,Scalar&);
-B xscalar(K,Scalar&);
-B xscalar(K,J,Scalar&);
+bool xnum(K,double&);
+bool xnum(K,J,double&);
+bool xnum(K,Scalar&);
+bool xnum(K,J,Scalar&);
+bool xnumn(K,c10::optional<Scalar>&);
+bool xnumn(K,J,c10::optional<Scalar>&);
+bool xnumt(K,Scalar&);
+bool xnumt(K,J,Scalar&);
+bool xnumlist(K,J,Scalar&);
+bool xbyte(K,Scalar&);
+bool xbyte(K,J,Scalar&);
+bool xscalar(K,Scalar&);
+bool xscalar(K,J,Scalar&);
 
-B xbool(K,B&);
-B xbool(K,J,B&);
+bool xbool(K,bool&);
+bool xbool(K,J,bool&);
 TypeMeta mtype(S);
 S mtype(TypeMeta);
 ScalarType stype(S);
 S stype(ScalarType);
 S stype(c10::optional<ScalarType>);
-B xtype(K,ScalarType&);
-B xtype(K,J,ScalarType&);
-B xtype(K,c10::optional<ScalarType>&);
-B xtype(K,J,c10::optional<ScalarType>&);
-B xtype(K,TypeMeta&);
-B xtype(K,J,TypeMeta&);
-B xopt(S,TensorOptions&);
-B xopt(K,TensorOptions&);
-B xopt(K,J,TensorOptions&);
-B xto(S,TensorOptions&);
-B xto(K,TensorOptions&);
-B xto(K,J,TensorOptions&);
-B xmode(K,S&,Tensormode&);
-B xmode(K,J,S&,Tensormode&);
-B xbacksym(K,B&,B&);
-B xbacksym(K,J,B&,B&);
+bool xtype(K,ScalarType&);
+bool xtype(K,J,ScalarType&);
+bool xtype(K,c10::optional<ScalarType>&);
+bool xtype(K,J,c10::optional<ScalarType>&);
+bool xtype(K,TypeMeta&);
+bool xtype(K,J,TypeMeta&);
+bool xopt(S,TensorOptions&);
+bool xopt(K,TensorOptions&);
+bool xopt(K,J,TensorOptions&);
+bool xto(S,TensorOptions&);
+bool xto(K,TensorOptions&);
+bool xto(K,J,TensorOptions&);
+bool xmode(K,S&,Tensormode&);
+bool xmode(K,J,S&,Tensormode&);
+bool xbacksym(K,bool&,bool&);
+bool xbacksym(K,J,bool&,bool&);
 
-B xpairs(K,Pairs&);
-B xpairs(K,J,Pairs&);
-B xpair(Pairs&);
+bool xpairs(K,Pairs&);
+bool xpairs(K,J,Pairs&);
+bool xpair(Pairs&);
 J xargc(K,J,Pairs&);
-B xnone(K,J);
+bool xnone(K,J);
 
 S psym(const Pairs&);
 ScalarType ptype(const Pairs&);
 void perr(const Pairs&,cS);
-B pempty(const Pairs&);
-B pbool(const Pairs&);
+bool pempty(const Pairs&);
+bool pbool(const Pairs&);
 J plong(const Pairs&);
-F pdouble(const Pairs&);
+double pdouble(const Pairs&);
 void pnum(const Pairs&,Scalar&);
 void psize(const Pairs&,IntArrayRef&,J n=-1);
 void psize(const Pairs&,J,int64_t*);
-void psize(const Pairs&,J,F*);
+void psize(const Pairs&,J,double*);
 void pten(const Pairs&,Tensor&);
 
 S& optsym(const torch::Device&);
@@ -383,12 +383,12 @@ K kbool(K);
 K kdict(const TensorDict&);
 J kfind(K,const std::string&);
 K klist(J,const int64_t*);
-K klist(J,const F*);
+K klist(J,const double*);
 K kexpand(J,const int64_t*);
-K kexpand(J,const F*);
+K kexpand(J,const double*);
 #define KEX(x) kexpand(x.size(),(*x).data())  // k list from ExpandingArray
-B kfree(K);
-B kfree(K,J);
+bool kfree(K);
+bool kfree(K,J);
 void fn(K,cS,void*,I);
 
 void randomfn(K);
@@ -403,19 +403,19 @@ Tensor kput(K);
 Tensor kput(K,J);
 K kten(const Tensor&);
 K kvec(const TensorVector&);
-inline K kresult(B p,const Tensor& t) {return p ? kten(t) : kget(t);}
-K tento(Kten*,const TensorOptions&,B,B);
-K vecto(Kvec*,const TensorOptions&,B);
-K ktenpair(B,Tensor&,Tensor&);
-K kten3(B,Tensor&,Tensor&,Tensor&);
+inline K kresult(bool p,const Tensor& t) {return p ? kten(t) : kget(t);}
+K tento(Kten*,const TensorOptions&,bool,bool);
+K vecto(Kvec*,const TensorOptions&,bool);
+K ktenpair(bool,Tensor&,Tensor&);
+K kten3(bool,Tensor&,Tensor&,Tensor&);
 J tensorlong(const Tensor&,Attr);
 S tensorsym(const Tensor&,Attr);
 K tensorsize(const Tensor&,Attr);
 K tensorattr(const Tensor&,A,Attr);
 K vectorattr(const TensorVector&,A,Attr);
-K tensorinfo(const Tensor&,B);
-K vectorinfo(const TensorVector&,B);
-void tensorcopy(Tensor&,const Tensor&,B async=false);
+K tensorinfo(const Tensor&,bool);
+K vectorinfo(const TensorVector&,bool);
+void tensorcopy(Tensor&,const Tensor&,bool async=false);
 Tensor       shuffle(const Tensor &t,      int64_t d=0);
 TensorVector shuffle(const TensorVector& v,int64_t d=0);
 void shuffle_(Tensor &t,      int64_t d=0);
@@ -434,8 +434,8 @@ void tensorfn(K);
 
 // nn module & functional routines:
 K kseq(const Sequential&);
-K seqto(Kseq*,const TensorOptions&,B);
-K mtable(const Sequential& q,B a,B b=true);
+K seqto(Kseq*,const TensorOptions&,bool);
+K mtable(const Sequential& q,bool a,bool b=true);
 K seqforward(Sequential&,K);
 K seqattr(const Sequential&,A,Attr);
 void nnfn(K);
@@ -444,15 +444,15 @@ K mstate(K);
 // loss functions:
 K kloss(Cast,const Lossptr&);
 K lossdict(Ktag*,K);
-K lossdict(B,B,Cast,Loss*);
-K lossto(Kloss*,const TensorOptions&,B);
+K lossdict(bool,bool,Cast,Loss*);
+K lossto(Kloss*,const TensorOptions&,bool);
 K lossattr(const Lossptr&,A,Attr);
 void lossfn(K);
 
 // optimization functions:
 K kopt(Cast,const Optptr&);
 K optstate(Ktag*,K);
-K optstate(B,B,Cast,OptimizerBase*);
+K optstate(bool,bool,Cast,OptimizerBase*);
 K optattr(const Optptr&,A,Attr);
 void optfn(K);
 
@@ -464,8 +464,8 @@ void modelfn(K);
 // global environment
 typedef struct {
  I cuda;             // number of CUDA devices
- B frame=false;      // if true, error message returns stack frame
- B alloptions=true;  // if true, return all option settings, else only non-defaults
+ bool frame=false;      // if true, error message returns stack frame
+ bool alloptions=true;  // if true, return all option settings, else only non-defaults
  S help=cs("help");
 
  std::vector<std::tuple<S,torch::Device>> device;
@@ -498,13 +498,13 @@ typedef struct {
   std::make_tuple(cs("sparse"), torch::kSparse)
  }};
 
- std::array<std::tuple<S,B>,2> gradient = {{
+ std::array<std::tuple<S,bool>,2> gradient = {{
   std::make_tuple(cs("grad"),   true),          
   std::make_tuple(cs("nograd"), false)
  }};
 
 /*
- std::array<std::tuple<S,B>,2> async = {{
+ std::array<std::tuple<S,bool>,2> async = {{
   std::make_tuple(cs("async"),   true),          
   std::make_tuple(cs("sync"),   false)
  }};

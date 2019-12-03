@@ -80,7 +80,7 @@ K kget(const TensorDeque& v) {
 // ktenpair - given a pair of tensors return pair of pointers or array
 // kten3 - given a triplet of tensors return triplet of pointers or array
 // -------------------------------------------------------------------------------
-K tento(Kten* t,const TensorOptions& o,B a,B b) {
+K tento(Kten* t,const TensorOptions& o,bool a,bool b) {
  auto r=t->t.to(o,a,b);
  if(b)                 // if copy flag set
   return kten(r);      // return new tensor
@@ -89,7 +89,7 @@ K tento(Kten* t,const TensorOptions& o,B a,B b) {
  return (K)0;
 }
 
-K vecto(Kvec* v,const TensorOptions& o,B a) {
+K vecto(Kvec* v,const TensorOptions& o,bool a) {
  for(auto& t:v->v) {
   auto r=t.to(o,a);
   if(!t.is_same(r)) t=std::move(r);
@@ -97,12 +97,12 @@ K vecto(Kvec* v,const TensorOptions& o,B a) {
  return (K)0;
 }
 
-K ktenpair(B p,Tensor& a,Tensor& b) {  // p:true if returning tensor pointers
+K ktenpair(bool p,Tensor& a,Tensor& b) {  // p:true if returning tensor pointers
  if(p) return knk(2,kten(a),kten(b));
  else  return knk(2,kget(a),kget(b));
 }
 
-K kten3(B p,Tensor& a,Tensor& b,Tensor& c) {  // p:true if returning tensor pointers
+K kten3(bool p,Tensor& a,Tensor& b,Tensor& c) {  // p:true if returning tensor pointers
  if(p) return knk(3,kten(a),kten(b),kten(c));
  else  return knk(3,kget(a),kget(b),kget(c));
 }
@@ -185,7 +185,7 @@ Tensor kput(K x,J i) {
 static void tensorlike(K x,Tensormode m,Tensor &t,Tensor &r) {  // t:input, r:result tensor
  //use tensor options from input tensor, override if any supplied in final arg
  using Tensormode=Tensormode; J i,j; Scalar s; TensorOptions o=t.options();
- B b=xopt(x,x->n-1,o); I nx=x->n-b;  //set flag if options given, count non-option args
+ bool b=xopt(x,x->n-1,o); I nx=x->n-b;  //set flag if options given, count non-option args
  switch(m) {
   case Tensormode::empty: if(nx==2) r=b ? torch::empty_like(t,o) : torch::empty_like(t); break;
   case Tensormode::zeros: if(nx==2) r=b ? torch::zeros_like(t,o) : torch::zeros_like(t); break;
@@ -204,7 +204,7 @@ static void tensorlike(K x,Tensormode m,Tensor &t,Tensor &r) {  // t:input, r:re
 
 static void tensorout(K x,Tensormode m,Tensor &t,Tensor &r) {  // t:output, r:result tensor
  F e; J i,j; Scalar a,z,n; IntArrayRef s;
- B b=xsize(x,1,s);  //true if size is given as 2nd arg (last arg is output tensor)
+ bool b=xsize(x,1,s);  //true if size is given as 2nd arg (last arg is output tensor)
  switch(m) {
   case Tensormode::empty: if(b && x->n==3) r=torch::empty_out(t,s); break;
   case Tensormode::zeros: if(b && x->n==3) r=torch::zeros_out(t,s); break;
@@ -241,8 +241,8 @@ static void tensorout(K x,Tensormode m,Tensor &t,Tensor &r) {  // t:output, r:re
 
 static void tensoropt(K x,Tensormode m,Tensor &r) {
  F e; J i,j; Scalar a,z,n; IntArrayRef s; TensorOptions o;
- B b=xopt(x,x->n-1,o); I nx=x->n-b;                        //track if options in last arg
- B sz=xsize(x,1,s) && nx==((m==Tensormode::full) ? 3 : 2); //2nd arg is size & correct arg count
+ bool b=xopt(x,x->n-1,o); I nx=x->n-b;                        //track if options in last arg
+ bool sz=xsize(x,1,s) && nx==((m==Tensormode::full) ? 3 : 2); //2nd arg is size & correct arg count
  switch(m) {
   case Tensormode::empty: if(sz) r=torch::empty(s,o); break;
   case Tensormode::zeros: if(sz) r=torch::zeros(s,o); break;
@@ -291,7 +291,7 @@ static void tensoropt(K x,Tensormode m,Tensor &r) {
 }
 
 static K tensormode(K x,S s,Tensormode m) {
- Tensor t,r; B in=false,out=false;
+ Tensor t,r; bool in=false,out=false;
  if((in=xten(x,1,t)))            tensorlike(x,m,t,r); // input tensor is 2nd arg
  else if((out=xten(x,x->n-1,t))) tensorout(x,m,t,r);  // output tensor is final arg
  else                            tensoropt(x,m,r);    // no input/output tensor
@@ -318,12 +318,12 @@ static K tensorput(K x) {
  }
 }
 
-static K tensorget(Ktag *g,B b,J i) { // g-tag with tensor, b-true if index, i-index
+static K tensorget(Ktag *g,bool b,J i) { // g-tag with tensor, b-true if index, i-index
  const auto &t=((Kten*)g)->t;
  return kget(b ? t[i] : t);
 }
 
-static K vectorptr(Ktag *g,B b,J i) {
+static K vectorptr(Ktag *g,bool b,J i) {
  const auto &v=((Kvec*)g)->v;
  if(b)
   return kten(v.at(i));
@@ -355,7 +355,7 @@ KAPI tensor(K x) {
 // vec - initialize vector of tensors from k array, tensor ptr(s) or some mix of both
 // vector - create vector of tensors, or return vector or vector element, or replace element
 // ------------------------------------------------------------------------------------------
-TensorVector vec(K x,B b) {   // b: true if any encountered tensor ptr to be de-referenced
+TensorVector vec(K x,bool b) {   // b: true if any encountered tensor ptr to be de-referenced
  TensorVector v;
  if(x->t) {
   Tensor t=kput(x);
@@ -415,9 +415,9 @@ KAPI vector(K x) {
 using Fld = Tensor  (*)(         TensorList, int64_t);
 using Gld = Tensor& (*)(Tensor&, TensorList, int64_t);
 
-B kcat1(K x) {for(J i=0;i<x->n;++i) if(xten(x,i)) return true; return false;}
+bool kcat1(K x) {for(J i=0;i<x->n;++i) if(xten(x,i)) return true; return false;}
 
-B kcat2(K x,int64_t& d, Tensor& r) {
+bool kcat2(K x,int64_t& d, Tensor& r) {
  if(!x->t && x->n>1 && !kK(x)[0]->t)
   return (xint64(x,1,d) && (x->n==2 || (x->n==3 && xten(x,2,r)))) || (x->n==2 && xten(x,1,r));
  else
@@ -480,9 +480,9 @@ KAPI expand(K x) {
  KCATCH("expand");
 }
 
-K ksqueeze(K x,B a,cS s) {
+K ksqueeze(K x,bool a,cS s) {
  KTRY
-  B b=false; int64_t d=nj; Tensor *t;
+  bool b=false; int64_t d=nj; Tensor *t;
   if((t=xten(x))) {
    if(a) return kten(t->squeeze());
    else  return KERR("unsqueeze requires 2nd arg specifying dimension to add");
@@ -554,7 +554,7 @@ S tensorsym(const Tensor& t,Attr a) {
  }
 }
 
-static B tensorflag(const Tensor &t,Attr a) {
+static bool tensorflag(const Tensor &t,Attr a) {
  switch(a) {
   case Attr::coalesced:  return t.is_sparse() ? t.is_coalesced() : false;
   case Attr::contiguous: return t.is_sparse() ? false : t.is_contiguous();
@@ -644,7 +644,7 @@ K storinfo(const Storage& s,const Storage& c) {
  return x;
 }
 
-K tensorinfo(const Tensor& t,B d) {
+K tensorinfo(const Tensor& t,bool d) {
  if(d && t.is_sparse()) {
   K x=xD(ktn(KS,0),ktn(0,0)),*a=&kK(x)[0],*b=&kK(x)[1];
   js(a, cs("indices")); jk(b, tensorinfo(t._indices(),d));
@@ -718,12 +718,12 @@ void shuffle_(TensorVector& v,int64_t d) {
  for(auto& t:v) t=t.index_select(d,p);
 }
 
-static K kshuffle1(Tensor &t,int64_t d,B b) {return b ? shuffle_(t,d),(K)0 : kten(shuffle(t,d));}
-static K kshuffle2(TensorVector& v,int64_t d,B b) {return b ? shuffle_(v,d),(K)0 : kvec(shuffle(v,d));}
+static K kshuffle1(Tensor &t,int64_t d,bool b) {return b ? shuffle_(t,d),(K)0 : kten(shuffle(t,d));}
+static K kshuffle2(TensorVector& v,int64_t d,bool b) {return b ? shuffle_(v,d),(K)0 : kvec(shuffle(v,d));}
 
 KAPI kshuffle(K x) {
  KTRY
-  B b=true; int64_t d=0; Ktag *g; //default is in-place, along 1st dim
+  bool b=true; int64_t d=0; Ktag *g; //default is in-place, along 1st dim
   if((g=xtag(x)) || 
     ((g=xtag(x,0)) && ((x->n==2 && (xint64(x,1,d) || xbool(x,1,b))) ||
                        (x->n==3 &&  xint64(x,1,d) && xbool(x,2,b)))))
@@ -808,7 +808,7 @@ KAPI restore(K x) {
 // -------------------------------------------------------------------------------------------
 KAPI narrow(K x) {
  KTRY
-  B b=false; int64_t d,i,w;
+  bool b=false; int64_t d,i,w;
   TORCH_CHECK(xint64(x,1,d) && xint64(x,2,i) && xint64(x,3,w) && (x->n==4 || (x->n==5 && xbool(x,4,b))),
              "narrow: unrecognized arg(s), expecting (array/tensor/vector; dim; offset; size; optional in-place flag)");
   if(auto *v=xvec(x,0)) {
@@ -834,8 +834,8 @@ KAPI narrow(K x) {
 KAPI transpose(K x) {
  KTRY
   if(x->t) return r1(x); // k scalar/simple list returned as is
-  B b=false; J n=x->n-xbool(x,x->n-1,b); int64_t i,j; Tensor t;
-  B p=xten(x,t) || xten(x,0,t);
+  bool b=false; J n=x->n-xbool(x,x->n-1,b); int64_t i,j; Tensor t;
+  bool p=xten(x,t) || xten(x,0,t);
   if(!p) t=xmixed(x,4) ? kput(x,0) : (n=1,kput(x));
   TORCH_CHECK(n==3 || t.dim()<3, "transpose of ",t.dim(),"d tensor needs the two dimenstions to be swapped");
   if(n==1)
@@ -859,7 +859,7 @@ KAPI transpose(K x) {
 //        error if view size is not compatible with input tensor's size and stride 
 // reshape - like view, but will create new storage for new tensor if view not possible
 // -------------------------------------------------------------------------------------------
-static B inferflag(const IntArrayRef& s) {for(auto i:s) if(i<0)return true; return false;}
+static bool inferflag(const IntArrayRef& s) {for(auto i:s) if(i<0)return true; return false;}
 
 static std::vector<int64_t> infersize(IntArrayRef s, int64_t m) {
   int64_t n=1; auto r=s.vec(); auto i=c10::optional<int64_t>();
@@ -885,7 +885,7 @@ static std::vector<int64_t> infersize(IntArrayRef s, int64_t m) {
   AT_ERROR("shape ",s," is invalid for input of size ",m);
 }
 
-static K kresize1(I m,B p,Tensor&& t, const IntArrayRef& s) {
+static K kresize1(I m,bool p,Tensor&& t, const IntArrayRef& s) {
  switch(m) {
   case 0:  t.resize_(inferflag(s) ? infersize(s,t.numel()) : s);
            return p ? (K)0 : kget(t);
@@ -980,7 +980,7 @@ KAPI fill(K x) {
 
 KAPI filldiagonal(K x) {
  KTRY
-  B w=false; Scalar s;
+  bool w=false; Scalar s;
   if(xnum(x,1,s) && (x->n==2 || (x->n==3 && xbool(x,2,w))))
    if(auto *t=xten(x,0))
     return t->fill_diagonal_(s,w), (K)0;
@@ -1017,7 +1017,7 @@ Tensor imagegrid(const Tensor& a,int64_t r,int64_t c,int64_t p,short v) {
 
 KAPI makegrid(K x,K y,K z) {
  KTRY
-  B b; int64_t r=nj,c=nj,p=2,v=0; Tensor t;
+  bool b; int64_t r=nj,c=nj,p=2,v=0; Tensor t;
   if(xint64(x,1,r) && (x->n==2 || (xint64(x,2,c) && (x->n==3 || (xint64(x,3,p) && (x->n==4 || (xint64(x,4,v) && x->n==5))))))) {
    if(!(b=xten(x,0,t))) t=kput(x,0);
    TORCH_CHECK(t.dim()==3 || t.dim()==4, "makegrid: expecting 3 or 4-dimensional input, ",t.dim()," dimension(s) given");
@@ -1034,7 +1034,7 @@ KAPI makegrid(K x,K y,K z) {
 // tensorcopy - tgt <- src values, must have same type & device, tgt resized if src larger
 // tensorcopy_ - copy in place method
 // ------------------------------------------------------------------------------------------
-void tensorcopy(Tensor &t,const Tensor &s,B a) {
+void tensorcopy(Tensor &t,const Tensor &s,bool a) {
  if(s.dtype() != t.dtype()) {
   AT_ERROR("Unable to copy values from ",s.dtype()," tensor to ",t.dtype()," tensor");
  } else if(s.device() != t.device()) {
@@ -1046,7 +1046,7 @@ void tensorcopy(Tensor &t,const Tensor &s,B a) {
 
 KAPI tensorcopy_(K x) {
  KTRY
-  B a=false; Tensor *t=xten(x,0),*s=xten(x,1);
+  bool a=false; Tensor *t=xten(x,0),*s=xten(x,1);
   TORCH_CHECK(t, "copy expects 1st arg of tensor");
   TORCH_CHECK(x->n==2 || (x->n==3 && xbool(x,2,a)), "copy expects (tensor;input;optional async flag)");
   t->copy_(s ? *s : kput(x,1), a);
@@ -1055,14 +1055,14 @@ KAPI tensorcopy_(K x) {
 }
 
 // ------------------------------------------------------------------------------------------
-// grad - return gradient data or empty, if ptr enlisted, return gradient ptr (must free)
+// kgrad - return gradient data or empty, if ptr enlisted, return gradient ptr (must free)
 // tensorback - backprop given tensor, optional tensor & sym for retain/create gradient graph
 // detach - detach tensor, with optional flag to perform the detach in place
 // same - given two tensors, compares underlying ptr, returns true if same
 // ------------------------------------------------------------------------------------------
-KAPI grad(K x) {
+KAPI kgrad(K x) {
  KTRY
-  B p=false; Tensor t;
+  bool p=false; Tensor t;
   if(xten(x,t) || (p=(xten(x,0,t) && x->n==1))) {
    if(p) return t.grad().defined() ? kten(t.grad()) : KERR("No gradient defined");
    else  return t.grad().defined() ? kget(t.grad()) : (K)0;
@@ -1073,11 +1073,11 @@ KAPI grad(K x) {
 }
 
 K tensorback(K x) {
- Tensor t; B ok=false;
+ Tensor t; bool ok=false;
  if(xten(x,t)) {
   t.backward(); ok=true;
  } else if(xten(x,0,t)) {
-  B a=false,b=false; Tensor g; J n=x->n - xbacksym(x,x->n-1,a,b);
+  bool a=false,b=false; Tensor g; J n=x->n - xbacksym(x,x->n-1,a,b);
   if(n==1) {
     t.backward({},a,b); ok=true;
   } else if(n==2) {
@@ -1094,7 +1094,7 @@ K tensorback(K x) {
 
 KAPI detach(K x) {
  KTRY
-  B b=false; Tensor *t;
+  bool b=false; Tensor *t;
   TORCH_CHECK((t=xten(x)) || ((t=xten(x,0)) && xbool(x,1,b) && x->n==2),
               "detach: unrecognized arg(s), expecting tensor or (tensor;inplace flag)");
   return b ? t->detach_(),(K)0 : kten(t->detach());
@@ -1119,7 +1119,7 @@ void tensorfn(K x) {
  fn(x, "filldiagonal", KFN(filldiagonal),  1);
  fn(x, "makegrid",     KFN(makegrid),      1);
  fn(x, "copy",         KFN(tensorcopy_),   1);
- fn(x, "grad",         KFN(grad),          1);
+ fn(x, "grad",         KFN(kgrad),         1);
  fn(x, "detach",       KFN(detach),        1);
  fn(x, "same",         KFN(same),          1);
  fn(x, "vector",       KFN(vector),        1);

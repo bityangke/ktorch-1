@@ -19,10 +19,10 @@ S krrbuf(const char *s) {
 void dictadd(K x, S s,K v){K *k=kK(x); js(&k[0],cs(s)); jk(&k[1],v);}
 void dictadd(K x,cS s,K v){K *k=kK(x); js(&k[0],cs(s)); jk(&k[1],v);}
 
-B xind(K x,J i) {return !x->t && -1<i && i<x->n;}
+bool xind(K x,J i) {return !x->t && -1<i && i<x->n;}
 K kptr(void *v){J j=(intptr_t)v; pointer().insert(j); return knk(1,kj(j));}
 
-B xptr(K x) {
+bool xptr(K x) {
  if(!x->t && x->n==1 && kK(x)[0]->t==-KJ) {
   TORCH_CHECK(pointer().count(kK(x)[0]->j), "stale pointer");
   return true;
@@ -31,13 +31,13 @@ B xptr(K x) {
  }
 }
 
-B xptr(K x,J i) {return xind(x,i) && xptr(kK(x)[i]);}
+bool xptr(K x,J i) {return xind(x,i) && xptr(kK(x)[i]);}
 
 Ktag* xtag(K x) {return xptr(x) ? (Ktag*)kK(x)[0]->j : nullptr;}
 Ktag* xtag(K x,J i) {return xind(x,i) ? xtag(kK(x)[i]) : nullptr;}
 
-B xhelp(K x) {return x->t == -KS && x->s == env().help;}
-B xhelp(K x,S &s) {
+bool xhelp(K x) {return x->t == -KS && x->s == env().help;}
+bool xhelp(K x,S &s) {
  if(x->t==KS && x->n == 2 && kS(x)[0]==env().help)
   return s=kS(x)[1],true;
  else
@@ -54,7 +54,7 @@ B xhelp(K x,S &s) {
 // maptype - map k data type to/from torch type
 // mapattr - make attr enum to symbol
 // ------------------------------------------------------------------------------------------
-B match(const Scalar &x,const Scalar &y) {
+bool match(const Scalar &x,const Scalar &y) {
  if(x.isIntegral(false)) {
   if(y.isIntegral(false))
    return x.toLong() == y.toLong();
@@ -91,7 +91,7 @@ S mapclass(Class a) {
 }
 
 cS kname(A k) {
- A t=abs(k); B b=k<0;
+ A t=abs(k); bool b=k<0;
  switch(t) {
   case 0: return "list";
   case 1: return b ? "boolean scalar" : "boolean list";
@@ -143,7 +143,7 @@ cS kname(K x) {return xptr(x) ? mapclass(xtag(x)->a) : kname(x->t);}
 J ksizeof(A k) {
  switch(k) {
   case KE: return sizeof(E);
-  case KF: return sizeof(F);
+  case KF: return sizeof(double);
   case KJ: return sizeof(J);
   case KI: return sizeof(I);
   case KH: return sizeof(H);
@@ -254,12 +254,12 @@ K statedict(State e,K x,J j) {  // e:enum, e.g. State::options, x:dict/table, j:
 // xstate - check for dictionary/table defining module state
 // xsize - check for long(s)/double(s), set array ref/expanding array used for sizing
 // --------------------------------------------------------------------------------------
-B xnull(K x) {return x->t==101 && x->g==0;}
-B xnull(K x,J i) {return xind(x,i) && xnull(kK(x)[i]);}
-B xempty(K x) {return xnull(x) ? true : (x->t ? false : x->n==0);}
-B xempty(K x,J i) {return xind(x,i) && xempty(kK(x)[i]);}
+bool xnull(K x) {return x->t==101 && x->g==0;}
+bool xnull(K x,J i) {return xind(x,i) && xnull(kK(x)[i]);}
+bool xempty(K x) {return xnull(x) ? true : (x->t ? false : x->n==0);}
+bool xempty(K x,J i) {return xind(x,i) && xempty(kK(x)[i]);}
 
-B xmixed(K x,J m) {      // check up to m elements of k value for mixed types/lengths
+bool xmixed(K x,J m) {      // check up to m elements of k value for mixed types/lengths
  A t; J i,n;
  if(!x->t)                                              // if general list
   if(x->n > 1) {                                        // with more than 1 element
@@ -274,15 +274,15 @@ B xmixed(K x,J m) {      // check up to m elements of k value for mixed types/le
  return false;
 }
 
-B xsym(K x,S &s) {return (x->t==-KS) ? s=x->s,true : false;}
-B xsym(K x,J i,S &s) {return xind(x,i) && xsym(kK(x)[i],s);}
-B xsyms(K x,S &s) {
+bool xsym(K x,S &s) {return (x->t==-KS) ? s=x->s,true : false;}
+bool xsym(K x,J i,S &s) {return xind(x,i) && xsym(kK(x)[i],s);}
+bool xsyms(K x,S &s) {
  if(xsym(x,s)) return true;
  else if(x->t == KS && x->n) return s=kS(x)[0],true;
  else return false;
 }
 
-B xdev(K x,torch::Device &d) {
+bool xdev(K x,torch::Device &d) {
  if(x->t==-KS) {
   for(auto &m:env().device)
    if(x->s==std::get<0>(m)) return d=std::get<1>(m),true;
@@ -290,15 +290,15 @@ B xdev(K x,torch::Device &d) {
  return false;
 }
 
-B xdev(K x,J i,torch::Device &d) {return xind(x,i) && xdev(kK(x)[i],d);}
+bool xdev(K x,J i,torch::Device &d) {return xind(x,i) && xdev(kK(x)[i],d);}
 
-B xint64(K x,int64_t &j) {return (x->t == -KJ) ? j=x->j,true : false;}  //convert J -> int64_t
-B xint64(K x,J i,int64_t &j) {return xind(x,i) && xint64(kK(x)[i],j);}  //mac doesn't differentiate, linux does
+bool xint64(K x,int64_t &j) {return (x->t == -KJ) ? j=x->j,true : false;}  //convert J -> int64_t
+bool xint64(K x,J i,int64_t &j) {return xind(x,i) && xint64(kK(x)[i],j);}  //mac doesn't differentiate, linux does
 
-B xlong(K x,J &j) {return (x->t == -KJ) ? j=x->j,true : false;}       //check k scalar
-B xlong(K x,J i,J &j) {return xind(x,i) && xlong(kK(x)[i],j);}        //check k list element
+bool xlong(K x,J &j) {return (x->t == -KJ) ? j=x->j,true : false;}       //check k scalar
+bool xlong(K x,J i,J &j) {return xind(x,i) && xlong(kK(x)[i],j);}        //check k list element
 
-B xlong(K x,J &n,J *&v){                                           //check for k list of longs
+bool xlong(K x,J &n,J *&v){                                           //check for k list of longs
  if(x->t == KJ){          n=x->n; v=kJ(x); return true;            //list of long ints
  } else if(x->t == -KJ){  n=1;    v=&x->j; return true;            //scalar long ok too
  } else if(x->t == 0 && x->n == 0) { n=0;  return true;            //empty,no type also ok
@@ -306,24 +306,24 @@ B xlong(K x,J &n,J *&v){                                           //check for k
  }
 }
 
-B xlong(K x,J i,J &n, J *&v) {return xind(x,i) && xlong(kK(x)[i],n,v);}  // check element of k list
+bool xlong(K x,J i,J &n, J *&v) {return xind(x,i) && xlong(kK(x)[i],n,v);}  // check element of k list
 
-B xdouble(K x,F &f) {return (x->t == -KF) ? f=x->f,true : false;}    //check k scalar
-B xdouble(K x,J i,F &f) {return xind(x,i) && xdouble(kK(x)[i],f);}   //check k list element
+bool xdouble(K x,F &f) {return (x->t == -KF) ? f=x->f,true : false;}    //check k scalar
+bool xdouble(K x,J i,F &f) {return xind(x,i) && xdouble(kK(x)[i],f);}   //check k list element
 
-B xdict(K x) {return x->t==99 && (kK(x)[0]->t==KS || (kK(x)[0]->t==0 && kK(x)[0]->n==0));}
-B xdict(K x,J i) {return xind(x,i) && xdict(kK(x)[i]);}
+bool xdict(K x) {return x->t==99 && (kK(x)[0]->t==KS || (kK(x)[0]->t==0 && kK(x)[0]->n==0));}
+bool xdict(K x,J i) {return xind(x,i) && xdict(kK(x)[i]);}
 
-B xstate(K x) {return xdict(x) || x->t==98;}
-B xstate(K x,J i) {return xind(x,i) && xstate(kK(x)[i]);}
+bool xstate(K x) {return xdict(x) || x->t==98;}
+bool xstate(K x,J i) {return xind(x,i) && xstate(kK(x)[i]);}
 
 // retrieve long integers from x -> IntArrayRef (linux clang/gcc require int64_t* from J*)
-B xsize(K x,IntArrayRef &s) {J n,*v; return (xlong(x,n,v)) ? s=IntArrayRef((int64_t*)v,n),true : false;}
-B xsize(K x,J i,IntArrayRef &s) {return xind(x,i) && xsize(kK(x)[i],s);}  //check element of k list
+bool xsize(K x,IntArrayRef &s) {J n,*v; return (xlong(x,n,v)) ? s=IntArrayRef((int64_t*)v,n),true : false;}
+bool xsize(K x,J i,IntArrayRef &s) {return xind(x,i) && xsize(kK(x)[i],s);}  //check element of k list
 
 // retrieve long integers/doubles from x -> ExpandingArray ptr of longs/floats
-B xsize(K x,J d,int64_t *a) {
- B b=false;
+bool xsize(K x,J d,int64_t *a) {
+ bool b=false;
  if((b=x->t == -KJ)) {
    for(J i=0;i<d;++i) a[i]=x->j;
  } else if(x->t == KJ) {
@@ -335,8 +335,8 @@ B xsize(K x,J d,int64_t *a) {
  return b;
 }
 
-B xsize(K x,J d,F *a) {
- B b=false; 
+bool xsize(K x,J d,F *a) {
+ bool b=false; 
  if((b=x->t == -KF)) {
   for(J i=0;i<d;++i) a[i]=x->f;
  } else if(x->t == KF) {
@@ -348,15 +348,15 @@ B xsize(K x,J d,F *a) {
  return b;
 }
 
-B xsize(K x,J i,J d,int64_t *a) {return xind(x,i) && xsize(kK(x)[i],d,a);}
-B xsize(K x,J i,J d,F       *a) {return xind(x,i) && xsize(kK(x)[i],d,a);}
+bool xsize(K x,J i,J d,int64_t *a) {return xind(x,i) && xsize(kK(x)[i],d,a);}
+bool xsize(K x,J i,J d,F       *a) {return xind(x,i) && xsize(kK(x)[i],d,a);}
 
 // ------------------------------------------------------------------------------------------------------
 // xten - check arg(s) for allocated ptr to tensor: set tensor & return true if found, else false
 //      - 2nd form, return tensor pointer if found from k value, else null
 // xvec - check arg(s) for allocated vector of tensors
 // ------------------------------------------------------------------------------------------------------
-B xten(K x,Tensor &t) {
+bool xten(K x,Tensor &t) {
  if(auto* a=xtag(x))
   if(a->a==Class::tensor && a->c==Cast::tensor)
    return t=((Kten*)a)->t, true;
@@ -370,7 +370,7 @@ Tensor* xten(K x) {
  return nullptr;
 }
 
-B xten(K x,J i,Tensor& t) {return xind(x,i) && xten(kK(x)[i],t);}
+bool xten(K x,J i,Tensor& t) {return xind(x,i) && xten(kK(x)[i],t);}
 Tensor* xten(K x,J i) {return xind(x,i) ? xten(kK(x)[i]) : nullptr;}
 
 TensorVector* xvec(K x) {
@@ -387,28 +387,28 @@ TensorVector* xvec(K x,J i) {return xind(x,i) ? xvec(kK(x)[i]) : nullptr;}
 // xten3 - check arg(s) for a triplet of allocated tensors
 // xtenarg - check arg(s) for a list of allocated tensors, or list of input arrays or mix of both
 // ------------------------------------------------------------------------------------------------------
-B xtenpair(K x,Tensor& y,Tensor& z) {return xten(x,0,y) && xten(x,1,z);}
-B xtenpair(K x,J i,Tensor& y,Tensor& z) {return xind(x,i) && xtenpair(kK(x)[i],y,z);}
-B xten3(K x,Tensor& t1,Tensor& t2,Tensor& t3) {return xten(x,0,t1) && xten(x,1,t2) && xten(x,2,t3);}
-B xten3(K x,J i,Tensor& t1,Tensor& t2,Tensor& t3) {return xind(x,i) && xten3(kK(x)[i],t1,t2,t3);}
+bool xtenpair(K x,Tensor& y,Tensor& z) {return xten(x,0,y) && xten(x,1,z);}
+bool xtenpair(K x,J i,Tensor& y,Tensor& z) {return xind(x,i) && xtenpair(kK(x)[i],y,z);}
+bool xten3(K x,Tensor& t1,Tensor& t2,Tensor& t3) {return xten(x,0,t1) && xten(x,1,t2) && xten(x,2,t3);}
+bool xten3(K x,J i,Tensor& t1,Tensor& t2,Tensor& t3) {return xind(x,i) && xten3(kK(x)[i],t1,t2,t3);}
  
-B xtenarg(K x,J i,Tensor& a,Tensor &b) {
- B p;
+bool xtenarg(K x,J i,Tensor& a,Tensor &b) {
+ bool p;
  p=xten(x,i,a)   ? true : (a=kput(x,i),false);
  p=xten(x,i+1,b) ? true : (b=kput(x,i+1),p);
  return p;
 }
 
-B xtenarg(K x,J i,Tensor& a,Tensor &b,Tensor &c) {
- B p;
+bool xtenarg(K x,J i,Tensor& a,Tensor &b,Tensor &c) {
+ bool p;
  p=xten(x,i,a)   ? true : (a=kput(x,i),false);
  p=xten(x,i+1,b) ? true : (b=kput(x,i+1),p);
  p=xten(x,i+2,c) ? true : (c=kput(x,i+2),p);
  return p;
 }
 
-B xtenarg(K x,Tensor& a,Tensor &b)           {return xtenarg(x,0,a,b);}
-B xtenarg(K x,Tensor& a,Tensor &b,Tensor &c) {return xtenarg(x,0,a,b,c);}
+bool xtenarg(K x,Tensor& a,Tensor &b)           {return xtenarg(x,0,a,b);}
+bool xtenarg(K x,Tensor& a,Tensor &b,Tensor &c) {return xtenarg(x,0,a,b,c);}
  
 // ------------------------------------------------------------------------------------------------------
 // xseq - check arg(s) for allocated sequential module, return boolean/pointer
@@ -416,7 +416,7 @@ B xtenarg(K x,Tensor& a,Tensor &b,Tensor &c) {return xtenarg(x,0,a,b,c);}
 // xoptim - check arg(s) for allocated optimizer pointer
 // xmodel - check arg(s) for allocated model pointer (module, loss & optimizer)
 // ------------------------------------------------------------------------------------------------------
-B xseq(K x,Sequential &q) {
+bool xseq(K x,Sequential &q) {
  if(auto* a=xtag(x))
   if(a->a==Class::sequential && a->c==Cast::sequential) 
    return q=((Kseq*)a)->q, true;
@@ -430,7 +430,7 @@ Sequential* xseq(K x) {
  return nullptr;
 }
 
-B xseq(K x,J i,Sequential& s) {return xind(x,i) && xseq(kK(x)[i],s);}
+bool xseq(K x,J i,Sequential& s) {return xind(x,i) && xseq(kK(x)[i],s);}
 Sequential* xseq(K x,J i) {return xind(x,i) ? xseq(kK(x)[i]) : nullptr;}
 
 Kloss* xloss(K x) {auto* g=xtag(x); return (g && g->a==Class::loss) ? (Kloss*)g : nullptr;}
@@ -451,16 +451,16 @@ Kmodel* xmodel(K x,J i) {return xind(x,i) ? xmodel(kK(x)[i]) : nullptr;}
 // xbyte - convert k bool,char,byte -> torch scalar
 // xscalar - convert k number or byte -> torch scalar
 // ------------------------------------------------------------------------------------------------------
-B xnum(K x,F &f) {
+bool xnum(K x,F &f) {
  switch(x->t) {
   case -KF: return f=x->f,true;
   case -KJ: return f=x->j,true;
   default: return false;
  }
 }
-B xnum(K x,J i,F &f) {return xind(x,i) && xnum(kK(x)[i],f);}
+bool xnum(K x,J i,F &f) {return xind(x,i) && xnum(kK(x)[i],f);}
 
-B xnum(K x,Scalar& s) {
+bool xnum(K x,Scalar& s) {
  switch(x->t) {
   case -KF: return s=x->f, true;
   case -KE: return s=x->e, true;
@@ -470,9 +470,9 @@ B xnum(K x,Scalar& s) {
   default: return false;
  }
 }
-B xnum(K x,J i,Scalar& s) {return xind(x,i) && xnum(kK(x)[i],s);}
+bool xnum(K x,J i,Scalar& s) {return xind(x,i) && xnum(kK(x)[i],s);}
 
-B xnumn(K x,c10::optional<Scalar>& s) {
+bool xnumn(K x,c10::optional<Scalar>& s) {
  switch(x->t) {
   case -KF: if(x->f==x->f) s=x->f; return true;
   case -KE: if(x->e==x->e) s=x->e; return true;
@@ -482,18 +482,18 @@ B xnumn(K x,c10::optional<Scalar>& s) {
   default: return false;
  }
 }
-B xnumn(K x,J i,c10::optional<Scalar>& s) {return xind(x,i) && xnumn(kK(x)[i],s);}
+bool xnumn(K x,J i,c10::optional<Scalar>& s) {return xind(x,i) && xnumn(kK(x)[i],s);}
 
-B xnumt(K x,Scalar& s) {
+bool xnumt(K x,Scalar& s) {
  Tensor t;
  if(xnum(x,s))      return true;
  else if(xten(x,t)) return s=t.item(), true;
  else               return false;
 }
 
-B xnumt(K x,J i,Scalar& s) {return xind(x,i) && xnumt(kK(x)[i],s);}
+bool xnumt(K x,J i,Scalar& s) {return xind(x,i) && xnumt(kK(x)[i],s);}
 
-B xnumlist(K x,J i,Scalar &a) {
+bool xnumlist(K x,J i,Scalar &a) {
  switch(x->t) {
   case KF: return a=kF(x)[i], true;
   case KE: return a=kE(x)[i], true;
@@ -506,11 +506,11 @@ B xnumlist(K x,J i,Scalar &a) {
  }
 }
 
-B xbyte(K x,Scalar &s) { return (x->t==-KB || x->t==-KC || xt==-KG) ? s=x->g,true : false;}
-B xbyte(K x,J i,Scalar &s) {return xind(x,i) && xbyte(kK(x)[i],s);}
+bool xbyte(K x,Scalar &s) { return (x->t==-KB || x->t==-KC || xt==-KG) ? s=x->g,true : false;}
+bool xbyte(K x,J i,Scalar &s) {return xind(x,i) && xbyte(kK(x)[i],s);}
 
-B xscalar(K x,Scalar &s) { return xnum(x,s) || xbyte(x,s);}
-B xscalar(K x,J i,Scalar &s) {return xind(x,i) && xscalar(kK(x)[i],s);}
+bool xscalar(K x,Scalar &s) { return xnum(x,s) || xbyte(x,s);}
+bool xscalar(K x,J i,Scalar &s) {return xind(x,i) && xscalar(kK(x)[i],s);}
 
 // ------------------------------------------------------------------------------------------------------
 // xbool - if value is boolean, set value and return true, else false
@@ -522,8 +522,8 @@ B xscalar(K x,J i,Scalar &s) {return xind(x,i) && xscalar(kK(x)[i],s);}
 // xmode - check if sym, if matches a known tensor creation mode, set mode and return true else false
 // xbacksym - check if sym, if matches back prop graph setting, set retain/create graph flags else false
 // ------------------------------------------------------------------------------------------------------
-B xbool(K x,B &b) {return (x->t == -KB) ? b=x->g,true : false;}
-B xbool(K x,J i,B &b) {return xind(x,i) && xbool(kK(x)[i],b);}
+bool xbool(K x,bool &b) {return (x->t == -KB) ? b=x->g,true : false;}
+bool xbool(K x,J i,bool &b) {return xind(x,i) && xbool(kK(x)[i],b);}
 
 TypeMeta mtype(S s) {
   for(auto &m:env().dtype) if(s==std::get<0>(m)) return std::get<1>(m);
@@ -539,15 +539,15 @@ ScalarType stype(S s) {return torch::typeMetaToScalarType(mtype(s));}
 S stype(ScalarType t) {return mtype(torch::scalarTypeToTypeMeta(t));}
 S stype(c10::optional<ScalarType> t) {return mtype(torch::scalarTypeToTypeMeta(t ? *t : ScalarType::Undefined));}
 
-B xtype(K x,ScalarType &s)                {if(x->t == -KS) return s=stype(x->s), true; return false;}
-B xtype(K x,c10::optional<ScalarType> &s) {if(x->t == -KS) return s=stype(x->s), true; return false;}
-B xtype(K x,TypeMeta   &t) {if(x->t == -KS) return t=mtype(x->s), true; return false;}
+bool xtype(K x,ScalarType &s)                {if(x->t == -KS) return s=stype(x->s), true; return false;}
+bool xtype(K x,c10::optional<ScalarType> &s) {if(x->t == -KS) return s=stype(x->s), true; return false;}
+bool xtype(K x,TypeMeta   &t) {if(x->t == -KS) return t=mtype(x->s), true; return false;}
 
-B xtype(K x,J i,ScalarType &s)                {return xind(x,i) && xtype(kK(x)[i],s);}
-B xtype(K x,J i,c10::optional<ScalarType> &s) {return xind(x,i) && xtype(kK(x)[i],s);}
-B xtype(K x,J i, TypeMeta &t) {return xind(x,i) && xtype(kK(x)[i],t);}
+bool xtype(K x,J i,ScalarType &s)                {return xind(x,i) && xtype(kK(x)[i],s);}
+bool xtype(K x,J i,c10::optional<ScalarType> &s) {return xind(x,i) && xtype(kK(x)[i],s);}
+bool xtype(K x,J i, TypeMeta &t) {return xind(x,i) && xtype(kK(x)[i],t);}
 
-B xopt(S s,TensorOptions &o) {
+bool xopt(S s,TensorOptions &o) {
  auto &e=env();
  for(auto &m:e.device)
   if(s == std::get<0>(m)) return o=o.device(std::get<1>(m)), true;
@@ -560,9 +560,9 @@ B xopt(S s,TensorOptions &o) {
  return false;
 }
 
-B xopt(K x,TensorOptions &o) {
+bool xopt(K x,TensorOptions &o) {
  if (x->t == -KS || x->t == KS) {
-  B a=x->t < 0; I i,n=a ? 1 : x->n;
+  bool a=x->t < 0; I i,n=a ? 1 : x->n;
   for(i=0; i<n; ++i) {
    S s=a ? x->s : kS(x)[i];
    if (!xopt(s,o))
@@ -574,9 +574,9 @@ B xopt(K x,TensorOptions &o) {
  }
 }
 
-B xopt(K x,J i,TensorOptions &o) { return !x->t && -1<x->n && i<x->n && xopt(kK(x)[i],o);}
+bool xopt(K x,J i,TensorOptions &o) { return !x->t && -1<x->n && i<x->n && xopt(kK(x)[i],o);}
 
-B xto(S s,TensorOptions &o) {
+bool xto(S s,TensorOptions &o) {
  for(auto &m:env().device)
   if(s == std::get<0>(m)) return o=o.device(std::get<1>(m)), true;
  for(auto &m:env().dtype)
@@ -584,9 +584,9 @@ B xto(S s,TensorOptions &o) {
  return false;
 }
 
-B xto(K x,TensorOptions &o) { 
+bool xto(K x,TensorOptions &o) { 
  if (x->t == -KS || x->t == KS) {
-  B a=x->t < 0; I i,n=a ? 1 : x->n;
+  bool a=x->t < 0; I i,n=a ? 1 : x->n;
   for(i=0; i<n; ++i) {
    S s=a ? x->s : kS(x)[i];
    if (!xto(s,o))
@@ -598,9 +598,9 @@ B xto(K x,TensorOptions &o) {
  }
 }
 
-B xto(K x,J i,TensorOptions &o) {return xind(x,i) ? xto(kK(x)[i],o) : false;}
+bool xto(K x,J i,TensorOptions &o) {return xind(x,i) ? xto(kK(x)[i],o) : false;}
 
-B xmode(K x,S &s,Tensormode &m) {
+bool xmode(K x,S &s,Tensormode &m) {
  if(x->t == -KS) {
   for(auto &v:env().tensormode)
    if(x->s == std::get<0>(v)) return s=x->s,m=std::get<1>(v), true;
@@ -609,9 +609,9 @@ B xmode(K x,S &s,Tensormode &m) {
  return false;
 }
 
-B xmode(K x,J i,S &s,Tensormode &m) {return xind(x,i) && xmode(kK(x)[i],s,m);}
+bool xmode(K x,J i,S &s,Tensormode &m) {return xind(x,i) && xmode(kK(x)[i],s,m);}
 
-B xbacksym(K x,B& a,B& b) {
+bool xbacksym(K x,bool& a,bool& b) {
  if(x->t == -KS) {
   for(auto &s:env().backsym)
    if(x->s == std::get<0>(s)) return a=std::get<1>(s),b=std::get<2>(s), true;
@@ -620,7 +620,7 @@ B xbacksym(K x,B& a,B& b) {
  return false;
 }
 
-B xbacksym(K x,J i,B& a,B& b) {return xind(x,i) && xbacksym(kK(x)[i],a,b);}
+bool xbacksym(K x,J i,bool& a,bool& b) {return xind(x,i) && xbacksym(kK(x)[i],a,b);}
 
 // ------------------------------------------------------------------------------------------
 // xpairs - initialize a set of name-value pairs given as an argument from k
@@ -628,7 +628,7 @@ B xbacksym(K x,J i,B& a,B& b) {return xind(x,i) && xbacksym(kK(x)[i],a,b);}
 // xargc - return count of args to process given arg(s), offset, pairs structure to initiate
 // xnone - return true if, given arg list and offset, no meaningful arg supplied
 // ------------------------------------------------------------------------------------------
-B xpairs(K x,Pairs& p) {   // initialize Pairs structure from k value
+bool xpairs(K x,Pairs& p) {   // initialize Pairs structure from k value
  p.a=0, p.i=0, p.n=0;      // sets a: 1-dict,2-pairs,3-list,4-syms
  if(x->t==99) {
   K y=kK(x)[0];
@@ -658,7 +658,7 @@ B xpairs(K x,Pairs& p) {   // initialize Pairs structure from k value
  return p.a ? (p.x=x,true) : false;
 }
 
-B xpairs(K x,J i,Pairs& p) {return xind(x,i) && xpairs(kK(x)[i],p);}
+bool xpairs(K x,J i,Pairs& p) {return xind(x,i) && xpairs(kK(x)[i],p);}
 
 static void xpair(Pairs& p,K x,J i) {
  if(x->t<0) {
@@ -691,7 +691,7 @@ static void xpair(Pairs& p,K x,J i) {
  }
 }
 
-B xpair(Pairs& p) {
+bool xpair(Pairs& p) {
  if(p.i<0 || p.i>=p.n) return false;
  I i=p.i; p.k=nullptr; p.v=nullptr; K y;
  switch(p.a) {   
@@ -740,7 +740,7 @@ J xargc(K x,J i,Pairs& p) { // x:arg(s), i:offset, -1 if not applicable, p:pairs
  }
 }
 
-B xnone(K x,J i) {Pairs p; return !(xargc(x,i,p) || p.n);}
+bool xnone(K x,J i) {Pairs p; return !(xargc(x,i,p) || p.n);}
 
 // ------------------------------------------------------------------------------------------
 // perr - signal error in type of value given w'name-value pair
@@ -767,8 +767,8 @@ static void plen(const Pairs& p,J n,J m) {
 
 S psym(const Pairs& p) {if(p.t!=-KS) perr(p,"symbol"); return p.s;}
 ScalarType ptype(const Pairs& p) {if(p.t!=-KS) perr(p,"symbol"); return torch::typeMetaToScalarType(mtype(p.s));}
-B pempty(const Pairs& p) {return p.t>=0 && p.v && !p.v->n;}
-B pbool(const Pairs& p) {if(p.t!=-KB) perr(p,"boolean"); return p.b;}
+bool pempty(const Pairs& p) {return p.t>=0 && p.v && !p.v->n;}
+bool pbool(const Pairs& p) {if(p.t!=-KB) perr(p,"boolean"); return p.b;}
 J plong(const Pairs& p) {if(p.t!=-KJ) perr(p,"long integer"); return p.j;}
 
 F pdouble(const Pairs& p) {
@@ -859,14 +859,14 @@ J kfind(K k,const std::string &s) {
 }
 
 K klist(J n,const int64_t *j) {K x=ktn(KJ,n); memcpy(kG(x),j,n*sizeof(int64_t)); return x;}
-K klist(J n,const F       *f) {K x=ktn(KF,n); memcpy(kG(x),f,n*sizeof(F));       return x;}
+K klist(J n,const double  *f) {K x=ktn(KF,n); memcpy(kG(x),f,n*sizeof(double));  return x;}
 
-template<typename T>static B kex(J n,const T *e) {
- B b=n>0; for(I i=1;i<n;++i) if(e[i-1]!=e[i]) return false; return b;
+template<typename T>static bool kex(J n,const T *e) {
+ bool b=n>0; for(I i=1;i<n;++i) if(e[i-1]!=e[i]) return false; return b;
 }
 
 K kexpand(J n,const int64_t *e) {return kex<int64_t>(n,e) ? kj(e[0]) : klist(n,e);}
-K kexpand(J n,const F       *e) {return kex<F>      (n,e) ? kf(e[0]) : klist(n,e);}
+K kexpand(J n,const double  *e) {return kex<double> (n,e) ? kf(e[0]) : klist(n,e);}
 
 // -----------------------------------------------------------------------------------------
 // addref - add a new kptr to a shared tensor/module/optimizer, incrementing reference count
@@ -887,14 +887,14 @@ KAPI addref(K x) {
  KCATCH("addref");
 }
 
-B kfree(K x) {
+bool kfree(K x) {
  if(auto *a=xtag(x))
    return delete a, pointer().erase(kK(x)[0]->j), true;
  else
    return false;
 }
 
-B kfree(K x,J i) {return xind(x,i) ? kfree(kK(x)[i]) : false;}
+bool kfree(K x,J i) {return xind(x,i) ? kfree(kK(x)[i]) : false;}
 
 KAPI Kfree(K x){
  KTRY
@@ -1002,7 +1002,7 @@ KAPI kstate(K x) {
 
 KAPI to(K x) {
  KTRY
-  B a=false,b=false; Ktag *g; Tensor t; TensorOptions o;
+  bool a=false,b=false; Ktag *g; Tensor t; TensorOptions o;
   if((g=xtag(x,0)) && (xto(x,1,o) || xten(x,1,t)) &&
      (x->n==2 || (xbool(x,2,a) && (x->n==3 || (x->n==4 && xbool(x,3,b)))))) {
    TORCH_CHECK(b ? g->a == Class::tensor : true,
@@ -1022,7 +1022,7 @@ KAPI to(K x) {
  KCATCH("to");
 }
 
-static K kinfo(K x,B b,cS e) {
+static K kinfo(K x,bool b,cS e) {
  KTRY
   auto* g=xtag(x);
   TORCH_CHECK(g, e," not implemented for ",kname(x->t));
@@ -1039,7 +1039,7 @@ KAPI info2(K x) {return kinfo(x, true,  "detail");}
 // -----------------------------------------------------------------------------------------
 // zerograd - zero gradients on tensor, vector of tensors, optimizer, sequential or model
 // forward - forward calcs on sequential module or model
-// backward - backward calcs on tensor or model(uses model loss(model output,target) )
+// kbackward - backward calcs on tensor or model(uses model loss(model output,target) )
 // -----------------------------------------------------------------------------------------
 KAPI zerograd(K x) {
  KTRY
@@ -1071,7 +1071,7 @@ KAPI forward(K x) {
  KCATCH("forward");
 }
 
-KAPI backward(K x) {
+KAPI kbackward(K x) {
  KTRY
   Ktag *g;
   TORCH_CHECK((g=xtag(x)) || (g=xtag(x,0)), "backward expects a tensor or model as first arg");
@@ -1202,7 +1202,7 @@ KAPI kdefault(K x) {
 
 KAPI ksetting(K x) {
  KTRY
-  auto &e=env(); auto &c=at::globalContext(); B b,o=torch::hasOpenMP(); J n; S s;
+  auto &e=env(); auto &c=at::globalContext(); bool b,o=torch::hasOpenMP(); J n; S s;
   if(xempty(x)) {
    K r=xD(ktn(KS,0),ktn(0,0)),*s=&kK(r)[0],*v=&kK(r)[1];
    js(s,cs("mkl"));            jk(v,kb(torch::hasMKL()));
@@ -1259,7 +1259,7 @@ KAPI config(K x) {
 // seedmap - returns map of device sym -> seed
 // kseed - k interface to query/set device seed or query/reset seed for all devices
 // -----------------------------------------------------------------------------------
-J deviceseed(torch::Device &d, B b=false,J s=0) { // d:device, b:set flag, s:seed to set
+J deviceseed(torch::Device &d, bool b=false,J s=0) { // d:device, b:set flag, s:seed to set
  torch::DeviceGuard dg(d);
  auto &g=at::globalContext().defaultGenerator(d.is_cuda() ? torch::kCUDA : torch::kCPU);
  if(b) {
@@ -1405,7 +1405,7 @@ KAPI fns(K x){
  fn(x, "state",       KFN(kstate),      1);
  fn(x, "forward",     KFN(forward),     1);
  fn(x, "zerograd",    KFN(zerograd),    1);
- fn(x, "backward",    KFN(backward),    1);
+ fn(x, "backward",    KFN(kbackward),   1);
  fn(x, "default",     KFN(kdefault),    1);
  fn(x, "setting",     KFN(ksetting),    1);
  fn(x, "config",      KFN(config),      1);

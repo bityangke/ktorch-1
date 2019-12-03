@@ -196,7 +196,7 @@ KAPI ktest(K x) {return ksub(x,"ktest()");}
 
 KAPI mixtest(K x) {return kb(xmixed(x,4));}
 
-K help(B b,cS s) {return b ? KERR(s) : (fprintf(stderr,"%s\n",s), (K)0);}
+K help(bool b,cS s) {return b ? KERR(s) : (fprintf(stderr,"%s\n",s), (K)0);}
 
 #define KHELP(cond, ...)  \
   if((cond))              \
@@ -299,8 +299,8 @@ KAPI learn(K x) {
  KCATCH("Error applying learning rate and gradient to tensor");
 }
 
-B xindex(K x,Tensor &t) {J n,*j; return xten(x,t) ? true : (xlong(x,n,j) ? t=kput(x),true : false);}
-B xindex(K x,J i,Tensor &t) { return xind(x,i) && xindex(kK(x)[i],t);}
+bool xindex(K x,Tensor &t) {J n,*j; return xten(x,t) ? true : (xlong(x,n,j) ? t=kput(x),true : false);}
+bool xindex(K x,J i,Tensor &t) { return xind(x,i) && xindex(kK(x)[i],t);}
 
 KAPI kindex(K x) {
  J d; Tensor r,t,i;

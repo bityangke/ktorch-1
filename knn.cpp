@@ -17,7 +17,7 @@
 // ----------------------------------------------------------------------------
 K kseq(const Sequential& q) {return kptr(new Kseq(q));}
 
-K seqto(Kseq* q,const TensorOptions& o,B a) {
+K seqto(Kseq* q,const TensorOptions& o,bool a) {
  auto s=torch::typeMetaToScalarType(o.dtype());
  if(o.has_device() && o.has_dtype()) q->q->to(o.device(),s,a);
  else if(o.has_device())             q->q->to(o.device(),a);
@@ -72,7 +72,7 @@ static Setting mset(S s) {
 // mkeys - initialize keys for dict/table of module state: `module`name`options`parms`buffers
 // mvals - initialize corresponding k values for state dictionary or table
 // ------------------------------------------------------------------------------------------
-static K mkeys(B b) { // b:true if including class, parms & buffers
+static K mkeys(bool b) { // b:true if including class, parms & buffers
  if(b) return statekeys();
  K x=ktn(KS,3);
  for(auto &m:env().state) {
@@ -83,7 +83,7 @@ static K mkeys(B b) { // b:true if including class, parms & buffers
  return x;
 }
 
-static K mvals(B b,J n) {
+static K mvals(bool b,J n) {
  K x=ktn(0,b ? 6 : 3);
  if(n<0) {
   if(b) kK(x)[0]=kc('m');
@@ -102,13 +102,13 @@ static K mvals(B b,J n) {
 // exarray - check positional or name-value args for long(s), return expanding array,  else error
 // exdouble - similar to exarray, but for double array
 // ----------------------------------------------------------------------------------------------------
-static B mbool(K x,J i,Cast c,Setting s) {
- B b;
+static bool mbool(K x,J i,Cast c,Setting s) {
+ bool b;
  TORCH_CHECK(xbool(x,i,b), msym(c)," ",mset(s),": expected boolean scalar, given ",kname(kK(x)[i]->t));
  return b;
 }
 
-static B mbool(const Pairs& p,Cast c) {
+static bool mbool(const Pairs& p,Cast c) {
  TORCH_CHECK(p.t==-KB, msym(c)," ",p.k,": expected boolean scalar, given ",kname(p.t));
  return p.b;
 }
@@ -180,7 +180,7 @@ template<size_t D> Exdouble<D> exdouble(const Pairs& p,Cast c) {
 // bnorm - create batchnorm module given options/set dictionary of options given module
 // --------------------------------------------------------------------------------------
 torch::nn::BatchNorm bnorm(K x,J k) {
- B a=true,t=true; F e=1e-5,m=0.1; Pairs p; J i,n=xargc(x,k,p);
+ bool a=true,t=true; F e=1e-5,m=0.1; Pairs p; J i,n=xargc(x,k,p);
  if(!((n==0 && p.n) || (n==1 && xlong(x,k,i))))
   AT_ERROR("Unrecognized arguments for batch normalization");
  while(xpair(p))
@@ -196,7 +196,7 @@ torch::nn::BatchNorm bnorm(K x,J k) {
  return torch::nn::BatchNorm(torch::nn::BatchNormOptions(i).affine(a).stateful(t).eps(e).momentum(m));
 }
 
-static void bnorm(B a,K x,const torch::nn::BatchNormImpl* m) {
+static void bnorm(bool a,K x,const torch::nn::BatchNormImpl* m) {
  torch::nn::BatchNormOptions o=m->options, d(o.features());
  OPTION(x, in, kj(o.features()));
  if(a || (o.eps()      != d.eps()))      OPTION(x, eps,       kf(o.eps()));
@@ -210,7 +210,7 @@ static void bnorm(B a,K x,const torch::nn::BatchNormImpl* m) {
 // --------------------------------------------------------------------------------------
 template<size_t D> static torch::nn::ConvOptions<D> conv(K x,J i,Cast c) {
  torch::nn::ConvOptions<D> o(0,0,0);
- B in=false,out=false,sz=false; Pairs p; J n=xargc(x,i,p);
+ bool in=false,out=false,sz=false; Pairs p; J n=xargc(x,i,p);
  for(J j=0;j<n;++j)
    switch(j) {
     case 0: o.input_channels (int64(x,i+j,c,Setting::in));        in=true; break;
@@ -247,7 +247,7 @@ template<size_t D> static torch::nn::ConvOptions<D> conv(K x,J i,Cast c) {
 
 template<size_t D,typename M>
 static M conv(K x,J k) {
- B b=true,t=false; Pairs p; size_t d; J i=-1,j=-1,g=1,n=xargc(x,k,p);
+ bool b=true,t=false; Pairs p; size_t d; J i=-1,j=-1,g=1,n=xargc(x,k,p);
  ExpandingArray<D> sz(-1),st(1),pd(0),po(0),dl(1);
  if(!((!n && p.n) || (xlong(x,k,i) && (n==1 || (xlong(x,k+1,j) && (n==2 || (n==3 && XDIM(x,k+2,D,sz))))))))
   AT_ERROR("Unrecognized arguments for conv",D,"d module");
@@ -278,7 +278,7 @@ static M conv(K x,J k) {
 }
 
 template<size_t D,typename M>
-static void conv(B a,K x,const M* m) {
+static void conv(bool a,K x,const M* m) {
  torch::nn::ConvOptions<D> o=m->options, d(o.input_channels(),o.output_channels(),o.kernel_size());
  OPTION(x, in,   kj(o.input_channels()));
  OPTION(x, out,  kj(o.output_channels()));
@@ -307,7 +307,7 @@ static F drop(S s,K x,J i) {
  return f;
 }
 
-static void drop(B a,K x,F f) {
+static void drop(bool a,K x,F f) {
  F d=torch::nn::DropoutOptions().rate();
  if(a || d != f) OPTION(x, drop, kf(f));
 }
@@ -345,7 +345,7 @@ static void embed(K x,const torch::nn::EmbeddingImpl* m) {
 // linear - parse/retrieve args, invoke functional form
 // --------------------------------------------------------------------------------------
 static torch::nn::LinearOptions linear(K x,J i,Cast c) {
- B b=true; int64_t in=nj,out=nj; Pairs p; J n=xargc(x,i,p);
+ bool b=true; int64_t in=nj,out=nj; Pairs p; J n=xargc(x,i,p);
  for(J j=0;j<n;++j) {
    switch(j) {
     case 0:  in=int64(x,i+j,c,Setting::in);   break;
@@ -366,7 +366,7 @@ static torch::nn::LinearOptions linear(K x,J i,Cast c) {
  return torch::nn::LinearOptions(in,out).with_bias(b);
 }
 
-static void linear(B a,K x,const torch::nn::LinearImpl *m) {
+static void linear(bool a,K x,const torch::nn::LinearImpl *m) {
  torch::nn::LinearOptions o=m->options, d(o.in(),o.out());
  OPTION(x, in,  kj(o.in()));
  OPTION(x, out, kj(o.out()));
@@ -392,10 +392,10 @@ KAPI klinear(K x) {
 template<typename M,typename O>
 static M rnn(S s,K x,J k) {
  auto f=torch::nn::RNNActivation::ReLU;
- B b=true,bi=false,ba=false; Pairs p; J i=-1,h=-1,l=1,n=xargc(x,k,p); F d=0.0;
+ bool b=true,bi=false,ba=false; Pairs p; J i=-1,h=-1,l=1,n=xargc(x,k,p); F d=0.0;
  if(!((n==0 && p.n) || (xlong(x,k,i) && (n==1 || (n==2 && xlong(x,k+1,h))))))
   AT_ERROR("Unrecognized arguments for ",s," module");
- B r=std::is_same<M,torch::nn::RNN>::value;
+ bool r=std::is_same<M,torch::nn::RNN>::value;
  while(xpair(p))
   switch(mset(p.k)) {
    case Setting::in:          i=plong(p); break;
@@ -414,7 +414,7 @@ static M rnn(S s,K x,J k) {
 }
 
 template<typename M,typename O>
-static void rnn(B a,K x,const M* m) {
+static void rnn(bool a,K x,const M* m) {
  O o=m->options, d(o.input_size(),o.hidden_size()); S f=rnnfn(o);
  OPTION(x, in,     kj(o.input_size()));
  OPTION(x, hidden, kj(o.hidden_size()));
@@ -431,7 +431,7 @@ static void rnn(B a,K x,const M* m) {
 // ----------------------------------------------------------------------------------
 template<size_t D> static torch::nn::MaxPoolOptions<D> maxpool(K x,J i,Cast c) {
  torch::nn::MaxPoolOptions<D> o(0);
- B sz=false,st=false; Pairs p; J n=xargc(x,i,p);
+ bool sz=false,st=false; Pairs p; J n=xargc(x,i,p);
  for(J j=0;j<n;++j) {
    switch(j) {
     case 0: o.kernel_size(exarray<D>(x,i+j,c,Setting::size));    sz=true; break;
@@ -456,7 +456,7 @@ template<size_t D> static torch::nn::MaxPoolOptions<D> maxpool(K x,J i,Cast c) {
  return o;
 }
 
-template<size_t D,typename M> static void maxpool(B a,K x,const M* m) {
+template<size_t D,typename M> static void maxpool(bool a,K x,const M* m) {
  torch::nn::MaxPoolOptions<D> o=m->options, d(o.kernel_size());
  OPTION(x, size, KEX(o.kernel_size()));
  if(a || *o.stride()   != *d.stride())   OPTION(x, stride,  KEX(o.stride()));
@@ -488,7 +488,7 @@ KAPI maxpool3d(K x) {return maxpool(x,Cast::maxpool3d);}
 // ----------------------------------------------------------------------------------
 template<size_t D> static torch::nn::AvgPoolOptions<D> avgpool(K x,J i,Cast c) {
  torch::nn::AvgPoolOptions<D> o(0);
- B sz=false,st=false; Pairs p; J n=xargc(x,i,p);
+ bool sz=false,st=false; Pairs p; J n=xargc(x,i,p);
  for(J j=0;j<n;++j) {
    switch(j) {
     case 0: o.kernel_size      (exarray<D>(x,i+j,c,Setting::size));   sz=true; break;
@@ -515,7 +515,7 @@ template<size_t D> static torch::nn::AvgPoolOptions<D> avgpool(K x,J i,Cast c) {
  return o;
 }
 
-template<size_t D,typename M> static void avgpool(B a,K x,const M* m) {
+template<size_t D,typename M> static void avgpool(bool a,K x,const M* m) {
  torch::nn::AvgPoolOptions<D> o=m->options, d(o.kernel_size());
  OPTION(x, size, KEX(o.kernel_size()));
  if(a || *o.stride()           != *d.stride())           OPTION(x, stride,   KEX(o.stride()));
@@ -547,7 +547,7 @@ KAPI avgpool3d(K x) {return avgpool(x,Cast::avgpool3d);}
 //  adaptive pooling - process args, return dictionary of options, call functional form
 // ------------------------------------------------------------------------------------
 template<size_t D,typename T> static T adapt(K x,J i,Cast c) {
- T o(0); B sz=false; Pairs p; J n=xargc(x,i,p);
+ T o(0); bool sz=false; Pairs p; J n=xargc(x,i,p);
  for(J j=0;j<n;++j) {
    switch(j) {
     case 0: o.output_size(exarray<D>(x,i+j,c,Setting::size)); sz=true; break;
@@ -597,7 +597,7 @@ KAPI adaptavg3d(K x) {return adapt(x,Cast::adaptavg3d);}
 // ----------------------------------------------------------------------------------
 template<size_t D> static FractionalMaxPoolOptions<D> fpool(K x,J i,Cast c) {
  FractionalMaxPoolOptions<D> o(0);
- B e,sz=false; Pairs p; J n=xargc(x,i,p);
+ bool e,sz=false; Pairs p; J n=xargc(x,i,p);
  for(J j=0;j<n;++j) {
    e=xempty(x,i+j);
    switch(j) {
@@ -624,7 +624,7 @@ template<size_t D> static FractionalMaxPoolOptions<D> fpool(K x,J i,Cast c) {
  return o;
 }
 
-template<size_t D,typename M> static void fpool(B a,K x,const M* m) {
+template<size_t D,typename M> static void fpool(bool a,K x,const M* m) {
  FractionalMaxPoolOptions<D> o=m->options, d(o.size());
  OPTION(x, size, KEX(o.size()));
  if(a || o.outsize().has_value())    OPTION(x, outsize, o.outsize() ? KEX(o.outsize().value()) : ktn(0,0));
@@ -637,7 +637,7 @@ template<size_t D,typename M> static void fpool(B a,K x,const M* m) {
 // ----------------------------------------------------------------------------------
 template<size_t D> static LPPoolOptions<D> lppool(K x,J i,Cast c) {
  LPPoolOptions<D> o(0,0);
- B pw=false,sz=false,st=false; Pairs p; J n=xargc(x,i,p);
+ bool pw=false,sz=false,st=false; Pairs p; J n=xargc(x,i,p);
  for(J j=0;j<n;++j) {
    switch(j) {
     case 0: o.power      (mdouble(x,i+j,  c,Setting::power));   pw=true; break;
@@ -661,7 +661,7 @@ template<size_t D> static LPPoolOptions<D> lppool(K x,J i,Cast c) {
  return o;
 }
 
-template<size_t D,typename M> static void lppool(B a,K x,const M* m) {
+template<size_t D,typename M> static void lppool(bool a,K x,const M* m) {
  LPPoolOptions<D> o=m->options, d(o.power(),o.kernel_size());
  OPTION(x, power, kf(o.power()));
  OPTION(x, size,  KEX(o.kernel_size()));
@@ -692,7 +692,7 @@ static Pad pad(K x,J i) {
  return Pad(PadOptions(v).value(s));
 }
 
-static void pad(B a,K x,const PadImpl* m) {
+static void pad(bool a,K x,const PadImpl* m) {
  auto& p=m->options.pad(); 
  OPTION(x, pad, klist(p.size(),p.data()));
  if(a || !match(PadOptions().value(),m->options.value()))
@@ -704,7 +704,7 @@ static void pad(B a,K x,const PadImpl* m) {
 // ----------------------------------------------------------------------------------
 template<size_t D,typename M> static M rpad(K x,J i,Cast c) {
  M o(0);
- B sz=false; Pairs p; J n=xargc(x,i,p);
+ bool sz=false; Pairs p; J n=xargc(x,i,p);
  for(J j=0;j<n;++j)
    switch(j) {
     case 0: o.padding(exarray<D*2>(x,i+j,c,Setting::pad)); sz=true; break;
@@ -746,7 +746,7 @@ template<typename M>
 static M soft(S s,K x,J i) {J d=nj; c10::optional<ScalarType> t; softargs(s,x,i,d,t); return M(d,t);}
 
 template<typename M>
-static void soft(B a,K x,const M *m) {
+static void soft(bool a,K x,const M *m) {
  SoftOptions o=m->options, d(o.dim());
  OPTION(x, dim, kj(o.dim()));
  if((a || o.dtype() != d.dtype()) && o.dtype())
@@ -791,7 +791,7 @@ using Ft = Tensor (*)(const Tensor&);
 
 static K noarg(cS s,Ft f, K x) {
  KTRY
-  Tensor t; B p=xten(x,t);
+  Tensor t; bool p=xten(x,t);
   return kresult(p, f(p ? t : kput(x)));
  KCATCH(s);
 }
@@ -842,7 +842,7 @@ static void arg1(Cast c,cS s,K x,J i,Scalar& v) { // check argument(s) for singl
   AT_ERROR("Dimension for gated linear unit must be given as an integer");
 }
 
-static void setting1(B a,Cast c,K x,const Scalar &w) {
+static void setting1(bool a,Cast c,K x,const Scalar &w) {
  Setting k; Scalar v; default1(c,k,v);
  if(a || !match(v,w)) dictadd(x,mset(k),kscalar(w));
 }
@@ -901,7 +901,7 @@ static void default2(Cast c,Setting& k1,Setting& k2,Scalar& v1,Scalar& v2) { //g
  }
 }
 
-static void arg2(B r,Cast c,cS s,K x,J i,B &b,Scalar& v1,Scalar& v2) {
+static void arg2(bool r,Cast c,cS s,K x,J i,bool &b,Scalar& v1,Scalar& v2) {
  // r:true for functional rrelu, b:training flag  (only used for functional rrelu)
  Pairs p; Setting e,k1,k2; J n=xargc(x,i,p); b=false; default2(c,k1,k2,v1,v2);
  if(!(n || p.n)) return;
@@ -925,10 +925,10 @@ static void arg2(B r,Cast c,cS s,K x,J i,B &b,Scalar& v1,Scalar& v2) {
 
 // version for modules without special handling for function version of rrelu()
 static void arg2(Cast c,cS s,K x,J i,Scalar& v1,Scalar& v2) {
- B b; arg2(false,c,s,x,i,b,v1,v2);
+ bool b; arg2(false,c,s,x,i,b,v1,v2);
 }
 
-static void setting2(B a,Cast c,K x,const Scalar &w1,const Scalar& w2) {
+static void setting2(bool a,Cast c,K x,const Scalar &w1,const Scalar& w2) {
  Setting k1,k2; Scalar v1,v2; default2(c,k1,k2,v1,v2);
  if(a || !match(v1,w1)) dictadd(x,mset(k1),kscalar(w1));
  if(a || !match(v2,w2)) dictadd(x,mset(k2),kscalar(w2));
@@ -938,12 +938,12 @@ using Ftss = Tensor (*)(const Tensor&, Scalar, Scalar);
 
 static K fn2(Cast c,cS s,K x,Ftss f) {
  KTRY
-  Tensor t; B b; Setting k1,k2; Scalar v1,v2;
+  Tensor t; bool b; Setting k1,k2; Scalar v1,v2;
   if(xten(x,t)) {                                                     // tensor w'out any other args
    default2(c,k1,k2,v1,v2);                                           // set defaults for scalars
    return kten(f(t,v1,v2));                                           // return tensor ptr to result
   } else if(xten(x,0,t) || xmixed(x,4)) {                             // arg(s) detected
-   B p=t.defined(), r=c==Cast::rrelu;
+   bool p=t.defined(), r=c==Cast::rrelu;
    arg2(r,c,s,x,1,b,v1,v2);                                           // check that args are valid
    if(!p) t=kput(x,0);                                                // if no tensor ptr, tensor from array
    Tensor a = r ? torch::rrelu(t,v1,v2,b) : f(t,v1,v2);               // special handling for rrelu w'train=true
@@ -965,7 +965,7 @@ KAPI kthreshold(K x) {return fn2(Cast::threshold, "threshold", x, torch::thresho
 // parameterized relu as function requires weight directly rather than module's count & initial value
 KAPI kprelu(K x) {
  KTRY
-  B p; Tensor t,w;
+  bool p; Tensor t,w;
   if(!x->t && x->n==2)
    p=xtenarg(x,t,w);
   else if(0<x->t && x->t<98 && x->n==2)
@@ -994,7 +994,7 @@ static FlattenOptions flatten(K x,J i) {
  return o.start_dim(s).end_dim(e);
 }
 
-static void flatten(B a,K x,const FlattenImpl* m) {
+static void flatten(bool a,K x,const FlattenImpl* m) {
  FlattenOptions d,o=m->options;
  if(a || d.start_dim() != o.start_dim()) OPTION(x, start, kj(o.start_dim()));
  if(a || d.end_dim()   != o.end_dim())   OPTION(x, end,   kj(o.end_dim()));
@@ -1002,7 +1002,7 @@ static void flatten(B a,K x,const FlattenImpl* m) {
 
 KAPI kflatten(K x) {
  KTRY
-  B m=false; Tensor t;
+  bool m=false; Tensor t;
   auto o=flatten((xten(x,t) || xten(x,0,t) || (m=xmixed(x,3))) ? x : nullptr, 1);
   if(t.defined())
    return kten(torch::flatten(t, o.start_dim(), o.end_dim()));
@@ -1015,7 +1015,7 @@ KAPI kflatten(K x) {
 // squeeze/unsqueeze - squeeze works with/without a dimension specified, unsqueeze requires it
 // ----------------------------------------------------------------------------------------------------
 static SqueezeOptions squeeze(K x,J i,Cast c) {
- SqueezeOptions o; Pairs p; B b; J n=xargc(x,i,p);
+ SqueezeOptions o; Pairs p; bool b; J n=xargc(x,i,p);
  if(n==1) {
   if(xbool(x,i,b))
     o.inplace(b);
@@ -1037,7 +1037,7 @@ static SqueezeOptions squeeze(K x,J i,Cast c) {
  return o;
 }
 
-static void squeeze(B a,K x,const SqueezeOptions& o) {
+static void squeeze(bool a,K x,const SqueezeOptions& o) {
  if(o.dim().has_value()) OPTION(x, dim,     kj(o.dim().value()));
  if(a || o.inplace())    OPTION(x, inplace, kb(o.inplace()));
 }
@@ -1059,7 +1059,7 @@ static SizeOptions getsize(K x,J i,Cast c) {
  return SizeOptions(v);
 }
 
-static void getsize(B a,K x,const SizeOptions& o) {
+static void getsize(bool a,K x,const SizeOptions& o) {
  OPTION(x, size, klist(o.size().size(),o.size().data()));
 }
 
@@ -1067,7 +1067,7 @@ static void getsize(B a,K x,const SizeOptions& o) {
 // mparms - set parameters/buffers in a defined module from k values in dictionary with matching names
 // mdefine - define module and add to a sequence, reading options (and sometimes parms/buffers) from k
 // ----------------------------------------------------------------------------------------------------
-void mparms(S s,Module &m,K x,B p) { // set named parms/buffers in module m from dict x, p true if parms
+void mparms(S s,Module &m,K x,bool p) { // set named parms/buffers in module m from dict x, p true if parms
  K k=kK(x)[0],v=kK(x)[1]; Tensor V; if(v->t) V=kput(v);
  for(auto &a:p ? m.named_parameters() : m.named_buffers()) {
   J i=kfind(k,a.key());
@@ -1205,7 +1205,7 @@ void mdefine(Sequential &q,K x) { // define modules from k table of options or f
 // mget - extract module options and, optionally, parameters & buffers to k array
 // mtable - extract child modules and return as k table, one row per module
 // --------------------------------------------------------------------------------------------
-void mopt(Module &g,B a,K &v,J i) { //g:generic module, a:true if all options, v:k values, i:table row
+void mopt(Module &g,bool a,K &v,J i) { //g:generic module, a:true if all options, v:k values, i:table row
  auto c=Cast::undefined;
  K x=xD(ktn(KS,0),ktn(0,0));
  if       (auto* m=g.as<torch::nn::BatchNorm>())      { c=Cast::batchnorm; bnorm(a,x,m);
@@ -1296,9 +1296,9 @@ void mopt(Module &g,B a,K &v,J i) { //g:generic module, a:true if all options, v
  else    kS(kK(v)[j])[i]=s, kK(kK(v)[j+2])[i]=x; //table, assign module,options in i'th row
 }
 
-void mget(cS s,Module &m,B a,K &v,J i) {
+void mget(cS s,Module &m,bool a,K &v,J i) {
  //s:name in sequence, m:type-erased module, a:true for all options, v:array for values, i:i'th row of table result
- B b=v->n==6;
+ bool b=v->n==6;
  mopt(m,a,v,i);
  if(i<0) {                               //fill in dictionary values[1 3 4], name,parms,buffers
   kK(v)[1+b]=ks(cs(s));
@@ -1315,7 +1315,7 @@ void mget(cS s,Module &m,B a,K &v,J i) {
  }
 }
 
-K mtable(const Sequential& q,B a,B b) {
+K mtable(const Sequential& q,bool a,bool b) {
  J i=0; K k=mkeys(b),v=mvals(b,q->size());
  for(const auto&c:q->named_children()) mget(c.key().c_str(),*c.value(),a,v,i++);
  return xT(xD(k,v));
@@ -1336,7 +1336,7 @@ static K tchild(S s,const Module& c) {
  return kget(t);
 }
 
-static K mchild(B a,J i,S s,const Sequential &q) {
+static K mchild(bool a,J i,S s,const Sequential &q) {
  if(i<0 || (unsigned)i>=q->size())
   AT_ERROR("Invalid module index: ",i);
  if(s) {
@@ -1352,7 +1352,7 @@ static K mchild(B a,J i,S s,const Sequential &q) {
  }
 }
 
-static K mchild(B a,S s1,S s2,const Sequential &q) {
+static K mchild(bool a,S s1,S s2,const Sequential &q) {
  const auto& m=q->named_children()[s1];
  if(s2) {
   return tchild(s2,*m);
@@ -1371,7 +1371,7 @@ static K mchild(B a,S s1,S s2,const Sequential &q) {
 // mstate - class,module,name,options,parms,buffers for module(s) or selected parm/buffer
 // seqforward - given sequential module and input, run forward calcs, return tensor to k
 // ------------------------------------------------------------------------------------------
-static void margs(B p,Sequential q,K x) {
+static void margs(bool p,Sequential q,K x) {
  J i=p; S s=nullptr,nm=nullptr;
  if(xsym(x,s) || xsym(x,i,s)) {
   if(xsym(x,i+1,nm)) i++;
@@ -1397,7 +1397,7 @@ static void margs(B p,Sequential q,K x) {
 
 KAPI seq(K x) {
  KTRY
-  Sequential q,u; B a=env().alloptions,p=xseq(x,0,q);
+  Sequential q,u; bool a=env().alloptions,p=xseq(x,0,q);
   if(xempty(x)) {
    return kseq(q);
   } else if(xseq(x,q) || (p && x->n==2 && xbool(x,1,a))) {
@@ -1413,7 +1413,7 @@ KAPI seq(K x) {
 }
 
 K mstate(K x) {
- B a=env().alloptions; S s1=nullptr,s2=nullptr; J i; Sequential q;
+ bool a=env().alloptions; S s1=nullptr,s2=nullptr; J i; Sequential q;
  if(xseq(x,q) || (xbool(x,1,a) && x->n==2 && xseq(x,0,q))) {
   return mtable(q,a);
  } else if(xseq(x,0,q)

@@ -31,13 +31,13 @@ K modelkeys() {
  return x;
 }
 
-K modelstate(B a,B b,Kmodel *m) {
+K modelstate(bool a,bool b,Kmodel *m) {
  return xD(modelkeys(), knk(3, mtable(m->q,a,b), lossdict(a,b,m->lc,m->l.get()), optstate(a,b,m->oc,m->o.get())));
 }
 
 // this version of modelstate called from generic state function in k-level api
 K modelstate(Ktag *g,K x) {
- B a=env().alloptions;
+ bool a=env().alloptions;
  if(x->n==1 || (x->n==2 && xbool(x,1,a)))
   return modelstate(a,true,(Kmodel*)g);
  else
@@ -58,7 +58,7 @@ KAPI modeltable(K x) {
 
 KAPI model(K x) {
  KTRY
-  B a=env().alloptions;
+  bool a=env().alloptions;
   Kseq *q=nullptr; Kloss *l=nullptr; Kopt *o=nullptr; Kmodel *m=nullptr;
   TORCH_CHECK(!x->t, "model not implemented for ",kname(x->t));
   if((m=xmodel(x)) || (x->n==2 && xbool(x,1,a) && (m=xmodel(x,0)))) {
@@ -147,7 +147,7 @@ Tensor trainbatch(Kmodel *m,TensorVector& v,int64_t w,int64_t n) {
  return r;                             // return losses
 }
 
-Tensor train(Kmodel *m,TensorVector& v,int64_t w,int64_t e,B s) {
+Tensor train(Kmodel *m,TensorVector& v,int64_t w,int64_t e,bool s) {
  auto n=fullsize(v);
  if(e) {
   TensorVector r;
@@ -164,7 +164,7 @@ Tensor train(Kmodel *m,TensorVector& v,int64_t w,int64_t e,B s) {
 
 KAPI ktrain(K x) {
  KTRY
-  Kmodel *m; TensorVector *v; B s=true; int64_t w,e=0;
+  Kmodel *m; TensorVector *v; bool s=true; int64_t w,e=0;
   TORCH_CHECK(!x->t, "train: not implemented for ",kname(x->t));
   auto a=x->n - xbool(x,x->n-1,s);
   if((m=xmodel(x,0)) && (v=xvec(x,1)) && xint64(x,2,w) && (a==3 || (a==4 && xint64(x,3,e)))) {
@@ -183,7 +183,7 @@ KAPI ktrain(K x) {
 // -------------------------------------------------------------------------------------------
 static K eval(Kmodel *m,TensorVector& v,int64_t w,int64_t a) {
  torch::NoGradGuard g;
- B b=m->q->is_training(); Tensor x;
+ bool b=m->q->is_training(); Tensor x;
  if(b) m->q->train(false);
  auto n=maxsize(v);
  if(w) {
@@ -233,7 +233,7 @@ Sequential& xseq(Ktag *g) {
 // training - query/set flag for module to perform forward calc as part of training(true) or inference(false)
 KAPI training(K x) {
  KTRY
-  B b; Ktag *g;
+  bool b; Ktag *g;
   TORCH_CHECK((g=xtag(x)) || ((g=xtag(x,0)) && x->n==2 && xbool(x,1,b)),
               "training: unrecognized arg(s), expects sequential module or model and optional flag");
   auto& q=xseq(g);

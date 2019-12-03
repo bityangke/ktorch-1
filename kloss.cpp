@@ -41,7 +41,7 @@ static Setting lset(S s) {
  AT_ERROR("Unrecognized loss setting: ",s);
 }
 
-static std::string rmsg(B b) {
+static std::string rmsg(bool b) {
  std::string s;
  for(auto&m:env().reduce)
   s += (b ? std::get<0>(m) : std::to_string(std::get<1>(m))) + ",";
@@ -61,12 +61,12 @@ static S rmap(int64_t r) {
  AT_ERROR("Unrecognized setting for loss reduction: ",r,", expecting one of ",rmsg(false));
 }
 
-static B xreduce(K x,int64_t &r) {
+static bool xreduce(K x,int64_t &r) {
  if(x->t == -KS) return r=rmap(x->s), true;
  return false;
 }
 
-static B xreduce(K x,J i,int64_t &r) {
+static bool xreduce(K x,J i,int64_t &r) {
  if(x->t == KS && -1<x->n && x->n>i)
   return r=rmap(kS(x)[i]),true;
  else
@@ -94,7 +94,7 @@ int64_t reduce(cS s,K x,J i) { // check argument(s) for sym or named pair/dict, 
 
 static K lossfunc(K a,Lf f,cS s) {
  KTRY
-  B b; Tensor x,y;
+  bool b; Tensor x,y;
   if(!a->t && (a->n==2 || a->n==3)) {
    b=xtenarg(a,x,y);
    return kresult(b, f(x,y,reduce(s,a,2)));
@@ -113,11 +113,11 @@ KAPI multilabel(K x)  {return lossfunc(x, torch::multilabel_margin_loss, "multi-
 KAPI smoothl1(K x)    {return lossfunc(x, torch::smooth_l1_loss,         "smooth l1");}
 KAPI softmargin(K x)  {return lossfunc(x, torch::soft_margin_loss,       "soft margin");}
 
-static B bcearg(K x) {return x->t==-KS || x->t==KS || xempty(x) || xdict(x);}  // true if arg is a setting (rather than wt tensor)
+static bool bcearg(K x) {return x->t==-KS || x->t==KS || xempty(x) || xdict(x);}  // true if arg is a setting (rather than wt tensor)
 
 KAPI bce(K a) {
  KTRY
-  B p=false; Tensor l,x,y,w;
+  bool p=false; Tensor l,x,y,w;
   if(!a->t && 1<a->n && a->n<5) {
    J n=(a->n==2) ? 2 : (a->n==4 ? 3 : 3-bcearg(kK(a)[2]));
    auto r=reduce("binary cross entropy",a,n);
@@ -138,7 +138,7 @@ KAPI bce(K a) {
 // wtloss - functional form for nll,cross entropy, multi-label soft margin (no c++ version yet)
 // ------------------------------------------------------------------------------------------------------
 static void wtargs(Cast c,cS s,K x,J i,Tensor& w,J& j,int64_t &r) {
- B b=c==Cast::ce || c==Cast::nll; Pairs p; J n=xargc(x,i,p); j=-100; r=reduce();
+ bool b=c==Cast::ce || c==Cast::nll; Pairs p; J n=xargc(x,i,p); j=-100; r=reduce();
  if(n && xreduce(x,i+n-1,r)) n--;
  if(n && xlong(x,i+n-1,j)) {if(b) n--; else AT_ERROR("Index to ignore not expected for ",s," loss");}
  if(n==1) {n--; if(!xten(x,i+n,w) && xlen(kK(x)[i+n])) w=kput(x,i+n);}
@@ -169,7 +169,7 @@ Tensor multilabel_soft_margin_loss(const Tensor& x,const Tensor& y,const Tensor&
 
 static K wtloss(K a,Cast c,cS s) {
  KTRY
-  B p=false; J j; int64_t r; Tensor l,x,y,w;
+  bool p=false; J j; int64_t r; Tensor l,x,y,w;
   if(a->t) {
    AT_ERROR(s," loss not implemented for ",kname(a->t));
   } else if(a->n < 2) {
@@ -196,9 +196,9 @@ KAPI multisoft(K x) {return wtloss(x, Cast::multisoft, "multi-label soft margin"
 // bcelogits - input & target, with options for reduction and class weights
 // bcelogitw - input, target & batch weights, along with options for reduction & class wts
 // ---------------------------------------------------------------------------------------
-static K bceloss(K a,B b,cS s) {  //a:args, b:true if batch wts
+static K bceloss(K a,bool b,cS s) {  //a:args, b:true if batch wts
  KTRY
-  B p=false; J i=2+b,j; int64_t r; Tensor x,y,bw,w;
+  bool p=false; J i=2+b,j; int64_t r; Tensor x,y,bw,w;
   if(a->t) {
    AT_ERROR(s," loss not implemented for ",kname(a->t));
   } else if(a->n < i) {
@@ -238,7 +238,7 @@ static void marginargs(Cast c,cS s,K x,J i,double &m,int64_t &r) {
 
 static K marginloss(K a,Cast c,cS s) {
  KTRY
-  B p=false,h=c==Cast::hinge; F m; int64_t r; Tensor l,x1,x2,y;
+  bool p=false,h=c==Cast::hinge; F m; int64_t r; Tensor l,x1,x2,y;
   if(a->t || a->n<3-h || a->n>5-h)
    AT_ERROR(s,h ? " loss expects (input;target), (input;target;margin) or (input;target;margin;reduction)"
                 : " loss expects (input1;input2;target), (input1;input2;target;margin) or (input1;input2;target;margin;reduction)");
@@ -284,7 +284,7 @@ static void multiargs(K x,J i,Scalar &pw,Scalar& m,Tensor& w,int64_t &r) {
 
 KAPI multimargin(K a) {
  KTRY
-  B b; Tensor x,y,w; Scalar p,m; int64_t r; 
+  bool b; Tensor x,y,w; Scalar p,m; int64_t r; 
   if(a->t || a->n<2 || a->n>6)
    AT_ERROR("multi-margin loss expects 2-6 args: at minimum (input;target) up to (input;target;p;margin;weight;reduction)");
   multiargs(a,2,p,m,w,r); b=xtenarg(a,x,y);
@@ -320,7 +320,7 @@ static void triargs(K x,J i,double& m,double& pw,double& e,bool& s,int64_t& r) {
 
 KAPI triplet(K a) {
  KTRY
-  B b,s; F e,m,p; Tensor x,y,z; int64_t r; 
+  bool b,s; F e,m,p; Tensor x,y,z; int64_t r; 
   if(a->t) {
    AT_ERROR("triplet margin loss not implemented for ",kname(a->t));
   } else if(a->n < 3) {
@@ -358,7 +358,7 @@ static void poissonargs(K x,J i,bool& l,bool& f,double& e,int64_t& r) {
 
 KAPI poissonloss(K a) {
  KTRY
-  B p,ln,f; F e; Tensor x,y; int64_t r; 
+  bool p,ln,f; F e; Tensor x,y; int64_t r; 
   if(a->t) {
    AT_ERROR("poisson nll loss not implemented for ",kname(a->t));
   } else if(a->n < 2) {
@@ -393,8 +393,8 @@ static void ctc1(K x,J i,int64_t& b,bool& z,int64_t& r) {
  }
 }
 
-static B ctc2(K a,J i,Tensor& x,Tensor& y,Tensor& nx,Tensor& ny,IntArrayRef& jx,IntArrayRef& jy) {
-  B p=xtenarg(a,i,x,y);
+static bool ctc2(K a,J i,Tensor& x,Tensor& y,Tensor& nx,Tensor& ny,IntArrayRef& jx,IntArrayRef& jy) {
+  bool p=xtenarg(a,i,x,y);
   if(!(xsize(a,i+2,jx) && xsize(a,i+3,jy))) { // unless both lenghts given as k arrays
     if(!xten(a,i+2,nx)) nx=kput(a,2);  // define input lengths as tensor
     if(!xten(a,i+3,ny)) ny=kput(a,3);  // define target lengths as tensor
@@ -404,7 +404,7 @@ static B ctc2(K a,J i,Tensor& x,Tensor& y,Tensor& nx,Tensor& ny,IntArrayRef& jx,
 
 KAPI ctc(K a) {
  KTRY
-  B p,z; IntArrayRef jx,jy; Tensor x,y,nx,ny; int64_t b,r; 
+  bool p,z; IntArrayRef jx,jy; Tensor x,y,nx,ny; int64_t b,r; 
   if(a->t) {
    AT_ERROR("CTC loss not implemented for ",kname(a->t));
   } else if(a->n < 4) {
@@ -445,16 +445,16 @@ static K lossinit(S s,K x,J i) {
   case Cast::cosineloss:  marginargs(c,s,x,i,m,r); a=std::make_shared<CosineEmbeddingLoss>(m,r); break;
   case Cast::margin:      marginargs(c,s,x,i,m,r); a=std::make_shared<MarginRankingLoss>(m,r); break;
 
-  case Cast::multimargin: {Scalar p,m; multiargs(x,i,p,m,w,r);  a=std::make_shared<MultiMarginLoss>(p,m,w,r); break;}
-  case Cast::triplet:     {B s;F e,p; triargs(x,i,m,p,e,s,r);   a=std::make_shared<TripletMarginLoss>(m,p,e,s,r); break;}
-  case Cast::poissonloss: {B l,f;F e; poissonargs(x,i,l,f,e,r); a=std::make_shared<PoissonNLLLoss>(l,f,e,r); break;}
-  case Cast::ctc:         {B z;int64_t b; ctc1(x,i,b,z,r);      a=std::make_shared<CTCLoss>(b,z,r); break;}
+  case Cast::multimargin: {Scalar p,m; multiargs(x,i,p,m,w,r);     a=std::make_shared<MultiMarginLoss>(p,m,w,r); break;}
+  case Cast::triplet:     {bool s;F e,p; triargs(x,i,m,p,e,s,r);   a=std::make_shared<TripletMarginLoss>(m,p,e,s,r); break;}
+  case Cast::poissonloss: {bool l,f;F e; poissonargs(x,i,l,f,e,r); a=std::make_shared<PoissonNLLLoss>(l,f,e,r); break;}
+  case Cast::ctc:         {bool z;int64_t b; ctc1(x,i,b,z,r);      a=std::make_shared<CTCLoss>(b,z,r); break;}
   default: AT_ERROR("Unrecognized loss function: ",s); break;
  }
  return kloss(c,a);
 }
 
-static K lossopt(B a,Cast c,Loss *l) {
+static K lossopt(bool a,Cast c,Loss *l) {
  K x=xD(ktn(KS,0),ktn(0,0));
  if (auto* p=dynamic_cast<BasicLoss*>(l)) {
   LossOptions d,o=p->options;
@@ -502,7 +502,7 @@ static K lossopt(B a,Cast c,Loss *l) {
  return x;
 }
  
-K lossdict(B a,B b,Cast c,Loss* l) {
+K lossdict(bool a,bool b,Cast c,Loss* l) {
  //a:true if all options, b:true if full state
  K k,v;
  if(b) {
@@ -523,7 +523,7 @@ K lossdict(B a,B b,Cast c,Loss* l) {
  
 // this version of lossdict() called from generic state() function in k-level api
 K lossdict(Ktag *g,K x) {
- B a=env().alloptions;
+ bool a=env().alloptions;
  if(x->n==1 || (x->n==2 && xbool(x,1,a)))
   return lossdict(a,true,g->c,((Kloss*)g)->l.get());
  else
@@ -531,7 +531,7 @@ K lossdict(Ktag *g,K x) {
 }
 
 static K lossfwd(Cast c,Loss *l,K a) {
- B p; Tensor r,x,y,z;
+ bool p; Tensor r,x,y,z;
  if(a->n==3) {
   p=xtenarg(a,1,x,y);
   r=l->forward(x,y);
@@ -549,7 +549,7 @@ static K lossfwd(Cast c,Loss *l,K a) {
   AT_ERROR("Unrecognized arg(s) for ",lmap(c)," forward call");
 }
 
-K lossto(Kloss* l,const TensorOptions& o,B a) {
+K lossto(Kloss* l,const TensorOptions& o,bool a) {
  auto s=torch::typeMetaToScalarType(o.dtype());
  if(o.has_device() && o.has_dtype()) l->l->to(o.device(),s,a);
  else if(o.has_device())             l->l->to(o.device(),a);
@@ -570,7 +570,7 @@ Tensor losswt(Loss *l) {
 
 KAPI loss(K x) {
  KTRY
-  S s; B a=env().alloptions; Kloss *l;
+  S s; bool a=env().alloptions; Kloss *l;
   if(xsyms(x,s) || xsym(x,0,s)) {
    return lossinit(s,x,1); //define loss from sym or (sym;option(s)..)
   } else if(xdict(x)) {    //define loss from state dictionary

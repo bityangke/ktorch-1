@@ -89,7 +89,7 @@ KAPI Trunc(K x)      {return math1(x, torch::trunc,       torch::trunc_out,     
 // ---------------------------------------------------------------------------------------------
 static K math2(K x,Ftt f,Fts fn,Gtt g,Tt m,Ts mn,cS s) {
  KTRY
-  B e,p; Scalar n; Tensor a,b,r;
+  bool e,p; Scalar n; Tensor a,b,r;
   if(2 == (((e=xempty(x,2)) || xten(x,2,r)) ? x->n-1 : xlen(x))) {
    if(xnum(x,1,n)) {
     if(!(p=xten(x,0,a)))
@@ -137,7 +137,7 @@ Tensor& Tensor::logical_xor_(const Tensor & other)
 // --------------------------------------------------------------------------------------------
 KAPI Add(K x) {
  KTRY
-  Scalar m=1; Tensor a,b,r; B s=xnum(x,1,m); I p=2;
+  Scalar m=1; Tensor a,b,r; bool s=xnum(x,1,m); I p=2;
   if(x->t) {
    AT_ERROR("add not implemented for ",kname(x->t));
   } else if(x->n<2 || x->n>4) {
@@ -171,7 +171,7 @@ KAPI Add(K x) {
 static K addc(K x,Fttts f,Gttts g,cS e) {
  KTRY
   I p=3; Scalar m=1; Tensor a,b,c,r;
-  B s=xnum(x,1,m); //s:true if scalar multiplier supplied as 2nd arg
+  bool s=xnum(x,1,m); //s:true if scalar multiplier supplied as 2nd arg
   if(x->t) {
    AT_ERROR(e, " not implemented for ",kname(x->t));
   } else if(x->n<3 || x->n>5) {
@@ -200,9 +200,9 @@ KAPI Addcdiv(K x) {return addc(x, torch::addcdiv, torch::addcdiv_out, "addcdiv")
 // cumprod,cumsum - handle multiple signatures (input;type) & (input;dim;type)
 // logsumexp - return log of summed exponentials of specified dimension of input tensor/array
 // --------------------------------------------------------------------------------------------
-static K prodsum(K x,B b,cS e) { // b:true -> prod, false -> sum
+static K prodsum(K x,bool b,cS e) { // b:true -> prod, false -> sum
  KTRY
-  B p,k=false; IntArrayRef d; Tensor r,t; c10::optional<ScalarType> s=c10::nullopt;
+  bool p,k=false; IntArrayRef d; Tensor r,t; c10::optional<ScalarType> s=c10::nullopt;
   J n=xten(x,x->n-1,r) ? x->n-1 : xlen(x); //optional output tensor at end, decrement arg count
   if(xten(x,t) || (r.defined() && n==1 && xten(x,0,t)) || !xmixed(x,4)) { // input as tensor or k array
    if(!(p=t.defined())) t=r.defined() ? kput(x,0) : kput(x);
@@ -241,9 +241,9 @@ static K prodsum(K x,B b,cS e) { // b:true -> prod, false -> sum
 KAPI Prod(K x) {return prodsum(x,true, "prod");}
 KAPI Sum(K x)  {return prodsum(x,false,"sum");}
 
-static K cprodsum(K x,B b,cS e) { // b:true -> prod, false -> sum
+static K cprodsum(K x,bool b,cS e) { // b:true -> prod, false -> sum
  KTRY
-  B p; Tensor r,t; c10::optional<ScalarType> s=c10::nullopt;
+  bool p; Tensor r,t; c10::optional<ScalarType> s=c10::nullopt;
   J d,n=xten(x,x->n-1,r) ? x->n-1 : xlen(x); //optional output tensor at end, decrement arg count
   if(x->t==KJ && x->n==2) {
    t=kput(x)[0]; d=kJ(x)[1];
@@ -266,7 +266,7 @@ KAPI Cumsum(K x)  {return cprodsum(x,false,"cumsum");}
 
 KAPI Logsumexp(K x) {
  KTRY
-  B p,k=false; Tensor r,t; J d,n=xten(x,x->n-1,r) ? x->n-1 : xlen(x);
+  bool p,k=false; Tensor r,t; J d,n=xten(x,x->n-1,r) ? x->n-1 : xlen(x);
   if(xlong(x,1,d) && (n==2 || (n==3 && xbool(x,2,k)))) {
    if(!(p=xten(x,0,t))) t=kput(x,0);
    if(r.defined())
@@ -287,7 +287,7 @@ KAPI Logsumexp(K x) {
 // --------------------------------------------------------------------------------------------
 KAPI Clamp(K x) {
  KTRY
-  B p; c10::optional<Scalar> lo,hi; Tensor t,r;
+  bool p; c10::optional<Scalar> lo,hi; Tensor t,r;
   if(x->t) {
     AT_ERROR("clamp not implemented for ",kname(x->t));
   } else if( !(xnumn(x,1,lo) && xnumn(x,2,hi)) ) {
@@ -305,7 +305,7 @@ KAPI Clamp(K x) {
 
 KAPI Lerp(K x) {
  KTRY
-  B p; J n=xlen(x); Scalar w; Tensor a,b,r;
+  bool p; J n=xlen(x); Scalar w; Tensor a,b,r;
   if(n==3 && x->t) {
    return a=kput(x), kget(torch::lerp(a[0],a[1],a[2].item()));
   } else if(xnumt(x,2,w) && (n==3 || (n==4 && xten(x,3,r)))) {
@@ -322,7 +322,7 @@ KAPI Lerp(K x) {
 
 KAPI Mvlgamma(K x) {
  KTRY
-  B p; J d; Tensor t,r;
+  bool p; J d; Tensor t,r;
   if(xlong(x,1,d) && x->n==2) {
    if(!(p=xten(x,0,t))) t=kput(x,0);
    return kresult(p,mvlgamma(t,d));
@@ -335,7 +335,7 @@ KAPI Mvlgamma(K x) {
 KAPI Pow(K x) {
  KTRY
   Scalar s; Tensor a,b,r;
-  B p,e; J m,n=((e=xempty(x,2)) || xten(x,2,r)) ? x->n-1 : xlen(x);
+  bool p,e; J m,n=((e=xempty(x,2)) || xten(x,2,r)) ? x->n-1 : xlen(x);
   if(n != 2) {             m=-1;
   } else if(xnum(x,0,s)) { m=0; if(!(p=xten(x,1,b))) b=kput(x,1);
   } else if(xnum(x,1,s)) { m=1; if(!(p=xten(x,0,a))) a=kput(x,0);
@@ -371,7 +371,7 @@ KAPI Pow(K x) {
 // ---------------------------------------------------------------------
 KAPI Dist(K x) {
  KTRY
-  B p; Scalar n=2; Tensor a,b;
+  bool p; Scalar n=2; Tensor a,b;
   if(x->t<0) {
    AT_ERROR("dist not implemented for ",kname(x->t));
   } else if(!(x->n==2 || (x->n==3 && (x->t || xnum(x,2,n))))) {
@@ -385,7 +385,7 @@ KAPI Dist(K x) {
 }
 
 KAPI Fnorm(K x) {
- B b=false; IntArrayRef d={}; Tensor r,t;
+ bool b=false; IntArrayRef d={}; Tensor r,t;
  KTRY
   if(xten(x,t)) {
    return kten(torch::frobenius_norm(t));
@@ -407,7 +407,7 @@ KAPI Fnorm(K x) {
 
 KAPI Nnorm(K x) {
  KTRY
-  B b=false; Tensor r,t;
+  bool b=false; Tensor r,t;
   if(xten(x,t)) {
    return kten(torch::nuclear_norm(t));
   } else if((xten(x,1,r) && x->n==2) || (xbool(x,1,b) && xten(x,2,r) && x->n==3)) {
@@ -422,7 +422,7 @@ KAPI Nnorm(K x) {
 }
 
 KAPI Pnorm(K x) {
- B b=false; IntArrayRef d={}; Scalar p=2; Tensor r,t;
+ bool b=false; IntArrayRef d={}; Scalar p=2; Tensor r,t;
  KTRY
   J n=xten(x,x->n-1,r) ? x->n-1 : xlen(x);
   if(xten(x,t)) {
@@ -450,9 +450,9 @@ KAPI Pnorm(K x) {
 // ----------------------------------------------------------------------------
 // std deviation & variance: same args from k, call with flag v=true if var()
 // ----------------------------------------------------------------------------
-static K variance(K x,B v) {
+static K variance(K x,bool v) {
  KTRY
-  B b,k=false,u=true; J d; Tensor r,t;
+  bool b,k=false,u=true; J d; Tensor r,t;
   if(xten(x,t)) {
    return kten(v ? torch::var(t) : torch::std(t));
   } else if(xbool(x,1,u)) {
@@ -491,7 +491,7 @@ KAPI Var(K x) {return variance(x,true);}
 // ----------------------------------------------------------------------------------------------
 KAPI Mean(K x) {
  KTRY
-  B p,k=false; IntArrayRef d; Tensor r,t; c10::optional<ScalarType> s=c10::nullopt;
+  bool p,k=false; IntArrayRef d; Tensor r,t; c10::optional<ScalarType> s=c10::nullopt;
   J n=xten(x,x->n-1,r) ? x->n-1 : xlen(x); //optional output tensor at end, decrement arg count
   if(xten(x,t) || (r.defined() && n==1 && xten(x,0,t)) || !xmixed(x,4)) { // input as tensor or k array
    if(!(p=t.defined())) t=r.defined() ? kput(x,0) : kput(x);
@@ -522,9 +522,9 @@ KAPI Mean(K x) {
  KCATCH("mean");
 }
 
-static K kmed(K x,B m,cS e) {  //m-true if median, else mode
+static K kmed(K x,bool m,cS e) {  //m-true if median, else mode
  KTRY
-  B p,k=false; Tensor t,v,i; J d=-1,n=xtenpair(x,x->n-1,v,i) ? x->n-1 : xlen(x);
+  bool p,k=false; Tensor t,v,i; J d=-1,n=xtenpair(x,x->n-1,v,i) ? x->n-1 : xlen(x);
   if(xten(x,t) || (v.defined() && n==1 && xten(x,0,t)) || !xmixed(x,4)) { // input as tensor or k array
    if(!(p=t.defined())) t=v.defined() ? kput(x,0) : kput(x);
    if(v.defined())
@@ -555,7 +555,7 @@ KAPI   Mode(K x) {return kmed(x, false, "mode");}
 // ----------------------------------------------------------------------------------------
 static K compare2(K x,Ftt f,Fts fn,Gtt g,Gts gn,Tt m,Ts mn,cS s) {
  KTRY
-  B p,e=xempty(x,2); Scalar n; Tensor a,b,r;
+  bool p,e=xempty(x,2); Scalar n; Tensor a,b,r;
   if(2 == ((e || xten(x,2,r)) ? x->n-1 : xlen(x))) {
    if(xnum(x,1,n)) {
     if(!(p=xten(x,0,a))) a=kput(x,0);
@@ -588,7 +588,7 @@ KAPI Ne(K x)  {return compare2(x, torch::ne, torch::ne, torch::ne_out, torch::ne
 // comparison functions that return single boolean if arrays are equal or approx. equal
 // -------------------------------------------------------------------------------------------
 KAPI Allclose(K x) {
- B na=false; F rt=1e-05,at=1e-08; Tensor a,b;
+ bool na=false; F rt=1e-05,at=1e-08; Tensor a,b;
  KTRY
   if(x->t)
    AT_ERROR("allclose not implemented for single ",kname(x->t));
@@ -621,7 +621,7 @@ KAPI Equal(K x) {
 // ----------------------------------------------------------------------------------------------
 static K special(K x, I m, cS e) {
  KTRY
-  Tensor r,t; B b=xten(x,t); if(!b) t=kput(x);
+  Tensor r,t; bool b=xten(x,t); if(!b) t=kput(x);
   switch(m) {
    case 1:  r = t.is_floating_point() ? ((t==t) == (t.abs()!=wf)) : torch::ones_like(t,torch::dtype(torch::kBool)); break;
    case 2:  r = t.is_floating_point() ? t.abs()==wf               : torch::ones_like(t,torch::dtype(torch::kBool)); break;
@@ -655,7 +655,7 @@ static void minmaxerr(I m,cS e) {
 }
 
 static K minmax1(K x,I m,cS e) {
- B p; Tensor r,t;
+ bool p; Tensor r,t;
  if(!(p=xten(x,t))) t=kput(x);
  switch(m) {
   case 0: r=torch::min(t); break;
@@ -668,7 +668,7 @@ static K minmax1(K x,I m,cS e) {
 }
 
 static K minmax2(K x,I m,Tensor &r,cS e) {
- Tensor a,b; B o=r.defined(),p=xtenarg(x,a,b);
+ Tensor a,b; bool o=r.defined(),p=xtenarg(x,a,b);
  switch(m) {
   case 0: if(o) torch::min_out(r,a,b); else r=torch::min(a,b); break;
   case 1: if(o) torch::max_out(r,a,b); else r=torch::max(a,b); break;
@@ -677,8 +677,8 @@ static K minmax2(K x,I m,Tensor &r,cS e) {
  return o ? (K)0 : kresult(p,r);
 }
 
-static K minmaxdim(K x,I m,J d,B k,Tensor &v,Tensor &i,cS e) {
- B p,o=v.defined(); Tensor t;
+static K minmaxdim(K x,I m,J d,bool k,Tensor &v,Tensor &i,cS e) {
+ bool p,o=v.defined(); Tensor t;
  if(!(p=xten(x,0,t))) t=kput(x,0);
  switch(m) {
   case 0: if(o) torch::min_out(v,i,t,d,k);  else std::tie(v,i)=torch::min(t,d,k); break;
@@ -694,7 +694,7 @@ static K minmaxdim(K x,I m,J d,B k,Tensor &v,Tensor &i,cS e) {
  else         return kresult(p,v);
 }
 
-static J minmaxout(K x,I m,B b,Tensor& v,Tensor& i) {
+static J minmaxout(K x,I m,bool b,Tensor& v,Tensor& i) {
  if(!x->t && x->n>2 && (m==0 || m==1) && ((b && xtenpair(x,x->n-1,v,i)) || (!b && xten(x,x->n-1,v))))
   return x->n-1;
  else
@@ -703,7 +703,7 @@ static J minmaxout(K x,I m,B b,Tensor& v,Tensor& i) {
 
 static K minmax(K x,I m,cS e) {
  KTRY
-  B k=false; J d; Tensor v,i; B b=xlong(x,1,d); J n=minmaxout(x,m,b,v,i);
+  bool k=false; J d; Tensor v,i; bool b=xlong(x,1,d); J n=minmaxout(x,m,b,v,i);
   if(b && (n==2 || (n==3 && xbool(x,2,k))))
    return minmaxdim(x,m,d,k,v,i,e);  // (input;dim) or (input;dim;keepdim)
   else if(n==2)                      // (input a;input b), 
@@ -728,9 +728,9 @@ KAPI Max_values(K x) {return minmax(x, 5, "max_values");}
 // topk - largest/smallest k values by optional dimension & sort flag, return values & indices
 // kthvalue - return the kth smallest by optional dimension, return values,indices
 // ----------------------------------------------------------------------------------------------
-static K ksort(K x,B a,cS e) {  //x:arg(s), a:flag for argsort() call (only return indices),e:errmsg
+static K ksort(K x,bool a,cS e) {  //x:arg(s), a:flag for argsort() call (only return indices),e:errmsg
  KTRY
-  B b=false,p; J d=-1,n=1; Tensor t,v,i;
+  bool b=false,p; J d=-1,n=1; Tensor t,v,i;
   if(x->t<0)
    AT_ERROR("sort not implemented for ",kname(x->t));
   n=xtenpair(x,x->n-1,v,i) ? x->n-1 : x->n;  // check for pair of output tensors at end
@@ -760,7 +760,7 @@ KAPI Argsort(K x) {return ksort(x, true,  "argsort");}
 
 KAPI Topk(K x) {
  KTRY
-  B l=true,s=true,p; J k,d=-1,n; Tensor t,v,i;
+  bool l=true,s=true,p; J k,d=-1,n; Tensor t,v,i;
   if(x->t)
    AT_ERROR("topk not implemented for single ",kname(x->t));
   n=xtenpair(x,x->n-1,v,i) ? x->n-1 : x->n;
@@ -787,7 +787,7 @@ KAPI Topk(K x) {
 
 KAPI Kthvalue(K x) {
  KTRY
-  B b=false,p; J k,d=-1,n; Tensor t,v,i;
+  bool b=false,p; J k,d=-1,n; Tensor t,v,i;
   if(x->t)
    AT_ERROR("kth value not implemented for ",kname(x->t));
   n=xtenpair(x,x->n-1,v,i) ? x->n-1 : x->n;
@@ -816,7 +816,7 @@ KAPI Kthvalue(K x) {
 // -------------------------------------------------------------------------
 static K kwindow(K x,I m,cS e) { // m: 0-bartlett, 1-blackman, 2-hann, 3-hamming
  KTRY
-  B p; J w; F a,b; Tensor t; TensorOptions o;
+  bool p; J w; F a,b; Tensor t; TensorOptions o;
   J n=xopt(x,x->n-1,o) ? x->n-1 : xlen(x);
   if(xlong(x,w) ||
     (n==1 && xlong(x,0,w))||
@@ -860,7 +860,7 @@ KAPI  Hamming(K x) {return kwindow(x, 3, "hamming");}
 // ---------------------------------------------------------------------------------
 static K kfft(K x,I m,cS e) {
  KTRY
-  B p,b1=false,b2=true; J d,n=xlen(x); IntArrayRef s; Tensor r,t;  // b1-normalized, b2-onesided
+  bool p,b1=false,b2=true; J d,n=xlen(x); IntArrayRef s; Tensor r,t;  // b1-normalized, b2-onesided
   if(xlong(x,1,d) &&
     (n==2 ||
     (n==3 && xbool(x,2,b1)) ||
@@ -893,7 +893,7 @@ KAPI  Ifft(K x) {return kfft(x, 1, "ifft");}
 KAPI  Rfft(K x) {return kfft(x, 2, "rfft");}
 KAPI Irfft(K x) {return kfft(x, 3, "irfft");}
 /*
-Tensor stft(const Tensor & self,J n_fft,J hop_length,J win_length,const Tensor& window={},B normalized=false,B onesided=true);
+Tensor stft(const Tensor & self,J n_fft,J hop_length,J win_length,const Tensor& window={},bool normalized=false,bool onesided=true);
 torch.stft(input, n_fft, hop_length=None, win_length=None, window=None, center=True, pad_mode='reflect', normalized=False, onesided=True)
       stft(input, n_fft, hop_length, win_length, window, normalized, onesided)
 */
@@ -913,7 +913,7 @@ chain_matmul(*matrices)[SOURCE]
 // -------------------------------------------------------------------------------------
 KAPI Bincount(K x) {
  KTRY
-  B p=false; J m=0; Tensor t,w,r;
+  bool p=false; J m=0; Tensor t,w,r;
   if(x->t<0) {
    AT_ERROR("bincount not implemented for single ",kname(x->t));
   } else if(x->t) {
@@ -968,7 +968,7 @@ KAPI Trace(K x) {
 static K diagfns(K x,Fti f,Gti g,Tn m,cS s) {
  KTRY
   TORCH_CHECK(x->t>=0, s,": not implemented for ",kname(x->t));
-  B p,e=false; int64_t d=0; Tensor r,t;
+  bool p,e=false; int64_t d=0; Tensor r,t;
   if((x->n==2 && (xint64(x,1,d) ||  xten(x,1,r) || (e=xempty(x,1)))) ||  // (input;diag) or (input;output tensor)
      (x->n==3 &&  xint64(x,1,d) && (xten(x,2,r) || (e=xempty(x,2))))) {  // (input;diag;output tensor)
    if(!(p=xten(x,0,t))) t=kput(x,0);
@@ -1001,7 +1001,7 @@ KAPI Triu(K x)     {return diagfns(x, torch::triu,     torch::triu_out,  &Tensor
 
 KAPI Diagonal(K x) {  //extract diagonal elements, optional offset & dimensions i,j
  KTRY
-  B p; J o=0,i=0,j=1; Tensor t;
+  bool p; J o=0,i=0,j=1; Tensor t;
   if(x->t) {
    AT_ERROR("diagonal not implemented for ",kname(x->t));
   } else if(xlong(x,1,o) && (x->n==2 || (xlong(x,2,i) && (x->n==3 || (x->n==4 && xlong(x,3,j)))))) {
@@ -1045,7 +1045,7 @@ KAPI Cross(K x) {
   J d=-1; Tensor r,a,b;
   if( !(!x->t && (x->n==2 || (xlong(x,2,d) && (x->n==3 || (x->n==4 && xten(x,3,r)))))) )
    AT_ERROR("Unexpected arg(s) for cross, expected (tensor/array; tensor/array; optional dim; optional output tensor)");
-  B p=xtenarg(x,a,b);
+  bool p=xtenarg(x,a,b);
   if(r.defined()) {
    return torch::cross_out(r,a,b,d), (K)0;
   } else {
@@ -1056,7 +1056,7 @@ KAPI Cross(K x) {
 
 KAPI Renorm(K x) {
  KTRY
-  B b; J d; Scalar p,m; Tensor r,t;
+  bool b; J d; Scalar p,m; Tensor r,t;
   if(!(xnum(x,1,p) && xlong(x,2,d) && xnum(x,3,m) && (x->n==4 || (x->n==5 && xten(x,4,r)))))
    AT_ERROR("Unexpected arg(s) for renorm, expected (tensor/array; power; dim; maxnorm; optional output tensor)");
   if(!(b=xten(x,0,t))) t=kput(x,0);
@@ -1070,7 +1070,7 @@ KAPI Renorm(K x) {
 
 KAPI Roll(K x) {
  KTRY
-  B p; IntArrayRef s,d; Tensor t;
+  bool p; IntArrayRef s,d; Tensor t;
   if(xsize(x,1,s) && (x->n==2 || (xsize(x,2,d) && x->n==3))) {
    if(!(p=xten(x,0,t))) t=kput(x,0);
    return kresult(p, x->n==2 ? torch::roll(t,s) : torch::roll(t,s,d));
@@ -1091,7 +1091,7 @@ KAPI Tensordot(K x) {
     AT_ERROR("tensordot: non-zero dimension specified for scalars");
    return kget(torch::tensordot(a[0],a[1],i,j));
   } else if(x->n==2 || (x->n==3 && xlong(x,2,d)) || (x->n==4 && xsize(x,2,i) && xsize(x,3,j))) {
-   B p=xtenarg(x,a,b);
+   bool p=xtenarg(x,a,b);
    if(x->n<4) {
     Ksize s1,s2;
     for(I k=0;k<d;++k) s1.push_back(k-d), s2.push_back(k);
@@ -1105,7 +1105,7 @@ KAPI Tensordot(K x) {
  KCATCH("tensordot");
 }
 
-static K uniqres(B p,B bi,B bc,Tensor &u,Tensor &i, Tensor &c) {
+static K uniqres(bool p,bool bi,bool bc,Tensor &u,Tensor &i, Tensor &c) {
  if(bi && bc)return kten3(p,u,i,c);
  else if(bi) return ktenpair(p,u,i);
  else if(bc) return ktenpair(p,u,c);
@@ -1114,7 +1114,7 @@ static K uniqres(B p,B bi,B bc,Tensor &u,Tensor &i, Tensor &c) {
 
 KAPI Unique(K x) {
  KTRY
-  B p,bs=true,bi=false,bc=false; J d=nj,n=xlen(x); Tensor t,u,i,c;
+  bool p,bs=true,bi=false,bc=false; J d=nj,n=xlen(x); Tensor t,u,i,c;
   if(xten(x,t)) {
    p=true;
   } else if(!xmixed(x,5)) {
@@ -1136,7 +1136,7 @@ KAPI Unique(K x) {
 
 KAPI Uniquec(K x) {
  KTRY
-  B p,bi=false,bc=false; J n=xlen(x); int64_t d=nj; Tensor t,u,i,c;
+  bool p,bi=false,bc=false; J n=xlen(x); int64_t d=nj; Tensor t,u,i,c;
   if(xten(x,t)) {
    p=true;
   } else if(!xmixed(x,4)) {
@@ -1194,9 +1194,9 @@ KAPI    Addr(K x) {return kaddmm(x, torch::addr,    torch::addr_out,    "addr");
 // lu_solve - batch LU solve of the linear system Ax = bAx=b
 // lu_unpack - unpack data & pivots from batched LU factorization of tensor
 // ------------------------------------------------------------------------------------
-KAPI lufact(K x,B y,cS e) {  // x:args, y:true if info required, e:error label
+KAPI lufact(K x,bool y,cS e) {  // x:args, y:true if info required, e:error label
  KTRY
-  B p,b=true; Tensor t,u,v,i,U,V,I; // p-true if ptr(s) in/out, else arrays, b:pivot flag
+  bool p,b=true; Tensor t,u,v,i,U,V,I; // p-true if ptr(s) in/out, else arrays, b:pivot flag
   J n=((!y && xtenpair(x,x->n-1,u,v)) || (y && xten3(x,x->n-1,u,v,i))) ? x->n-1 : xlen(x);
   if(xten(x,t) || (u.defined() && n==1 && xten(x,0,t)) || !xmixed(x,4)) { // input as tensor or k array
    if(!(p=t.defined())) t=u.defined() ? kput(x,0) : kput(x);
@@ -1238,12 +1238,12 @@ KAPI Lu_solve(K x) {
 
 KAPI Lu_unpack(K x) {
  KTRY
-  B b1=true,b2=true; Tensor a,b,l,u,v;
+  bool b1=true,b2=true; Tensor a,b,l,u,v;
   if(!(x->n==2 || (xbool(x,2,b1) && (x->n==3 || (xbool(x,3,b2) && x->n==4))))) {
    AT_ERROR("lu_unpack expects 2 input arrays/tensors and 2 optional boolean flags");
    return KERR("lu_unpack");
   }
-  B p=xtenarg(x,a,b); J n=a.size(-1);
+  bool p=xtenarg(x,a,b); J n=a.size(-1);
   K r=ktn(0,3);
   if(b1) {
    auto t0=torch::tensor({0.0}).type_as(a);
@@ -1286,7 +1286,7 @@ KAPI Lu_unpack(K x) {
 // ------------------------------------------------------------------------------------------
 KAPI Matrix_power(K x) {
  KTRY
-  B p; J n; Tensor r,t;
+  bool p; J n; Tensor r,t;
   if(xlong(x,1,n)) {
    if(!(p=xten(x,0,t))) t=kput(x,0);
    return kresult(p, torch::matrix_power(t,n));
@@ -1298,7 +1298,7 @@ KAPI Matrix_power(K x) {
 
 KAPI Matrix_rank(K x) {
  KTRY
-  B s=false,p; F f; Tensor r,t;
+  bool s=false,p; F f; Tensor r,t;
   if(xten(x,t)) {
    return kten(torch::matrix_rank(t));
   } else if(xbool(x,1,s) && x->n==2) {
@@ -1318,7 +1318,7 @@ KAPI Matrix_rank(K x) {
 // ----------------------------------------------------------------------------------------
 static K kdet(K x,I m,cS e) { //x:arg, m:mode 0-det,1-logdet,2-slogdet, e:errmsg
  KTRY
-  B p; Tensor a,d,s;
+  bool p; Tensor a,d,s;
   if(!(p=xten(x,a))) a=kput(x);
   if(m==2) {
    std::tie(s,d)=torch::slogdet(a);
@@ -1338,7 +1338,7 @@ KAPI Slogdet(K x) {return kdet(x, 2, "sign & log determinant");}
 // --------------------------------------------------------------------------------------------------
 static K blas2(K x, Ftt f, Gtt g, cS e) {
  KTRY
-  B p; Tensor a,b,r;
+  bool p; Tensor a,b,r;
   if(!x->t && (x->n==2 || (x->n==3 && xten(x,2,r)))) {
    p=xtenarg(x,a,b);
    if(r.defined())
@@ -1384,7 +1384,7 @@ KAPI Orgqr(K x)  {return blas2(x, torch::orgqr,   torch::orgqr_out,  "orthorgana
 // --------------------------------------------------------------------------------------
 KAPI Pinverse(K x) {
  KTRY
-  B p; F f=1e-15; Tensor t,r;
+  bool p; F f=1e-15; Tensor t,r;
   if (xten(x,t))
    return kten(torch::pinverse(t));
   else if (xdouble(x,1,f))
@@ -1396,7 +1396,7 @@ KAPI Pinverse(K x) {
 
 KAPI Qr(K x) {
  KTRY
-  B b=true; Tensor t,q,r;  //flag true for reduced, false for complete QR decomposition
+  bool b=true; Tensor t,q,r;  //flag true for reduced, false for complete QR decomposition
   if(x->t) {
    AT_ERROR("QR factorization not supported for ",kname(x->t));
   } else if(xtenpair(x,x->n-1,q,r)) {
@@ -1407,7 +1407,7 @@ KAPI Qr(K x) {
      AT_ERROR("AR factorization: output pair detected, but args not of form: (matrix/tensor;output pair) or (matrix/tensor;flag;output pair)");
     }
   } else {
-   B p;
+   bool p;
    if(xbool(x,1,b) && x->n==2) {
     if(!(p=xten(x,0,t))) t=kput(x,0);
    } else {
@@ -1433,7 +1433,7 @@ KAPI Geqrf(K x) {
 
 KAPI Ormqr(K x) {
  KTRY
-  B l=true,t=false; Tensor a,b,c,r; J p=3,n=xten(x,x->n-1,r) ? x->n-1 : xlen(x);
+  bool l=true,t=false; Tensor a,b,c,r; J p=3,n=xten(x,x->n-1,r) ? x->n-1 : xlen(x);
   if(n==3 || (xbool(x,3,l) && (n==4 || (n==5 && xbool(x,4,t))))) {
    if(!xten(x,0,a)) a=kput(x,0), p-=1;
    if(!xten(x,1,b)) b=kput(x,1), p-=1;
@@ -1450,7 +1450,7 @@ KAPI Ormqr(K x) {
 
 KAPI Svd(K x) {
  KTRY
-  B p=true,b1=true,b2=true; Tensor t,u,s,v; J n=xten3(x,x->n-1,u,s,v) ? x->n-1 : xlen(x);
+  bool p=true,b1=true,b2=true; Tensor t,u,s,v; J n=xten3(x,x->n-1,u,s,v) ? x->n-1 : xlen(x);
   if(xten(x,t) || (n==1 && u.defined()) || (xbool(x,1,b1) && (n==2 || (n==3 && xbool(x,2,b2))))) {
    if(!t.defined() && !(p=xten(x,0,t))) t=kput(x,0);
   } else if(!xmixed(x,2)) {
@@ -1472,7 +1472,7 @@ KAPI Svd(K x) {
 // --------------------------------------------------------------------------------------
 static K gls(K x,Ftuple2 f,Gtuple2 g,cS e) {
  KTRY
-  B p; Tensor a,b,c,d;
+  bool p; Tensor a,b,c,d;
   if(x->n==2)
    return p=xtenarg(x,b,a), std::tie(c,d)=f(b,a), ktenpair(p,c,d);
   else if(x->n==3 && xtenpair(x,2,c,d))
@@ -1487,7 +1487,7 @@ KAPI Solve(K x) {return gls(x, torch::solve, torch::solve_out, "solve(gesv)");}
 
 KAPI Triangular_solve(K x) {
  KTRY
-  B p,u=true,t=false,g=false; Tensor a,b,c,d;  //u-upper triangle, t-transpose, a=unitriangular
+  bool p,u=true,t=false,g=false; Tensor a,b,c,d;  //u-upper triangle, t-transpose, a=unitriangular
   J n=xtenpair(x,x->n-1,c,d) ? x->n-1 : xlen(x);
   if(n==2 || (xbool(x,2,u) && (n==3 || (xbool(x,3,t) && (n==4 || (xbool(x,4,g) && n==5)))))) {
    p=xtenarg(x,b,a);
@@ -1506,7 +1506,7 @@ KAPI Triangular_solve(K x) {
 // cholesky_inverse - inverse of symmetric positive-definite matrix using cholesky factorization
 // cholesky_solve - solves equations w'positive semidefinite matrix and cholesky factors
 // ---------------------------------------------------------------------------------------------
-static K chol(K x,Ftb f,Gtb g,B b,cS e) {
+static K chol(K x,Ftb f,Gtb g,bool b,cS e) {
  KTRY
   Tensor r,t;
   if(xten(x,t)) {
@@ -1527,7 +1527,7 @@ KAPI Choleskyinverse(K x) {return chol(x, torch::cholesky_inverse, torch::choles
 
 KAPI Choleskysolve(K x) {
  KTRY
-  B p,u=false; J n=xlen(x); Tensor a,b,r;
+  bool p,u=false; J n=xlen(x); Tensor a,b,r;
   if(n==2 || (n==3 && (xbool(x,2,u) || xten(x,2,r))) || (n==4 && xbool(x,2,u) && xten(x,3,r))) {
    p=xtenpair(x,a,b);
    if(r.defined())
@@ -1545,7 +1545,7 @@ KAPI Choleskysolve(K x) {
 // -------------------------------------------------------------------------
 KAPI Eig(K x) {
  KTRY
- B b=false,p; Tensor a,e,v;
+ bool b=false,p; Tensor a,e,v;
  if(xten(x,a)) {
   p=true;
  } else if((x->n==2 && (xbool(x,1,b) || xtenpair(x,1,e,v))) ||
@@ -1565,7 +1565,7 @@ KAPI Eig(K x) {
 
 KAPI Symeig(K x) {
  KTRY
- B b=false,u=true,p; Tensor a,e,v;
+ bool b=false,u=true,p; Tensor a,e,v;
  if(xten(x,a)) {
   p=true;
  } else if((x->n==2 && (xbool(x,1,b) ||                  xtenpair(x,1,e,v))) ||
@@ -1652,7 +1652,7 @@ KAPI Uniform(K x)     {return kprob(x, Prob::uniform);}
 // -------------------------------------------------------------------------------------
 KAPI Bernoulli(K x) {
  KTRY
-  B p=false; F f; Tensor a,b;
+  bool p=false; F f; Tensor a,b;
   if(x->t || (p=xten(x,a))) {           // simple list or single tensor
    return kresult(p, torch::bernoulli(p ? a : kput(x)));
   } else if(xnum(x,1,f)) {              // (input;prob;..)

@@ -33,7 +33,7 @@ using Tt = Tensor& (Tensor::*)(const Tensor&) const;
 // -----------------------------------------------------------------------------------------
 // point-wise & other math fns, returning new tensor, operating in place or -> output tensor
 // -----------------------------------------------------------------------------------------
-static K math1(K x,Ft f,Gt g,Tm m,cS s) {
+static K math1(K x,Ft f,Gt g,Tm m,const char* s) {
  KTRY
   Tensor t,r;
   if(xten(x,t)) {                                     // operate on tensor, return new tensor
@@ -87,7 +87,7 @@ KAPI Trunc(K x)      {return math1(x, torch::trunc,       torch::trunc_out,     
 // ---------------------------------------------------------------------------------------------
 // point-wise functions with arg of (input1;input2;optional output tensor), input2 may be scalar
 // ---------------------------------------------------------------------------------------------
-static K math2(K x,Ftt f,Fts fn,Gtt g,Tt m,Ts mn,cS s) {
+static K math2(K x,Ftt f,Fts fn,Gtt g,Tt m,Ts mn,const char* s) {
  KTRY
   bool e,p; Scalar n; Tensor a,b,r;
   if(2 == (((e=xempty(x,2)) || xten(x,2,r)) ? x->n-1 : xlen(x))) {
@@ -168,7 +168,7 @@ KAPI Add(K x) {
  KCATCH("add");
 }
 
-static K addc(K x,Fttts f,Gttts g,cS e) {
+static K addc(K x,Fttts f,Gttts g,const char* e) {
  KTRY
   I p=3; Scalar m=1; Tensor a,b,c,r;
   bool s=xnum(x,1,m); //s:true if scalar multiplier supplied as 2nd arg
@@ -200,7 +200,7 @@ KAPI Addcdiv(K x) {return addc(x, torch::addcdiv, torch::addcdiv_out, "addcdiv")
 // cumprod,cumsum - handle multiple signatures (input;type) & (input;dim;type)
 // logsumexp - return log of summed exponentials of specified dimension of input tensor/array
 // --------------------------------------------------------------------------------------------
-static K prodsum(K x,bool b,cS e) { // b:true -> prod, false -> sum
+static K prodsum(K x,bool b,const char* e) { // b:true -> prod, false -> sum
  KTRY
   bool p,k=false; IntArrayRef d; Tensor r,t; c10::optional<ScalarType> s=c10::nullopt;
   J n=xten(x,x->n-1,r) ? x->n-1 : xlen(x); //optional output tensor at end, decrement arg count
@@ -241,7 +241,7 @@ static K prodsum(K x,bool b,cS e) { // b:true -> prod, false -> sum
 KAPI Prod(K x) {return prodsum(x,true, "prod");}
 KAPI Sum(K x)  {return prodsum(x,false,"sum");}
 
-static K cprodsum(K x,bool b,cS e) { // b:true -> prod, false -> sum
+static K cprodsum(K x,bool b,const char* e) { // b:true -> prod, false -> sum
  KTRY
   bool p; Tensor r,t; c10::optional<ScalarType> s=c10::nullopt;
   J d,n=xten(x,x->n-1,r) ? x->n-1 : xlen(x); //optional output tensor at end, decrement arg count
@@ -522,7 +522,7 @@ KAPI Mean(K x) {
  KCATCH("mean");
 }
 
-static K kmed(K x,bool m,cS e) {  //m-true if median, else mode
+static K kmed(K x,bool m,const char* e) {  //m-true if median, else mode
  KTRY
   bool p,k=false; Tensor t,v,i; J d=-1,n=xtenpair(x,x->n-1,v,i) ? x->n-1 : xlen(x);
   if(xten(x,t) || (v.defined() && n==1 && xten(x,0,t)) || !xmixed(x,4)) { // input as tensor or k array
@@ -553,7 +553,7 @@ KAPI   Mode(K x) {return kmed(x, false, "mode");}
 // comparison fns with arg of (input1;input2;optional output tensor), input2 may be scalar
 // if output tensor is empty, e.g. ge(t;0;[]), operates in-place, like t.ge_(0)
 // ----------------------------------------------------------------------------------------
-static K compare2(K x,Ftt f,Fts fn,Gtt g,Gts gn,Tt m,Ts mn,cS s) {
+static K compare2(K x,Ftt f,Fts fn,Gtt g,Gts gn,Tt m,Ts mn,const char* s) {
  KTRY
   bool p,e=xempty(x,2); Scalar n; Tensor a,b,r;
   if(2 == ((e || xten(x,2,r)) ? x->n-1 : xlen(x))) {
@@ -619,7 +619,7 @@ KAPI Equal(K x) {
 // ----------------------------------------------------------------------------------------------
 // comparison functions that check for special values (nan, +/- inf) on floating point tensors
 // ----------------------------------------------------------------------------------------------
-static K special(K x, I m, cS e) {
+static K special(K x, I m, const char* e) {
  KTRY
   Tensor r,t; bool b=xten(x,t); if(!b) t=kput(x);
   switch(m) {
@@ -643,7 +643,7 @@ KAPI Isnan(K x)    {return special(x, 3, "Check for NaN");}
 // minmaxout - given mode and arg(s), check for output tensor or pair, return remaining arg count
 // minmax - main function to evaluate argument pattern and call relevant min/max routine
 // ------------------------------------------------------------------------------------------------
-static void minmaxerr(I m,cS e) {
+static void minmaxerr(I m,const char* e) {
  if(m==0 || m==1) {
   AT_ERROR(e," expects input array/tensor a, or a pair a,b, or input w'dim d and optional keepdim flag k, output val v,ind i:\n"
              "a, (a;b), (a;b;v), (a;d), (a;d;k), (a;d;(v;i)) or (a;d;k;(v;i))");
@@ -654,7 +654,7 @@ static void minmaxerr(I m,cS e) {
  }
 }
 
-static K minmax1(K x,I m,cS e) {
+static K minmax1(K x,I m,const char* e) {
  bool p; Tensor r,t;
  if(!(p=xten(x,t))) t=kput(x);
  switch(m) {
@@ -667,7 +667,7 @@ static K minmax1(K x,I m,cS e) {
  return kresult(p,r);
 }
 
-static K minmax2(K x,I m,Tensor &r,cS e) {
+static K minmax2(K x,I m,Tensor &r,const char* e) {
  Tensor a,b; bool o=r.defined(),p=xtenarg(x,a,b);
  switch(m) {
   case 0: if(o) torch::min_out(r,a,b); else r=torch::min(a,b); break;
@@ -677,7 +677,7 @@ static K minmax2(K x,I m,Tensor &r,cS e) {
  return o ? (K)0 : kresult(p,r);
 }
 
-static K minmaxdim(K x,I m,J d,bool k,Tensor &v,Tensor &i,cS e) {
+static K minmaxdim(K x,I m,J d,bool k,Tensor &v,Tensor &i,const char* e) {
  bool p,o=v.defined(); Tensor t;
  if(!(p=xten(x,0,t))) t=kput(x,0);
  switch(m) {
@@ -701,7 +701,7 @@ static J minmaxout(K x,I m,bool b,Tensor& v,Tensor& i) {
   return xlen(x);
 }
 
-static K minmax(K x,I m,cS e) {
+static K minmax(K x,I m,const char* e) {
  KTRY
   bool k=false; J d; Tensor v,i; bool b=xlong(x,1,d); J n=minmaxout(x,m,b,v,i);
   if(b && (n==2 || (n==3 && xbool(x,2,k))))
@@ -728,7 +728,7 @@ KAPI Max_values(K x) {return minmax(x, 5, "max_values");}
 // topk - largest/smallest k values by optional dimension & sort flag, return values & indices
 // kthvalue - return the kth smallest by optional dimension, return values,indices
 // ----------------------------------------------------------------------------------------------
-static K ksort(K x,bool a,cS e) {  //x:arg(s), a:flag for argsort() call (only return indices),e:errmsg
+static K ksort(K x,bool a,const char* e) {  //x:arg(s), a:flag for argsort() call (only return indices),e:errmsg
  KTRY
   bool b=false,p; J d=-1,n=1; Tensor t,v,i;
   if(x->t<0)
@@ -814,7 +814,7 @@ KAPI Kthvalue(K x) {
 // -------------------------------------------------------------------------
 //  windowing functions: bartlett, blackman, hann & hamming window options
 // -------------------------------------------------------------------------
-static K kwindow(K x,I m,cS e) { // m: 0-bartlett, 1-blackman, 2-hann, 3-hamming
+static K kwindow(K x,I m,const char* e) { // m: 0-bartlett, 1-blackman, 2-hann, 3-hamming
  KTRY
   bool p; J w; double a,b; Tensor t; TensorOptions o;
   J n=xopt(x,x->n-1,o) ? x->n-1 : xlen(x);
@@ -858,7 +858,7 @@ KAPI  Hamming(K x) {return kwindow(x, 3, "hamming");}
 // irfft - complex-to-real inverse discrete Fourier transform
 // stft - short-time Fourier transform
 // ---------------------------------------------------------------------------------
-static K kfft(K x,I m,cS e) {
+static K kfft(K x,I m,const char* e) {
  KTRY
   bool p,b1=false,b2=true; J d,n=xlen(x); IntArrayRef s; Tensor r,t;  // b1-normalized, b2-onesided
   if(xlong(x,1,d) &&
@@ -965,7 +965,7 @@ KAPI Trace(K x) {
 // -------------------------------------------------------------------------------------
 // fns dealing with diagonals, upper & lower triangles
 // -------------------------------------------------------------------------------------
-static K diagfns(K x,Fti f,Gti g,Tn m,cS s) {
+static K diagfns(K x,Fti f,Gti g,Tn m,const char* s) {
  KTRY
   TORCH_CHECK(x->t>=0, s,": not implemented for ",kname(x->t));
   bool p,e=false; int64_t d=0; Tensor r,t;
@@ -1162,7 +1162,7 @@ KAPI Uniquec(K x) {
 // addmv - beta * vector + alpha * mat1 * vec1
 // addr - beta * mat + alpha * outter product of vec1,vec2
 // --------------------------------------------------------------------------
-static K kaddmm(K x,Fmm f,Gmm g,cS e) {
+static K kaddmm(K x,Fmm f,Gmm g,const char* e) {
  KTRY
   J p=3,n=xlen(x); Scalar a=1,b=1; Tensor r,t,t1,t2;
   if(n>3 && xten(x,n-1,r)) n-=1;
@@ -1194,7 +1194,7 @@ KAPI    Addr(K x) {return kaddmm(x, torch::addr,    torch::addr_out,    "addr");
 // lu_solve - batch LU solve of the linear system Ax = bAx=b
 // lu_unpack - unpack data & pivots from batched LU factorization of tensor
 // ------------------------------------------------------------------------------------
-KAPI lufact(K x,bool y,cS e) {  // x:args, y:true if info required, e:error label
+KAPI lufact(K x,bool y,const char* e) {  // x:args, y:true if info required, e:error label
  KTRY
   bool p,b=true; Tensor t,u,v,i,U,V,I; // p-true if ptr(s) in/out, else arrays, b:pivot flag
   J n=((!y && xtenpair(x,x->n-1,u,v)) || (y && xten3(x,x->n-1,u,v,i))) ? x->n-1 : xlen(x);
@@ -1316,7 +1316,7 @@ KAPI Matrix_rank(K x) {
 // ----------------------------------------------------------------------------------------
 // det,logdet,slogdet - determinant, log determinant & log determinant w'sign
 // ----------------------------------------------------------------------------------------
-static K kdet(K x,I m,cS e) { //x:arg, m:mode 0-det,1-logdet,2-slogdet, e:errmsg
+static K kdet(K x,I m,const char* e) { //x:arg, m:mode 0-det,1-logdet,2-slogdet, e:errmsg
  KTRY
   bool p; Tensor a,d,s;
   if(!(p=xten(x,a))) a=kput(x);
@@ -1336,7 +1336,7 @@ KAPI Slogdet(K x) {return kdet(x, 2, "sign & log determinant");}
 // --------------------------------------------------------------------------------------------------
 // blas2 - BLAS fns with 2 input tensors/arrays & optional output tensor, return tensor or set output
 // --------------------------------------------------------------------------------------------------
-static K blas2(K x, Ftt f, Gtt g, cS e) {
+static K blas2(K x, Ftt f, Gtt g, const char* e) {
  KTRY
   bool p; Tensor a,b,r;
   if(!x->t && (x->n==2 || (x->n==3 && xten(x,2,r)))) {
@@ -1470,7 +1470,7 @@ KAPI Svd(K x) {
 // solve - solution to least squares for Ax=B, returns x & LU factorization (was: gesv)
 // triangular_solve - solves Ax=b w'triangular matrix A and multiple right-hand sides b
 // --------------------------------------------------------------------------------------
-static K gls(K x,Ftuple2 f,Gtuple2 g,cS e) {
+static K gls(K x,Ftuple2 f,Gtuple2 g,const char* e) {
  KTRY
   bool p; Tensor a,b,c,d;
   if(x->n==2)
@@ -1506,7 +1506,7 @@ KAPI Triangular_solve(K x) {
 // cholesky_inverse - inverse of symmetric positive-definite matrix using cholesky factorization
 // cholesky_solve - solves equations w'positive semidefinite matrix and cholesky factors
 // ---------------------------------------------------------------------------------------------
-static K chol(K x,Ftb f,Gtb g,bool b,cS e) {
+static K chol(K x,Ftb f,Gtb g,bool b,const char* e) {
  KTRY
   Tensor r,t;
   if(xten(x,t)) {

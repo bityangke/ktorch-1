@@ -80,7 +80,7 @@ static bool xreduce(K x,J i,int64_t &r) {
 // ------------------------------------------------------------------------------------------------------
 int64_t reduce() {return Reduction::Mean;}
 
-int64_t reduce(cS s,K x,J i) { // check argument(s) for sym or named pair/dict, e.g. (`reduce;`mean))
+int64_t reduce(const char* s,K x,J i) { // check argument(s) for sym or named pair/dict, e.g. (`reduce;`mean))
  Pairs p; J n=xargc(x,i,p); auto r=reduce();
  if(!(n==0 || (n==1 && xreduce(x,i,r))))
   AT_ERROR("Unrecognized argument(s) for ",s," loss");
@@ -92,7 +92,7 @@ int64_t reduce(cS s,K x,J i) { // check argument(s) for sym or named pair/dict, 
  return r;
 }
 
-static K lossfunc(K a,Lf f,cS s) {
+static K lossfunc(K a,Lf f,const char* s) {
  KTRY
   bool b; Tensor x,y;
   if(!a->t && (a->n==2 || a->n==3)) {
@@ -137,7 +137,7 @@ KAPI bce(K a) {
 // wtargs - process args from k for weight tensor, index to ignore & reduction method (or some subset)
 // wtloss - functional form for nll,cross entropy, multi-label soft margin (no c++ version yet)
 // ------------------------------------------------------------------------------------------------------
-static void wtargs(Cast c,cS s,K x,J i,Tensor& w,J& j,int64_t &r) {
+static void wtargs(Cast c,const char* s,K x,J i,Tensor& w,J& j,int64_t &r) {
  bool b=c==Cast::ce || c==Cast::nll; Pairs p; J n=xargc(x,i,p); j=-100; r=reduce();
  if(n && xreduce(x,i+n-1,r)) n--;
  if(n && xlong(x,i+n-1,j)) {if(b) n--; else AT_ERROR("Index to ignore not expected for ",s," loss");}
@@ -167,7 +167,7 @@ Tensor multilabel_soft_margin_loss(const Tensor& x,const Tensor& y,const Tensor&
  // unable to use torch::apply_loss_reduction(l,r), in anonymous namespace in ATen/native/Loss.cpp
 }
 
-static K wtloss(K a,Cast c,cS s) {
+static K wtloss(K a,Cast c,const char* s) {
  KTRY
   bool p=false; J j; int64_t r; Tensor l,x,y,w;
   if(a->t) {
@@ -196,7 +196,7 @@ KAPI multisoft(K x) {return wtloss(x, Cast::multisoft, "multi-label soft margin"
 // bcelogits - input & target, with options for reduction and class weights
 // bcelogitw - input, target & batch weights, along with options for reduction & class wts
 // ---------------------------------------------------------------------------------------
-static K bceloss(K a,bool b,cS s) {  //a:args, b:true if batch wts
+static K bceloss(K a,bool b,const char* s) {  //a:args, b:true if batch wts
  KTRY
   bool p=false; J i=2+b,j; int64_t r; Tensor x,y,bw,w;
   if(a->t) {
@@ -221,7 +221,7 @@ KAPI bcelogitw(K x) {return bceloss(x, true,  "binary cross-entropy with logits 
 // marginloss - funcional form of loss functions w'margin & reduction args
 // ------------------------------------------------------------------------------------------------------
 static double marginval(Cast c) {return c==Cast::hinge ? 1.0 : 0.0;}
-static void marginargs(Cast c,cS s,K x,J i,double &m,int64_t &r) {
+static void marginargs(Cast c,const char* s,K x,J i,double &m,int64_t &r) {
  Pairs p; J n=xargc(x,i,p); r=reduce(); m=marginval(c);
  if(n && xreduce(x,i+n-1,r)) n--;
  if(n && xnum(x,i+n-1,m)) n--;
@@ -236,7 +236,7 @@ static void marginargs(Cast c,cS s,K x,J i,double &m,int64_t &r) {
  }
 }
 
-static K marginloss(K a,Cast c,cS s) {
+static K marginloss(K a,Cast c,const char* s) {
  KTRY
   bool p=false,h=c==Cast::hinge; double m; int64_t r; Tensor l,x1,x2,y;
   if(a->t || a->n<3-h || a->n>5-h)

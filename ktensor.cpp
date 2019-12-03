@@ -424,7 +424,7 @@ bool kcat2(K x,int64_t& d, Tensor& r) {
   return false;
 }
 
-K kcat(K x,Fld f,Gld g,cS s) {
+K kcat(K x,Fld f,Gld g,const char* s) {
  KTRY
   TORCH_CHECK(!x->t, s," not implemented for ",kname(x->t));
   int64_t d=0; Tensor r; TensorVector *v;
@@ -480,7 +480,7 @@ KAPI expand(K x) {
  KCATCH("expand");
 }
 
-K ksqueeze(K x,bool a,cS s) {
+K ksqueeze(K x,bool a,const char* s) {
  KTRY
   bool b=false; int64_t d=nj; Tensor *t;
   if((t=xten(x))) {
@@ -895,7 +895,7 @@ static K kresize1(I m,bool p,Tensor&& t, const IntArrayRef& s) {
  }
 }
 
-static K kresize2(K x,I m,cS e) {
+static K kresize2(K x,I m,const char* e) {
  KTRY
   IntArrayRef n; Tensor *t=xten(x,0),*s=xten(x,1);
   TORCH_CHECK(!x->t,   e," not implemented for ",kname(x->t));

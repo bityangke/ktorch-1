@@ -60,12 +60,12 @@ static size_t osize(const TensorVector& p) {
 //      - deque of tensors (LBFGS)
 //      - single tensor (LBFGS)
 // --------------------------------------------------------------------------------------
-static K bget(K x,cS s) {
+static K bget(K x,const char* s) {
  auto i=xdict(x) ? kfind(kK(x)[0],s) : -1;
  return (i<0 || kK(x)[1]->t) ? nullptr : kK(kK(x)[1])[i];
 }
 
-static void bset(size_t n,cS s,const TensorVector& p,LongVector& v,const K x) {
+static void bset(size_t n,const char* s,const TensorVector& p,LongVector& v,const K x) {
  // restore vector of longs (parameter vector not referenced, included for uniform call)
  K y=bget(x,s);
  if(!y || !y->n) return;
@@ -75,7 +75,7 @@ static void bset(size_t n,cS s,const TensorVector& p,LongVector& v,const K x) {
  for(size_t i=0; i<n; ++i) v.emplace_back(kJ(y)[i]);
 }
 
-static void bset(size_t n,cS s,const TensorVector& p,TensorVector& v,const K x) {
+static void bset(size_t n,const char* s,const TensorVector& p,TensorVector& v,const K x) {
  K y=bget(x,s);
  if(!y || !y->n) return;
  if(y->t) AT_ERROR("type error: ",s,", expecting general list, input is ",kname(y->t));
@@ -96,7 +96,7 @@ static void bset(size_t n,cS s,const TensorVector& p,TensorVector& v,const K x) 
  }
 }
 
-static void bset(size_t n,cS s,const TensorVector& p,TensorDeque& v,const K x) {
+static void bset(size_t n,const char* s,const TensorVector& p,TensorDeque& v,const K x) {
  // used w'LBFGS, not sure if parameter count/type/device relevant
  K y=bget(x,s);
  if(!y || !y->n) return;
@@ -106,7 +106,7 @@ static void bset(size_t n,cS s,const TensorVector& p,TensorDeque& v,const K x) {
   v[i]=kput(kK(y)[i]);
 }
 
-static void bset(size_t n,cS s,const TensorVector& p,Tensor& t,const K x) {
+static void bset(size_t n,const char* s,const TensorVector& p,Tensor& t,const K x) {
  // used w'LBFGS, not sure if parameter count/type/device relevant
  K y=bget(x,s);
  if(!y || !y->n) return;

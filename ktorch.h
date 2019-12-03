@@ -54,8 +54,6 @@
 #define cs(x) ss((S)x)
 
 using A=signed char;
-using cS=const char*;
-
 using Storage=torch::Storage;
 using Tensor=torch::Tensor;
 using Scalar=torch::Scalar;
@@ -231,7 +229,7 @@ struct TORCH_API Kmodel : public Ktag {
 
 S krrbuf(const char *);
 void dictadd(K,S,K);
-void dictadd(K,cS,K);
+void dictadd(K,const char*,K);
 bool xind(K,J);
 K kptr(void*);
 bool xptr(K);
@@ -243,8 +241,8 @@ bool match(const Scalar&,const Scalar&);
 K kscalar(const Scalar&);
 J xlen(K);
 J xlen(K,J);
-cS kname(A);
-cS kname(K);
+const char* kname(A);
+const char* kname(K);
 J ksizeof(A);
 A maptype(TypeMeta);
 TypeMeta maptype(A);
@@ -360,7 +358,7 @@ bool xnone(K,J);
 
 S psym(const Pairs&);
 ScalarType ptype(const Pairs&);
-void perr(const Pairs&,cS);
+void perr(const Pairs&,const char*);
 bool pempty(const Pairs&);
 bool pbool(const Pairs&);
 J plong(const Pairs&);
@@ -389,7 +387,7 @@ K kexpand(J,const double*);
 #define KEX(x) kexpand(x.size(),(*x).data())  // k list from ExpandingArray
 bool kfree(K);
 bool kfree(K,J);
-void fn(K,cS,void*,I);
+void fn(K,const char*,void*,I);
 
 void randomfn(K);
 void mathfn(K);

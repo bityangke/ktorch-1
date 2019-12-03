@@ -17,7 +17,7 @@ S krrbuf(const char *s) {
 }
 
 void dictadd(K x, S s,K v){K *k=kK(x); js(&k[0],cs(s)); jk(&k[1],v);}
-void dictadd(K x,cS s,K v){K *k=kK(x); js(&k[0],cs(s)); jk(&k[1],v);}
+void dictadd(K x,const char* s,K v){K *k=kK(x); js(&k[0],cs(s)); jk(&k[1],v);}
 
 bool xind(K x,J i) {return !x->t && -1<i && i<x->n;}
 K kptr(void *v){J j=(intptr_t)v; pointer().insert(j); return knk(1,kj(j));}
@@ -90,7 +90,7 @@ S mapclass(Class a) {
  AT_ERROR("Unrecognized class: ", (I)a);
 }
 
-cS kname(A k) {
+const char* kname(A k) {
  A t=abs(k); bool b=k<0;
  switch(t) {
   case 0: return "list";
@@ -138,7 +138,7 @@ cS kname(A k) {
  }
 }
 
-cS kname(K x) {return xptr(x) ? mapclass(xtag(x)->a) : kname(x->t);}
+const char* kname(K x) {return xptr(x) ? mapclass(xtag(x)->a) : kname(x->t);}
  
 J ksizeof(A k) {
  switch(k) {
@@ -755,7 +755,7 @@ bool xnone(K x,J i) {Pairs p; return !(xargc(x,i,p) || p.n);}
 // psize - check if integral scalar or list, set IntArrayRef or ExpandingArray, else error
 // pten - attempt to define a tensor from provided scalar or array
 // ------------------------------------------------------------------------------------------
-void perr(const Pairs& p,cS s) {AT_ERROR("Option: ",p.k," is a ",kname(p.t),", expected a ",s);}
+void perr(const Pairs& p,const char* s) {AT_ERROR("Option: ",p.k," is a ",kname(p.t),", expected a ",s);}
 
 static void plen(const Pairs& p,J n,J m) {
  if(n==0 && (p.t<0 || m)) {
@@ -1022,7 +1022,7 @@ KAPI to(K x) {
  KCATCH("to");
 }
 
-static K kinfo(K x,bool b,cS e) {
+static K kinfo(K x,bool b,const char* e) {
  KTRY
   auto* g=xtag(x);
   TORCH_CHECK(g, e," not implemented for ",kname(x->t));
@@ -1392,7 +1392,7 @@ static void kinit() {
 // fn - given dictionary, along with name, fn & arg count, adds function to dictionary
 // fns - returns K dictionary with function names and code
 // -----------------------------------------------------------------------------------------
-void fn(K x,cS s,void *f,I n){dictadd(x,s,dl(f,n));}
+void fn(K x,const char* s,void *f,I n){dictadd(x,s,dl(f,n));}
 
 KAPI fns(K x){
  x=xD(ktn(KS,0),ktn(0,0));

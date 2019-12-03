@@ -728,7 +728,7 @@ template<typename M> static void rpad(K x,const M* m) {
 // ----------------------------------------------------------------------------------
 static J softdim(size_t d) {return !(d==0 || d==1 || d==3);}
 
-static void softargs(cS s,K x,J i,J &d,c10::optional<ScalarType>& t) { 
+static void softargs(const char* s,K x,J i,J &d,c10::optional<ScalarType>& t) { 
  t=c10::nullopt; Pairs p; J n=xargc(x,i,p);
  if(!((n==0 && p.n) || (xlong(x,i,d) && (n==1 || (n==2 && xtype(x,i+1,t))))))
   AT_ERROR("Unrecognized arguments for ",s,", expecting dim or (dim;type)");
@@ -759,7 +759,7 @@ static Tensor softmin(const Tensor& a,int64_t d,c10::optional<ScalarType> t) {
  return torch::softmax(-a,d,t);
 }
 
-static K soft(K x,cS s,SoftFn f) {
+static K soft(K x,const char* s,SoftFn f) {
  KTRY
   J d; c10::optional<ScalarType> t=c10::nullopt; Tensor a;
   if(xten(x,a)) {
@@ -789,7 +789,7 @@ static void noarg(S s,K x,J i) {if(!xnone(x,i))AT_ERROR("No arguments expected f
 
 using Ft = Tensor (*)(const Tensor&);
 
-static K noarg(cS s,Ft f, K x) {
+static K noarg(const char* s,Ft f, K x) {
  KTRY
   Tensor t; bool p=xten(x,t);
   return kresult(p, f(p ? t : kput(x)));
@@ -828,7 +828,7 @@ static void default1(Cast c,Setting &k,Scalar &v) {  // given module type, get s
  }
 }
 
-static void arg1(Cast c,cS s,K x,J i,Scalar& v) { // check argument(s) for single numeric scalar or named, e.g. (`alpha;.01)
+static void arg1(Cast c,const char* s,K x,J i,Scalar& v) { // check argument(s) for single numeric scalar or named, e.g. (`alpha;.01)
  Pairs p; Setting k; J n=xargc(x,i,p); default1(c,k,v);
  if(!(n || p.n)) return;
  if(!(n==0 || (n==1 && xnum(x,i,v))))
@@ -849,7 +849,7 @@ static void setting1(bool a,Cast c,K x,const Scalar &w) {
 
 using Fts = Tensor (*)(const Tensor&, Scalar);
 
-static K fn1(Cast c,cS s,K x,Fts f) {
+static K fn1(Cast c,const char* s,K x,Fts f) {
  KTRY
   Tensor t; Setting k; Scalar v;
   if(xten(x,t))
@@ -901,7 +901,7 @@ static void default2(Cast c,Setting& k1,Setting& k2,Scalar& v1,Scalar& v2) { //g
  }
 }
 
-static void arg2(bool r,Cast c,cS s,K x,J i,bool &b,Scalar& v1,Scalar& v2) {
+static void arg2(bool r,Cast c,const char* s,K x,J i,bool &b,Scalar& v1,Scalar& v2) {
  // r:true for functional rrelu, b:training flag  (only used for functional rrelu)
  Pairs p; Setting e,k1,k2; J n=xargc(x,i,p); b=false; default2(c,k1,k2,v1,v2);
  if(!(n || p.n)) return;
@@ -924,7 +924,7 @@ static void arg2(bool r,Cast c,cS s,K x,J i,bool &b,Scalar& v1,Scalar& v2) {
 }
 
 // version for modules without special handling for function version of rrelu()
-static void arg2(Cast c,cS s,K x,J i,Scalar& v1,Scalar& v2) {
+static void arg2(Cast c,const char* s,K x,J i,Scalar& v1,Scalar& v2) {
  bool b; arg2(false,c,s,x,i,b,v1,v2);
 }
 
@@ -936,7 +936,7 @@ static void setting2(bool a,Cast c,K x,const Scalar &w1,const Scalar& w2) {
 
 using Ftss = Tensor (*)(const Tensor&, Scalar, Scalar);
 
-static K fn2(Cast c,cS s,K x,Ftss f) {
+static K fn2(Cast c,const char* s,K x,Ftss f) {
  KTRY
   Tensor t; bool b; Setting k1,k2; Scalar v1,v2;
   if(xten(x,t)) {                                                     // tensor w'out any other args
@@ -1296,7 +1296,7 @@ void mopt(Module &g,bool a,K &v,J i) { //g:generic module, a:true if all options
  else    kS(kK(v)[j])[i]=s, kK(kK(v)[j+2])[i]=x; //table, assign module,options in i'th row
 }
 
-void mget(cS s,Module &m,bool a,K &v,J i) {
+void mget(const char* s,Module &m,bool a,K &v,J i) {
  //s:name in sequence, m:type-erased module, a:true for all options, v:array for values, i:i'th row of table result
  bool b=v->n==6;
  mopt(m,a,v,i);

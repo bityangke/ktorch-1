@@ -175,7 +175,7 @@ KAPI kdict(K x) {
  return kb(xdict(x));
 }
 
-static K ksub(K x,cS e) {
+static K ksub(K x,const char* e) {
  KTRY
  std::cerr << "in ksub " << (!x ? "null" : "with args")<< "\n";
  Tensor t;
@@ -196,7 +196,7 @@ KAPI ktest(K x) {return ksub(x,"ktest()");}
 
 KAPI mixtest(K x) {return kb(xmixed(x,4));}
 
-K help(bool b,cS s) {return b ? KERR(s) : (fprintf(stderr,"%s\n",s), (K)0);}
+K help(bool b,const char* s) {return b ? KERR(s) : (fprintf(stderr,"%s\n",s), (K)0);}
 
 #define KHELP(cond, ...)  \
   if((cond))              \
@@ -207,7 +207,7 @@ K help(bool b,cS s) {return b ? KERR(s) : (fprintf(stderr,"%s\n",s), (K)0);}
 /*
 KAPI helptest(K x) {
 KTRY
- cS a="some FN";
+ const char* a="some FN";
 // if(!x || xhelp(x)) {
  if(!x || xempty(x)) {
   KHELP(x,"This is one part,",a,"\n"

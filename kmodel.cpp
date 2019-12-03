@@ -207,7 +207,7 @@ static K eval(Kmodel *m,TensorVector& v,int64_t w,int64_t a) {
  }
 }
 
-static K keval(K x,int64_t a,cS s) {
+static K keval(K x,int64_t a,const char* s) {
  KTRY
   Kmodel *m; TensorVector *v; int64_t w=0;
   TORCH_CHECK((m=xmodel(x,0)) && (v=xvec(x,1)) && (x->n==2 || (x->n==3 && xint64(x,2,w))), 

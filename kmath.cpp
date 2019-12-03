@@ -588,7 +588,7 @@ KAPI Ne(K x)  {return compare2(x, torch::ne, torch::ne, torch::ne_out, torch::ne
 // comparison functions that return single boolean if arrays are equal or approx. equal
 // -------------------------------------------------------------------------------------------
 KAPI Allclose(K x) {
- bool na=false; F rt=1e-05,at=1e-08; Tensor a,b;
+ bool na=false; double rt=1e-05,at=1e-08; Tensor a,b;
  KTRY
   if(x->t)
    AT_ERROR("allclose not implemented for single ",kname(x->t));
@@ -816,7 +816,7 @@ KAPI Kthvalue(K x) {
 // -------------------------------------------------------------------------
 static K kwindow(K x,I m,cS e) { // m: 0-bartlett, 1-blackman, 2-hann, 3-hamming
  KTRY
-  bool p; J w; F a,b; Tensor t; TensorOptions o;
+  bool p; J w; double a,b; Tensor t; TensorOptions o;
   J n=xopt(x,x->n-1,o) ? x->n-1 : xlen(x);
   if(xlong(x,w) ||
     (n==1 && xlong(x,0,w))||
@@ -1298,7 +1298,7 @@ KAPI Matrix_power(K x) {
 
 KAPI Matrix_rank(K x) {
  KTRY
-  bool s=false,p; F f; Tensor r,t;
+  bool s=false,p; double f; Tensor r,t;
   if(xten(x,t)) {
    return kten(torch::matrix_rank(t));
   } else if(xbool(x,1,s) && x->n==2) {
@@ -1384,7 +1384,7 @@ KAPI Orgqr(K x)  {return blas2(x, torch::orgqr,   torch::orgqr_out,  "orthorgana
 // --------------------------------------------------------------------------------------
 KAPI Pinverse(K x) {
  KTRY
-  bool p; F f=1e-15; Tensor t,r;
+  bool p; double f=1e-15; Tensor t,r;
   if (xten(x,t))
    return kten(torch::pinverse(t));
   else if (xdouble(x,1,f))
@@ -1652,7 +1652,7 @@ KAPI Uniform(K x)     {return kprob(x, Prob::uniform);}
 // -------------------------------------------------------------------------------------
 KAPI Bernoulli(K x) {
  KTRY
-  bool p=false; F f; Tensor a,b;
+  bool p=false; double f; Tensor a,b;
   if(x->t || (p=xten(x,a))) {           // simple list or single tensor
    return kresult(p, torch::bernoulli(p ? a : kput(x)));
   } else if(xnum(x,1,f)) {              // (input;prob;..)

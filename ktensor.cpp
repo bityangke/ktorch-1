@@ -203,7 +203,7 @@ static void tensorlike(K x,Tensormode m,Tensor &t,Tensor &r) {  // t:input, r:re
 }
 
 static void tensorout(K x,Tensormode m,Tensor &t,Tensor &r) {  // t:output, r:result tensor
- F e; J i,j; Scalar a,z,n; IntArrayRef s;
+ double e; J i,j; Scalar a,z,n; IntArrayRef s;
  bool b=xsize(x,1,s);  //true if size is given as 2nd arg (last arg is output tensor)
  switch(m) {
   case Tensormode::empty: if(b && x->n==3) r=torch::empty_out(t,s); break;
@@ -240,7 +240,7 @@ static void tensorout(K x,Tensormode m,Tensor &t,Tensor &r) {  // t:output, r:re
 }
 
 static void tensoropt(K x,Tensormode m,Tensor &r) {
- F e; J i,j; Scalar a,z,n; IntArrayRef s; TensorOptions o;
+ double e; J i,j; Scalar a,z,n; IntArrayRef s; TensorOptions o;
  bool b=xopt(x,x->n-1,o); I nx=x->n-b;                        //track if options in last arg
  bool sz=xsize(x,1,s) && nx==((m==Tensormode::full) ? 3 : 2); //2nd arg is size & correct arg count
  switch(m) {

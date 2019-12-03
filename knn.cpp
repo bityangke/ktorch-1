@@ -127,13 +127,13 @@ static int64_t int64(const Pairs& p,Cast c) {
 static c10::optional<int64_t> int64n(K x,J i,Cast c,Setting s) {auto n=int64(x,i,c,s); if(n==nj) return c10::nullopt; else return n;}
 static c10::optional<int64_t> int64n(const Pairs& p,Cast c)    {auto n=int64(p,c);     if(n==nj) return c10::nullopt; else return n;}
 
-static F mdouble(K x,J i,Cast c,Setting s) {
- F f;
+static double mdouble(K x,J i,Cast c,Setting s) {
+ double f;
  TORCH_CHECK(xnum(x,i,f), msym(c)," ",mset(s),": expected double, given ",kname(kK(x)[i]->t));
  return f;
 }
 
-static F mdouble(const Pairs& p,Cast c) {
+static double mdouble(const Pairs& p,Cast c) {
  TORCH_CHECK(p.t==-KJ || p.t==-KF, msym(c)," ",p.k,": expected double, given ",kname(p.t));
  return pdouble(p);
 }
@@ -180,7 +180,7 @@ template<size_t D> Exdouble<D> exdouble(const Pairs& p,Cast c) {
 // bnorm - create batchnorm module given options/set dictionary of options given module
 // --------------------------------------------------------------------------------------
 torch::nn::BatchNorm bnorm(K x,J k) {
- bool a=true,t=true; F e=1e-5,m=0.1; Pairs p; J i,n=xargc(x,k,p);
+ bool a=true,t=true; double e=1e-5,m=0.1; Pairs p; J i,n=xargc(x,k,p);
  if(!((n==0 && p.n) || (n==1 && xlong(x,k,i))))
   AT_ERROR("Unrecognized arguments for batch normalization");
  while(xpair(p))
@@ -295,8 +295,8 @@ static void conv(bool a,K x,const M* m) {
 // --------------------------------------------------------------------------------------
 // drop - create dropout module given probability/set dictionary given module
 // --------------------------------------------------------------------------------------
-static F drop(S s,K x,J i) {
- F f=torch::nn::DropoutOptions().rate(); Pairs p; J n=xargc(x,i,p);
+static double drop(S s,K x,J i) {
+ double f=torch::nn::DropoutOptions().rate(); Pairs p; J n=xargc(x,i,p);
  if(!(n==0 || (n==1 && xdouble(x,i,f))))
   AT_ERROR("Unrecognized arguments for dropout module: ",s);
  while(xpair(p))
@@ -307,8 +307,8 @@ static F drop(S s,K x,J i) {
  return f;
 }
 
-static void drop(bool a,K x,F f) {
- F d=torch::nn::DropoutOptions().rate();
+static void drop(bool a,K x,double f) {
+ double d=torch::nn::DropoutOptions().rate();
  if(a || d != f) OPTION(x, drop, kf(f));
 }
 
@@ -392,7 +392,7 @@ KAPI klinear(K x) {
 template<typename M,typename O>
 static M rnn(S s,K x,J k) {
  auto f=torch::nn::RNNActivation::ReLU;
- bool b=true,bi=false,ba=false; Pairs p; J i=-1,h=-1,l=1,n=xargc(x,k,p); F d=0.0;
+ bool b=true,bi=false,ba=false; Pairs p; J i=-1,h=-1,l=1,n=xargc(x,k,p); double d=0.0;
  if(!((n==0 && p.n) || (xlong(x,k,i) && (n==1 || (n==2 && xlong(x,k+1,h))))))
   AT_ERROR("Unrecognized arguments for ",s," module");
  bool r=std::is_same<M,torch::nn::RNN>::value;

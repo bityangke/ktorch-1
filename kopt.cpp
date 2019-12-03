@@ -119,7 +119,7 @@ static void bset(size_t n,cS s,const TensorVector& p,Tensor& t,const K x) {
 //         - if given previously allocated ptr, return dictionary of options & buffers
 // ----------------------------------------------------------------------------------------
 static void adagrad(K x,J i,AdagradOptions& o) {
- Pairs p; J n=xargc(x,i,p); F f;
+ Pairs p; J n=xargc(x,i,p); double f;
  if(n && xnum(x,i,f)) {i++; n--; if(f==f) o.learning_rate(f);}
  if(n && xnum(x,i,f)) {i++; n--; if(f==f) o.lr_decay(f);}
  if(n && xnum(x,i,f)) {i++; n--; if(f==f) o.weight_decay(f);}
@@ -143,7 +143,7 @@ static Optptr adagrad(const TensorVector& w,const AdagradOptions& a,K y) {
  return o;
 }
 
-static K adagrad(bool a,F r,Adagrad* v) { //return all or non-default options as k dictionary
+static K adagrad(bool a,double r,Adagrad* v) { //return all or non-default options as k dictionary
  K x=xD(ktn(KS,0),ktn(0,0)); AdagradOptions d(r),o=v->options;
  if(a || d.learning_rate() != o.learning_rate()) OPTSET(x, lr,      kf(o.learning_rate()));
  if(a || d.lr_decay()      != o.lr_decay())      OPTSET(x, lrdecay, kf(o.lr_decay()));
@@ -162,7 +162,7 @@ static K adagrad(Adagrad* v) {  //return internal buffer state as k dictionary
 // adam - parse args (lr;beta1;beta2;eps;wtdecay;amsgrad) or (..;name-value pairs/dict)
 // ----------------------------------------------------------------------------------------
 static void adam(K x,J i,AdamOptions& o) {
- Pairs p; J n=xargc(x,i,p); bool b; F f;
+ Pairs p; J n=xargc(x,i,p); bool b; double f;
  if(n && xnum(x,i,f)) {i++; n--; if(f==f) o.learning_rate(f);}
  if(n && xnum(x,i,f)) {i++; n--; if(f==f) o.beta1(f);}
  if(n && xnum(x,i,f)) {i++; n--; if(f==f) o.beta2(f);}
@@ -194,7 +194,7 @@ static Optptr adam(const TensorVector& w,const AdamOptions& a,K y) {
  return o;
 }
 
-static K adam(bool a,F r,Adam* v) { //return all or non-default options as k dictionary
+static K adam(bool a,double r,Adam* v) { //return all or non-default options as k dictionary
  K x=xD(ktn(KS,0),ktn(0,0)); AdamOptions d(r),o=v->options;
  if(a || d.learning_rate() != o.learning_rate()) OPTSET(x, lr,      kf(o.learning_rate()));
  if(a || d.beta1()         != o.beta1())         OPTSET(x, beta1,   kf(o.beta1()));
@@ -218,7 +218,7 @@ static K adam(Adam* v) {  //return internal buffer state as k dictionary
 // lbfgs - (lr;max iter;max eval;tolerance grad;tolerance change;history size)
 // ---------------------------------------------------------------------------------------
 static void lbfgs(K x,J i,LBFGSOptions& o) {
- Pairs p; J j,n=xargc(x,i,p); F f;
+ Pairs p; J j,n=xargc(x,i,p); double f;
  if(n && xnum(x,i,f))  {i++; n--; if(f==f)  o.learning_rate(f);}
  if(n && xlong(x,i,j)) {i++; n--; if(j!=nj) o.max_iter(j);}
  if(n && xlong(x,i,j)) {i++; n--; if(j!=nj) o.max_eval(j);}
@@ -252,7 +252,7 @@ static Optptr lbfgs(const TensorVector& w,const LBFGSOptions& a,K y) {
  return o;
 }
 
-static K lbfgs(bool a,F r,LBFGS* v) { //return all or non-default options as k dictionary
+static K lbfgs(bool a,double r,LBFGS* v) { //return all or non-default options as k dictionary
  K x=xD(ktn(KS,0),ktn(0,0)); LBFGSOptions d(r),o=v->options;
  if(a || d.learning_rate()    != o.learning_rate())    OPTSET(x, lr,        kf(o.learning_rate()));
  if(a || d.max_iter()         != o.max_iter())         OPTSET(x, iter,      kj(o.max_iter()));
@@ -279,7 +279,7 @@ static K lbfgs(LBFGS* v) {  //return internal buffer state as k dictionary
 // rmsprop - parse arg(s) (lr;alpha;eps;decay;momentum;centered) or (..;nm-val pairs/dict)
 // ----------------------------------------------------------------------------------------
 static void rmsprop(K x,J i,RMSpropOptions& o) {
- Pairs p; J n=xargc(x,i,p); bool b; F f;
+ Pairs p; J n=xargc(x,i,p); bool b; double f;
  if(n && xnum(x,i,f)) {i++; n--; if(f==f) o.learning_rate(f);}
  if(n && xnum(x,i,f)) {i++; n--; if(f==f) o.alpha(f);}
  if(n && xnum(x,i,f)) {i++; n--; if(f==f) o.eps(f);}
@@ -310,7 +310,7 @@ static Optptr rmsprop(const TensorVector& w,const RMSpropOptions& a,K y) {
  return o;
 }
 
-static K rmsprop(bool a,F r,RMSprop* v) { //return all or non-default options as k dictionary
+static K rmsprop(bool a,double r,RMSprop* v) { //return all or non-default options as k dictionary
  K x=xD(ktn(KS,0),ktn(0,0)); RMSpropOptions d(r),o=v->options;
  if(a || d.learning_rate() != o.learning_rate()) OPTSET(x, lr,       kf(o.learning_rate()));
  if(a || d.alpha()         != o.alpha())         OPTSET(x, alpha,    kf(o.alpha()));
@@ -333,7 +333,7 @@ static K rmsprop(RMSprop* v) {  //return internal buffer state as k dictionary
 // SGD parse args (lr;momentum;dampening;wtdecay;nesterov) or (..;name-value pairs/dict)
 // ----------------------------------------------------------------------------------------
 static void sgd(K x,J i,SGDOptions& o) {
- Pairs p; J n=xargc(x,i,p); bool b; F f;
+ Pairs p; J n=xargc(x,i,p); bool b; double f;
  if(n && xnum(x,i,f)) {i++; n--; if(f==f) o.learning_rate(f);}
  if(n && xnum(x,i,f)) {i++; n--; if(f==f) o.momentum(f);}
  if(n && xnum(x,i,f)) {i++; n--; if(f==f) o.dampening(f);}
@@ -359,7 +359,7 @@ static Optptr sgd(const TensorVector& w,const SGDOptions& a,K y) {
  return o;
 }
 
-static K sgd(bool a,F r,SGD* v) { //return all or non-default options as k dictionary
+static K sgd(bool a,double r,SGD* v) { //return all or non-default options as k dictionary
  K x=xD(ktn(KS,0),ktn(0,0)); SGDOptions d(r),o=v->options;
  if(a || d.learning_rate() != o.learning_rate()) OPTSET(x, lr,        kf(o.learning_rate()));
  if(a || d.momentum()      != o.momentum())      OPTSET(x, momentum,  kf(o.momentum()));
@@ -398,7 +398,7 @@ static TensorVector optparms(K x,J i) {
 
 static K optinit(S s,K x,K y=nullptr);  //s:optimizer name, x:options, y:buffers
 static K optinit(S s,K x,K y) {
- J i=xdict(x) ? -1 : 2; Cast c; F r; omap(s,c,r);
+ J i=xdict(x) ? -1 : 2; Cast c; double r; omap(s,c,r);
  if(!(x->t==-KS || xdict(x) || xempty(x,1) || xptr(x,1)))
   AT_ERROR("Optimizer ",s," expects args of form:\n",
            "name\n", "(name; parm(s); option(s)..)\n" "(saved state; parm(s))");
@@ -415,7 +415,7 @@ static K optinit(S s,K x,K y) {
 }
 
 K optstate(bool a,bool b,Cast c,OptimizerBase *o) {
- F r; S s; omap(c,s,r); K k,v,x,y;
+ double r; S s; omap(c,s,r); K k,v,x,y;
  switch(c) {
   case Cast::adagrad: {auto m=(Adagrad*)o; x=adagrad(a,r,m); if(b) y=adagrad(m); break;}
   case Cast::adam:    {auto m=(Adam*)o;    x=adam(a,r,m);    if(b) y=adam(m);    break;}
@@ -493,7 +493,7 @@ KAPI kstep(K x) {
 
 KAPI lr(K x) {
  KTRY
-  bool b=false; F r; Ktag *g;
+  bool b=false; double r; Ktag *g;
   TORCH_CHECK((g=xtag(x)) || ((g=xtag(x,0)) && (b=x->n==2) && xdouble(x,1,r)),
    "lr: unrecognized arg(s), expecting model/optimizer and optional learning rate");
   Cast c; OptimizerBase *o; Kmodel *m;

@@ -308,8 +308,8 @@ bool xlong(K x,J &n,J *&v){                                           //check fo
 
 bool xlong(K x,J i,J &n, J *&v) {return xind(x,i) && xlong(kK(x)[i],n,v);}  // check element of k list
 
-bool xdouble(K x,F &f) {return (x->t == -KF) ? f=x->f,true : false;}    //check k scalar
-bool xdouble(K x,J i,F &f) {return xind(x,i) && xdouble(kK(x)[i],f);}   //check k list element
+bool xdouble(K x,double &f) {return (x->t == -KF) ? f=x->f,true : false;}    //check k scalar
+bool xdouble(K x,J i,double &f) {return xind(x,i) && xdouble(kK(x)[i],f);}   //check k list element
 
 bool xdict(K x) {return x->t==99 && (kK(x)[0]->t==KS || (kK(x)[0]->t==0 && kK(x)[0]->n==0));}
 bool xdict(K x,J i) {return xind(x,i) && xdict(kK(x)[i]);}
@@ -335,7 +335,7 @@ bool xsize(K x,J d,int64_t *a) {
  return b;
 }
 
-bool xsize(K x,J d,F *a) {
+bool xsize(K x,J d,double *a) {
  bool b=false; 
  if((b=x->t == -KF)) {
   for(J i=0;i<d;++i) a[i]=x->f;
@@ -349,7 +349,7 @@ bool xsize(K x,J d,F *a) {
 }
 
 bool xsize(K x,J i,J d,int64_t *a) {return xind(x,i) && xsize(kK(x)[i],d,a);}
-bool xsize(K x,J i,J d,F       *a) {return xind(x,i) && xsize(kK(x)[i],d,a);}
+bool xsize(K x,J i,J d,double  *a) {return xind(x,i) && xsize(kK(x)[i],d,a);}
 
 // ------------------------------------------------------------------------------------------------------
 // xten - check arg(s) for allocated ptr to tensor: set tensor & return true if found, else false
@@ -451,14 +451,14 @@ Kmodel* xmodel(K x,J i) {return xind(x,i) ? xmodel(kK(x)[i]) : nullptr;}
 // xbyte - convert k bool,char,byte -> torch scalar
 // xscalar - convert k number or byte -> torch scalar
 // ------------------------------------------------------------------------------------------------------
-bool xnum(K x,F &f) {
+bool xnum(K x,double &f) {
  switch(x->t) {
   case -KF: return f=x->f,true;
   case -KJ: return f=x->j,true;
   default: return false;
  }
 }
-bool xnum(K x,J i,F &f) {return xind(x,i) && xnum(kK(x)[i],f);}
+bool xnum(K x,J i,double &f) {return xind(x,i) && xnum(kK(x)[i],f);}
 
 bool xnum(K x,Scalar& s) {
  switch(x->t) {
@@ -771,7 +771,7 @@ bool pempty(const Pairs& p) {return p.t>=0 && p.v && !p.v->n;}
 bool pbool(const Pairs& p) {if(p.t!=-KB) perr(p,"boolean"); return p.b;}
 J plong(const Pairs& p) {if(p.t!=-KJ) perr(p,"long integer"); return p.j;}
 
-F pdouble(const Pairs& p) {
+double pdouble(const Pairs& p) {
  if(!(p.t==-KJ || p.t==-KF)) perr(p,"float, double or integer scalar");
  return p.t==-KJ ? p.j : p.f;
 }
@@ -805,7 +805,7 @@ void psize(const Pairs& p,J d,int64_t *a) {
  }
 }
 
-void psize(const Pairs& p,J d,F *a) {
+void psize(const Pairs& p,J d,double *a) {
  if(p.t == -KF) {
    for(J i=0;i<d;++i) a[i]=p.f;
  } else if(p.t == KF) {

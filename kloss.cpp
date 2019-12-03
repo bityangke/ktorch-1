@@ -220,7 +220,7 @@ KAPI bcelogitw(K x) {return bceloss(x, true,  "binary cross-entropy with logits 
 // marginargs - process optional margin & reduction arguments in given k array
 // marginloss - funcional form of loss functions w'margin & reduction args
 // ------------------------------------------------------------------------------------------------------
-static F marginval(Cast c) {return c==Cast::hinge ? 1.0 : 0.0;}
+static double marginval(Cast c) {return c==Cast::hinge ? 1.0 : 0.0;}
 static void marginargs(Cast c,cS s,K x,J i,double &m,int64_t &r) {
  Pairs p; J n=xargc(x,i,p); r=reduce(); m=marginval(c);
  if(n && xreduce(x,i+n-1,r)) n--;
@@ -238,7 +238,7 @@ static void marginargs(Cast c,cS s,K x,J i,double &m,int64_t &r) {
 
 static K marginloss(K a,Cast c,cS s) {
  KTRY
-  bool p=false,h=c==Cast::hinge; F m; int64_t r; Tensor l,x1,x2,y;
+  bool p=false,h=c==Cast::hinge; double m; int64_t r; Tensor l,x1,x2,y;
   if(a->t || a->n<3-h || a->n>5-h)
    AT_ERROR(s,h ? " loss expects (input;target), (input;target;margin) or (input;target;margin;reduction)"
                 : " loss expects (input1;input2;target), (input1;input2;target;margin) or (input1;input2;target;margin;reduction)");
@@ -320,7 +320,7 @@ static void triargs(K x,J i,double& m,double& pw,double& e,bool& s,int64_t& r) {
 
 KAPI triplet(K a) {
  KTRY
-  bool b,s; F e,m,p; Tensor x,y,z; int64_t r; 
+  bool b,s; double e,m,p; Tensor x,y,z; int64_t r; 
   if(a->t) {
    AT_ERROR("triplet margin loss not implemented for ",kname(a->t));
   } else if(a->n < 3) {
@@ -358,7 +358,7 @@ static void poissonargs(K x,J i,bool& l,bool& f,double& e,int64_t& r) {
 
 KAPI poissonloss(K a) {
  KTRY
-  bool p,ln,f; F e; Tensor x,y; int64_t r; 
+  bool p,ln,f; double e; Tensor x,y; int64_t r; 
   if(a->t) {
    AT_ERROR("poisson nll loss not implemented for ",kname(a->t));
   } else if(a->n < 2) {
@@ -426,7 +426,7 @@ KAPI ctc(K a) {
 // loss - main api function that creates/calls loss objects and queries their properties
 // ---------------------------------------------------------------------------------------------------
 static K lossinit(S s,K x,J i) {
- J j; F m; Cast c=lmap(s); Tensor w; int64_t r; Lossptr a;
+ J j; double m; Cast c=lmap(s); Tensor w; int64_t r; Lossptr a;
  switch(c) {
   case Cast::bce:         a=std::make_shared<BCELoss>(reduce(s,x,i)); break;
   case Cast::kl:          a=std::make_shared<KLDivLoss>(reduce(s,x,i)); break;
@@ -445,10 +445,10 @@ static K lossinit(S s,K x,J i) {
   case Cast::cosineloss:  marginargs(c,s,x,i,m,r); a=std::make_shared<CosineEmbeddingLoss>(m,r); break;
   case Cast::margin:      marginargs(c,s,x,i,m,r); a=std::make_shared<MarginRankingLoss>(m,r); break;
 
-  case Cast::multimargin: {Scalar p,m; multiargs(x,i,p,m,w,r);     a=std::make_shared<MultiMarginLoss>(p,m,w,r); break;}
-  case Cast::triplet:     {bool s;F e,p; triargs(x,i,m,p,e,s,r);   a=std::make_shared<TripletMarginLoss>(m,p,e,s,r); break;}
-  case Cast::poissonloss: {bool l,f;F e; poissonargs(x,i,l,f,e,r); a=std::make_shared<PoissonNLLLoss>(l,f,e,r); break;}
-  case Cast::ctc:         {bool z;int64_t b; ctc1(x,i,b,z,r);      a=std::make_shared<CTCLoss>(b,z,r); break;}
+  case Cast::multimargin: {Scalar p,m;        multiargs(x,i,p,m,w,r);   a=std::make_shared<MultiMarginLoss>(p,m,w,r); break;}
+  case Cast::triplet:     {bool s;double e,p; triargs(x,i,m,p,e,s,r);   a=std::make_shared<TripletMarginLoss>(m,p,e,s,r); break;}
+  case Cast::poissonloss: {bool l,f;double e; poissonargs(x,i,l,f,e,r); a=std::make_shared<PoissonNLLLoss>(l,f,e,r); break;}
+  case Cast::ctc:         {bool z;int64_t b;  ctc1(x,i,b,z,r);          a=std::make_shared<CTCLoss>(b,z,r); break;}
   default: AT_ERROR("Unrecognized loss function: ",s); break;
  }
  return kloss(c,a);

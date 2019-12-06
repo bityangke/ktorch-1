@@ -3,6 +3,7 @@
 // Adaptive Avg Pool pending, should be released in 1.4
 // Options for a `D`-dimensional adaptive avgpool functional and module
 // ---------------------------------------------------------------------
+/*
 namespace torch { namespace nn {
 template <size_t D> struct AdaptiveAvgPoolOptions {
   AdaptiveAvgPoolOptions(ExpandingArray<D> output_size) : output_size_(output_size) {}
@@ -62,6 +63,7 @@ TORCH_MODULE(AdaptiveAvgPool1d);
 TORCH_MODULE(AdaptiveAvgPool2d);
 TORCH_MODULE(AdaptiveAvgPool3d);
 }}
+*/
 
 // ------------------------------------------
 // fractional max pool 2,3d
@@ -183,6 +185,7 @@ struct TORCH_API PadOptions {
  TORCH_ARG(torch::Scalar, value)=0;
 };
 
+/*
 namespace torch { namespace nn {
 template <size_t D>
 struct TORCH_API ReflectionPadOptions {
@@ -202,6 +205,7 @@ using ReplicationPad1dOptions = ReplicationPadOptions<1>;
 using ReplicationPad2dOptions = ReplicationPadOptions<2>;
 using ReplicationPad3dOptions = ReplicationPadOptions<3>;
 }}
+*/
 
 // ------------------------------------------
 // constant pad n-dim
@@ -651,8 +655,8 @@ template <typename Derived> class DropoutImplBase : public torch::nn::Cloneable<
  public:
   DropoutImplBase() {}
   explicit DropoutImplBase(torch::nn::DropoutOptions o) : options(o) {
-   TORCH_CHECK(options.rate() >= 0, "Dropout rate must not be less than zero");
-   TORCH_CHECK(options.rate() <= 1, "Dropout rate must not be greater than one");
+   TORCH_CHECK(options.p() >= 0, "Dropout rate must not be less than zero");
+   TORCH_CHECK(options.p() <= 1, "Dropout rate must not be greater than one");
   }
   void reset() {}
   torch::nn::DropoutOptions options;
@@ -661,14 +665,14 @@ template <typename Derived> class DropoutImplBase : public torch::nn::Cloneable<
 class TORCH_API AlphaDropoutImpl : public DropoutImplBase<AlphaDropoutImpl> {
  public:
   using DropoutImplBase<AlphaDropoutImpl>::DropoutImplBase;
-  torch::Tensor forward(const torch::Tensor& t) {return torch::alpha_dropout(t,options.rate(),this->is_training());}
+  torch::Tensor forward(const torch::Tensor& t) {return torch::alpha_dropout(t,options.p(),this->is_training());}
 };
 TORCH_MODULE(AlphaDropout);
 
 class TORCH_API FeatureAlphaDropoutImpl : public DropoutImplBase<FeatureAlphaDropoutImpl> {
  public:
   using DropoutImplBase<FeatureAlphaDropoutImpl>::DropoutImplBase;
-  torch::Tensor forward(const torch::Tensor& t) {return torch::feature_alpha_dropout(t,options.rate(),this->is_training());}
+  torch::Tensor forward(const torch::Tensor& t) {return torch::feature_alpha_dropout(t,options.p(),this->is_training());}
 };
 TORCH_MODULE(FeatureAlphaDropout);
 

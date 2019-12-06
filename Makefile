@@ -2,7 +2,7 @@ CXX := clang++
 TORCH := $(HOME)/libtorch
 OS := $(shell uname)
 CPPFLAGS := -isystem $(TORCH)/include -isystem $(TORCH)/include/torch/csrc/api/include 
-CXXFLAGS := -std=c++11 -std=gnu++11 -pedantic -Wall -Wfatal-errors -fPIC -O3
+CXXFLAGS := -std=c++14 -std=gnu++14 -pedantic -Wall -Wfatal-errors -fPIC -O3
 LDFLAGS := -shared -L$(TORCH)/lib
 LDLIBS := -l torch -Wl,-rpath $(TORCH)/lib
 

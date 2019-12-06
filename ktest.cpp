@@ -164,9 +164,9 @@ KAPI namecheck(K x) {
 
 KAPI dupname(K x) {
 KTRY
- Sequential q(torch::nn::modules_ordered_dict(
+ Sequential q(
   {{"A", torch::nn::Linear(1,2)},
-   {"B", torch::nn::Conv2d(3,4,5)}}));
+   {"B", torch::nn::Conv2d(3,4,5)}});
  return (K)0;
 KCATCH("duplicate names");
 }
@@ -322,11 +322,11 @@ KAPI opttest(K x) {
  std::cout << "device:      " << o.device() << "\n";
  std::cout << "layout:      " << o.layout() << "\n";
  std::cout << "gradient:    " << o.requires_grad() << "\n";
- std::cout << "variable:    " << o.is_variable() << "\n";
+ //std::cout << "variable:    " << o.is_variable() << "\n";
  std::cout << "has dtype:   " << o.has_dtype()  << "\n";
  std::cout << "has device:  " << o.has_device() << "\n";
  std::cout << "has layout:  " << o.has_layout() << "\n";
- std::cout << "has variable:" << o.has_is_variable() << "\n";
+ //std::cout << "has variable:" << o.has_is_variable() << "\n";
  std::cout << "has gradient:" << o.has_requires_grad() << "\n";
  return (K)0;
 }
@@ -381,29 +381,29 @@ KAPI gan(K x) {
  torch::Device device(torch::cuda::is_available() ? torch::kCUDA : torch::kCPU);
 
   nn::Sequential generator(
-   nn::Conv2d(nn::Conv2dOptions(kNoiseSize, 256, 4).with_bias(false).transposed(true)),
+   nn::Conv2d(nn::Conv2dOptions(kNoiseSize, 256, 4).bias(false).transposed(true)),
       nn::BatchNorm(256),
       nn::Functional(torch::relu),
-   nn::Conv2d(nn::Conv2dOptions(256, 128, 3).stride(2).padding(1).with_bias(false).transposed(true)),
+   nn::Conv2d(nn::Conv2dOptions(256, 128, 3).stride(2).padding(1).bias(false).transposed(true)),
       nn::BatchNorm(128),
       nn::Functional(torch::relu),
-   nn::Conv2d(nn::Conv2dOptions(128, 64, 4).stride(2).padding(1).with_bias(false).transposed(true)),
+   nn::Conv2d(nn::Conv2dOptions(128, 64, 4).stride(2).padding(1).bias(false).transposed(true)),
       nn::BatchNorm(64),
       nn::Functional(torch::relu),
-   nn::Conv2d(nn::Conv2dOptions(64, 1, 4).stride(2).padding(1).with_bias(false).transposed(true)),
+   nn::Conv2d(nn::Conv2dOptions(64, 1, 4).stride(2).padding(1).bias(false).transposed(true)),
    nn::Functional(torch::tanh));
   generator->to(device);
 
   nn::Sequential discriminator(
-      nn::Conv2d(nn::Conv2dOptions(1, 64, 4).stride(2).padding(1).with_bias(false)),
+      nn::Conv2d(nn::Conv2dOptions(1, 64, 4).stride(2).padding(1).bias(false)),
       nn::Functional(torch::leaky_relu, 0.2),
-      nn::Conv2d(nn::Conv2dOptions(64, 128, 4).stride(2).padding(1).with_bias(false)),
+      nn::Conv2d(nn::Conv2dOptions(64, 128, 4).stride(2).padding(1).bias(false)),
       nn::BatchNorm(128),
       nn::Functional(torch::leaky_relu, 0.2),
-      nn::Conv2d(nn::Conv2dOptions(128, 256, 4).stride(2).padding(1).with_bias(false)),
+      nn::Conv2d(nn::Conv2dOptions(128, 256, 4).stride(2).padding(1).bias(false)),
       nn::BatchNorm(256),
       nn::Functional(torch::leaky_relu, 0.2),
-      nn::Conv2d(nn::Conv2dOptions(256, 1, 3).stride(1).padding(0).with_bias(false)),
+      nn::Conv2d(nn::Conv2dOptions(256, 1, 3).stride(1).padding(0).bias(false)),
       nn::Functional(torch::sigmoid));
   discriminator->to(device);
   //torch::Tensor z = torch::randn({kBatchSize, kNoiseSize, 1, 1}, device);
@@ -460,6 +460,8 @@ KAPI gan(K x) {
   }
   torch::Tensor samples = generator->forward(torch::randn({10, kNoiseSize, 1, 1}, device));
   torch::save((samples + 1.0) / 2.0, torch::str("sample.pt"));
- return kget(losses.reshape({kNumberOfEpochs,batches_per_epoch,2}));
+  samples = generator->forward(torch::randn({100, kNoiseSize, 1, 1}, device));
+  return kten(samples);
+ //return kget(losses.reshape({kNumberOfEpochs,batches_per_epoch,2}));
 }
 

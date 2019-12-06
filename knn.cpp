@@ -180,7 +180,7 @@ template<size_t D> Exdouble<D> exdouble(const Pairs& p,Cast c) {
 // bnorm - create batchnorm module given options/set dictionary of options given module
 // --------------------------------------------------------------------------------------
 torch::nn::BatchNorm bnorm(K x,J k) {
- bool a=true,t=true; double e=1e-5,m=0.1; Pairs p; J i,n=xargc(x,k,p);
+ bool a=true,t=true; double e=1e-5,m=0.1; Pairs p; J i=-1,n=xargc(x,k,p);
  if(!((n==0 && p.n) || (n==1 && xlong(x,k,i))))
   AT_ERROR("Unrecognized arguments for batch normalization");
  while(xpair(p))
@@ -193,16 +193,16 @@ torch::nn::BatchNorm bnorm(K x,J k) {
    default: AT_ERROR("Unrecognized batch norm option: ",p.k); break;
   }
  if(i<0) AT_ERROR("number of input features must be set, currently in = ",i);
- return torch::nn::BatchNorm(torch::nn::BatchNormOptions(i).affine(a).stateful(t).eps(e).momentum(m));
+ return torch::nn::BatchNorm(torch::nn::BatchNormOptions(i).affine(a).track_running_stats(t).eps(e).momentum(m));
 }
 
 static void bnorm(bool a,K x,const torch::nn::BatchNormImpl* m) {
- torch::nn::BatchNormOptions o=m->options, d(o.features());
- OPTION(x, in, kj(o.features()));
+ torch::nn::BatchNormOptions o=m->options, d(o.num_features());
+ OPTION(x, in, kj(o.num_features()));
  if(a || (o.eps()      != d.eps()))      OPTION(x, eps,       kf(o.eps()));
- if(a || (o.momentum() != d.momentum())) OPTION(x, momentum,  kf(o.momentum()));
+ if(a || (o.momentum() != d.momentum())) OPTION(x, momentum,  kf(o.momentum().value()));
  if(a || (o.affine()   != d.affine()))   OPTION(x, affine,    kb(o.affine()));
- if(a || (o.stateful() != d.stateful())) OPTION(x, track,     kb(o.stateful()));
+ if(a || (o.track_running_stats() != d.track_running_stats())) OPTION(x, track, kb(o.track_running_stats()));
 }
 
 // --------------------------------------------------------------------------------------
@@ -213,29 +213,29 @@ template<size_t D> static torch::nn::ConvOptions<D> conv(K x,J i,Cast c) {
  bool in=false,out=false,sz=false; Pairs p; J n=xargc(x,i,p);
  for(J j=0;j<n;++j)
    switch(j) {
-    case 0: o.input_channels (int64(x,i+j,c,Setting::in));        in=true; break;
-    case 1: o.output_channels(int64(x,i+j,c,Setting::in));       out=true; break;
+    case 0: o.in_channels    (int64(x,i+j,c,Setting::in));        in=true; break;
+    case 1: o.out_channels   (int64(x,i+j,c,Setting::in));       out=true; break;
     case 2: o.kernel_size    (exarray<D>(x,i+j,c,Setting::size)); sz=true; break;
     case 3: o.stride         (exarray<D>(x,i+j,c,Setting::stride));   break;
     case 4: o.padding        (exarray<D>(x,i+j,c,Setting::pad));      break;
     case 5: o.output_padding (exarray<D>(x,i+j,c,Setting::outpad));   break;
     case 6: o.dilation       (exarray<D>(x,i+j,c,Setting::dilate));   break;
     case 7: o.groups         (int64(x,i+j,c,Setting::groups));        break;
-    case 8: o.with_bias      (mbool    (x,i+j,c,Setting::bias));      break;
+    case 8: o.bias           (mbool    (x,i+j,c,Setting::bias));      break;
     case 9: o.transposed     (mbool    (x,i+j,c,Setting::transpose)); break;
     default: AT_ERROR(msym(c),": up to 10 positional arguments expected, ",n," given");
   }
  while(xpair(p))
   switch(mset(p.k)) {
-   case Setting::in:        o.input_channels (int64(p,c));     in=true; break;
-   case Setting::out:       o.output_channels(int64(p,c));    out=true; break;
+   case Setting::in:        o.in_channels   (int64(p,c));     in=true; break;
+   case Setting::out:       o.out_channels  (int64(p,c));    out=true; break;
    case Setting::size:      o.kernel_size   (exarray<D>(p,c)); sz=true; break;
    case Setting::stride:    o.stride        (exarray<D>(p,c)); break;
    case Setting::pad:       o.padding       (exarray<D>(p,c)); break;
    case Setting::outpad:    o.output_padding(exarray<D>(p,c)); break;
    case Setting::dilate:    o.dilation      (exarray<D>(p,c)); break;
    case Setting::groups:    o.groups         (int64(p,c));     break;
-   case Setting::bias:      o.with_bias      (mbool(p,c));     break;
+   case Setting::bias:      o.bias           (mbool(p,c));     break;
    case Setting::transpose: o.transposed     (mbool(p,c));     break;
    default: AT_ERROR("Unrecognized convolution option: ",p.k); break;
   }
@@ -245,6 +245,7 @@ template<size_t D> static torch::nn::ConvOptions<D> conv(K x,J i,Cast c) {
  return o;
 }
 
+/*
 template<size_t D,typename M>
 static M conv(K x,J k) {
  bool b=true,t=false; Pairs p; size_t d; J i=-1,j=-1,g=1,n=xargc(x,k,p);
@@ -276,19 +277,20 @@ static M conv(K x,J k) {
  using O=torch::nn::ConvOptions<D>;
  return M(O(i,j,sz).with_bias(b).transposed(t).groups(g).stride(st).padding(pd).output_padding(po).dilation(dl));
 }
+*/
 
 template<size_t D,typename M>
 static void conv(bool a,K x,const M* m) {
- torch::nn::ConvOptions<D> o=m->options, d(o.input_channels(),o.output_channels(),o.kernel_size());
- OPTION(x, in,   kj(o.input_channels()));
- OPTION(x, out,  kj(o.output_channels()));
+ torch::nn::ConvOptions<D> o=m->options, d(o.in_channels(),o.out_channels(),o.kernel_size());
+ OPTION(x, in,   kj(o.in_channels()));
+ OPTION(x, out,  kj(o.out_channels()));
  OPTION(x, size, KEX(o.kernel_size()));
  if(a || (*o.stride()         != *d.stride()))         OPTION(x, stride,    KEX(o.stride()));
  if(a || (*o.padding()        != *d.padding()))        OPTION(x, pad,       KEX(o.padding()));
  if(a || (*o.output_padding() != *d.output_padding())) OPTION(x, outpad,    KEX(o.output_padding()));
  if(a || (*o.dilation()       != *d.dilation()))       OPTION(x, dilate,    KEX(o.dilation()));
  if(a || ( o.groups()         !=  d.groups()))         OPTION(x, groups,    kj(o.groups()));
- if(a || ( o.with_bias()      !=  d.with_bias()))      OPTION(x, bias,      kb(o.with_bias()));
+ if(a || ( o.bias()           !=  d.bias()))      OPTION(x, bias,      kb(o.bias()));
  if(a || ( o.transposed()     !=  d.transposed()))     OPTION(x, transpose, kb(o.transposed()));
 }
 
@@ -296,7 +298,7 @@ static void conv(bool a,K x,const M* m) {
 // drop - create dropout module given probability/set dictionary given module
 // --------------------------------------------------------------------------------------
 static double drop(S s,K x,J i) {
- double f=torch::nn::DropoutOptions().rate(); Pairs p; J n=xargc(x,i,p);
+ double f=torch::nn::DropoutOptions().p(); Pairs p; J n=xargc(x,i,p);
  if(!(n==0 || (n==1 && xdouble(x,i,f))))
   AT_ERROR("Unrecognized arguments for dropout module: ",s);
  while(xpair(p))
@@ -308,8 +310,8 @@ static double drop(S s,K x,J i) {
 }
 
 static void drop(bool a,K x,double f) {
- double d=torch::nn::DropoutOptions().rate();
- if(a || d != f) OPTION(x, drop, kf(f));
+ double p=torch::nn::DropoutOptions().p();
+ if(a || p != f) OPTION(x, drop, kf(f));
 }
 
 // --------------------------------------------------------------------------------------
@@ -333,12 +335,8 @@ torch::nn::Embedding embed(K x,J k) {
 
 static void embed(K x,const torch::nn::EmbeddingImpl* m) {
  auto o=m->options;
- OPTION(x, rows, kj(o.count()));
- OPTION(x, cols, kj(o.dimension()));
-/* will be renamed:
  OPTION(x, rows, kj(o.num_embeddings()));
  OPTION(x, cols, kj(o.embedding_dim()));
-*/
 }
 
 // --------------------------------------------------------------------------------------
@@ -363,14 +361,14 @@ static torch::nn::LinearOptions linear(K x,J i,Cast c) {
   }
  TORCH_CHECK(in>0,  msym(c), ": positive input size required");
  TORCH_CHECK(out>0, msym(c), ": positive output size required");
- return torch::nn::LinearOptions(in,out).with_bias(b);
+ return torch::nn::LinearOptions(in,out).bias(b);
 }
 
 static void linear(bool a,K x,const torch::nn::LinearImpl *m) {
- torch::nn::LinearOptions o=m->options, d(o.in(),o.out());
- OPTION(x, in,  kj(o.in()));
- OPTION(x, out, kj(o.out()));
- if(a || (o.with_bias() != d.with_bias())) OPTION(x, bias, kb(o.with_bias()));
+ torch::nn::LinearOptions o=m->options, d(o.in_features(),o.out_features());
+ OPTION(x, in,  kj(o.in_features()));
+ OPTION(x, out, kj(o.out_features()));
+ if(a || (o.bias() != d.bias())) OPTION(x, bias, kb(o.bias()));
 }
 
 KAPI klinear(K x) {
@@ -1212,10 +1210,10 @@ void mopt(Module &g,bool a,K &v,J i) { //g:generic module, a:true if all options
  } else if(auto* m=g.as<torch::nn::Embedding>())      { c=Cast::embed;     embed(x,m);
  } else if(auto* m=g.as<torch::nn::Linear>())         { c=Cast::linear;    linear(a,x,m);
 
- } else if(auto* m=g.as<torch::nn::Dropout>())        { c=Cast::dropout;   drop(a,x,m->options.rate());
- } else if(auto* m=g.as<torch::nn::FeatureDropout>()) { c=Cast::fdropout;  drop(a,x,m->options.rate());
- } else if(auto* m=g.as<AlphaDropout>())              { c=Cast::adropout;  drop(a,x,m->options.rate());
- } else if(auto* m=g.as<FeatureAlphaDropout>())       { c=Cast::fadropout; drop(a,x,m->options.rate());
+ } else if(auto* m=g.as<torch::nn::Dropout>())        { c=Cast::dropout;   drop(a,x,m->options.p());
+ } else if(auto* m=g.as<torch::nn::FeatureDropout>()) { c=Cast::fdropout;  drop(a,x,m->options.p());
+ } else if(auto* m=g.as<AlphaDropout>())              { c=Cast::adropout;  drop(a,x,m->options.p());
+ } else if(auto* m=g.as<FeatureAlphaDropout>())       { c=Cast::fadropout; drop(a,x,m->options.p());
 
  } else if(auto* m=g.as<torch::nn::Conv1d>())         { c=Cast::conv1d; conv<1,torch::nn::Conv1dImpl>(a,x,m);
  } else if(auto* m=g.as<torch::nn::Conv2d>())         { c=Cast::conv2d; conv<2,torch::nn::Conv2dImpl>(a,x,m);

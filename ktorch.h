@@ -77,7 +77,7 @@ using TensorDict = torch::OrderedDict<std::string, torch::Tensor>;
 class TORCH_API Loss;
 using Lossptr=std::shared_ptr<Loss>;
 using at::detail::computeStorageSize;
-//using at::Reduction::Reduction;
+using at::Reduction::Reduction;
 
 typedef struct {
  A a = 0;  // type: 1-dict, 2-list of pairs, 3-general list, 4-sym list

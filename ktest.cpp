@@ -423,6 +423,7 @@ KAPI gan(K x) {
     for (torch::data::Example<>& batch : *data_loader) {
       //return kget(batch.data);
       // Train discriminator with real images.
+      std::cerr << "discriminator\n";
       discriminator->zero_grad();
       torch::Tensor real_images = batch.data.to(device);
       torch::Tensor real_labels = torch::empty(batch.data.size(0), device).uniform_(0.8, 1.0);
@@ -432,6 +433,7 @@ KAPI gan(K x) {
 
       // Train discriminator with fake images.
       torch::Tensor noise = torch::randn({batch.data.size(0), kNoiseSize, 1, 1}, device);
+      std::cerr << "generator\n";
       torch::Tensor fake_images = generator->forward(noise);
       torch::Tensor fake_labels = torch::zeros(batch.data.size(0), device);
       torch::Tensor fake_output = discriminator->forward(fake_images.detach());

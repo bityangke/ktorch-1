@@ -245,40 +245,6 @@ template<size_t D> static torch::nn::ConvOptions<D> conv(K x,J i,Cast c) {
  return o;
 }
 
-/*
-template<size_t D,typename M>
-static M conv(K x,J k) {
- bool b=true,t=false; Pairs p; size_t d; J i=-1,j=-1,g=1,n=xargc(x,k,p);
- ExpandingArray<D> sz(-1),st(1),pd(0),po(0),dl(1);
- if(!((!n && p.n) || (xlong(x,k,i) && (n==1 || (xlong(x,k+1,j) && (n==2 || (n==3 && XDIM(x,k+2,D,sz))))))))
-  AT_ERROR("Unrecognized arguments for conv",D,"d module");
- while(xpair(p))
-  switch(mset(p.k)) {
-   case Setting::in:        i=plong(p); break;
-   case Setting::out:       j=plong(p); break;
-   case Setting::size:      PDIM(p,D,sz); break;
-   case Setting::stride:    PDIM(p,D,st); break;
-   case Setting::pad:       PDIM(p,D,pd); break;
-   case Setting::outpad:    PDIM(p,D,po); break;
-   case Setting::dilate:    PDIM(p,D,dl); break;
-   case Setting::groups:    g=plong(p); break;
-   case Setting::bias:      b=pbool(p); break;
-   case Setting::transpose: t=pbool(p); break;
-   default: AT_ERROR("Unrecognized convolution option: ",p.k); break;
-  }
- if(i<0) {
-  AT_ERROR("number of channels in the input must be set, currently in = ",i);
- } else if(j<0) {
-  AT_ERROR("number of channels produced from the convolution must be set, currently out = ",j);
- } else {
-  for(d=0;d<D;d++)
-   if((*sz)[d]<0) AT_ERROR("Size of ",D,"-d colvolutional kernel, dim[",d,"] = ",(*sz)[d]);
- }
- using O=torch::nn::ConvOptions<D>;
- return M(O(i,j,sz).with_bias(b).transposed(t).groups(g).stride(st).padding(pd).output_padding(po).dilation(dl));
-}
-*/
-
 template<size_t D,typename M>
 static void conv(bool a,K x,const M* m) {
  torch::nn::ConvOptions<D> o=m->options, d(o.in_channels(),o.out_channels(),o.kernel_size());
@@ -297,21 +263,27 @@ static void conv(bool a,K x,const M* m) {
 // --------------------------------------------------------------------------------------
 // drop - create dropout module given probability/set dictionary given module
 // --------------------------------------------------------------------------------------
-static double drop(S s,K x,J i) {
- double f=torch::nn::DropoutOptions().p(); Pairs p; J n=xargc(x,i,p);
- if(!(n==0 || (n==1 && xdouble(x,i,f))))
-  AT_ERROR("Unrecognized arguments for dropout module: ",s);
+static torch::nn::DropoutOptions drop(K x,J i,Cast c) {
+ torch::nn::DropoutOptions o; Pairs p; J n=xargc(x,i,p);
+ for(J j=0;j<n;++j)
+   switch(j) {
+    case 0: o.p(mdouble(x,i+j,c,Setting::p)); break;
+    case 1: o.inplace(mbool(x,i+j,c,Setting::inplace)); break;
+    default: AT_ERROR(msym(c),": up to 2 positional arguments expected, ",n," given");
+  }
  while(xpair(p))
-  if(mset(p.k)==Setting::drop)
-   f=pdouble(p);
-  else
-   AT_ERROR("Dropout option: ",p.k," unrecognized, expected option: drop, with a probability from 0.0 to 1.0");
- return f;
+  switch(mset(p.k)) {
+   case Setting::p: o.p(mdouble(p,c)); break;
+   case Setting::inplace: o.inplace(mbool(p,c)); break;
+   default: AT_ERROR("Unrecognized dropout option: ",p.k); break;
+  }
+ return o;
 }
 
-static void drop(bool a,K x,double f) {
- double p=torch::nn::DropoutOptions().p();
- if(a || p != f) OPTION(x, drop, kf(f));
+static void drop(bool a,K x,const torch::nn::DropoutOptions& o) {
+ torch::nn::DropoutOptions d;
+ if(a || o.p()       != d.p())       OPTION(x, p,       kf(o.p()));
+ if(a || o.inplace() != d.inplace()) OPTION(x, inplace, kb(o.inplace()));
 }
 
 // --------------------------------------------------------------------------------------
@@ -1105,10 +1077,12 @@ void mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) {
   case Cast::embed:        PUSH(q,n,embed(x,i)); break;
   case Cast::linear:       PUSH(q,n,torch::nn::Linear(linear(x,i,c))); break;
 
-  case Cast::dropout:      PUSH(q,n,torch::nn::Dropout(drop(s,x,i))); break;
-  case Cast::fdropout:     PUSH(q,n,torch::nn::FeatureDropout(drop(s,x,i))); break;
-  case Cast::adropout:     PUSH(q,n,AlphaDropout(drop(s,x,i))); break;
-  case Cast::fadropout:    PUSH(q,n,FeatureAlphaDropout(drop(s,x,i))); break;
+  case Cast::drop:         PUSH(q,n,torch::nn::Dropout(drop(x,i,c))); break;
+  case Cast::drop2d:       PUSH(q,n,torch::nn::Dropout2d(drop(x,i,c))); break;
+  case Cast::drop3d:       PUSH(q,n,torch::nn::Dropout3d(drop(x,i,c))); break;
+  case Cast::fdrop:        PUSH(q,n,torch::nn::FeatureDropout(drop(x,i,c))); break;
+  case Cast::adrop:        PUSH(q,n,torch::nn::AlphaDropout(drop(x,i,c))); break;
+  case Cast::fadrop:       PUSH(q,n,torch::nn::FeatureAlphaDropout(drop(x,i,c))); break;
 
   case Cast::conv1d:       PUSH(q,n,torch::nn::Conv1d(conv<1>(x,i,c))); break;
   case Cast::conv2d:       PUSH(q,n,torch::nn::Conv2d(conv<2>(x,i,c))); break;
@@ -1210,10 +1184,12 @@ void mopt(Module &g,bool a,K &v,J i) { //g:generic module, a:true if all options
  } else if(auto* m=g.as<torch::nn::Embedding>())      { c=Cast::embed;     embed(x,m);
  } else if(auto* m=g.as<torch::nn::Linear>())         { c=Cast::linear;    linear(a,x,m);
 
- } else if(auto* m=g.as<torch::nn::Dropout>())        { c=Cast::dropout;   drop(a,x,m->options.p());
- } else if(auto* m=g.as<torch::nn::FeatureDropout>()) { c=Cast::fdropout;  drop(a,x,m->options.p());
- } else if(auto* m=g.as<AlphaDropout>())              { c=Cast::adropout;  drop(a,x,m->options.p());
- } else if(auto* m=g.as<FeatureAlphaDropout>())       { c=Cast::fadropout; drop(a,x,m->options.p());
+ } else if(auto* m=g.as<torch::nn::Dropout>())             { c=Cast::drop;   drop(a,x,m->options);
+ } else if(auto* m=g.as<torch::nn::Dropout2d>())           { c=Cast::drop2d; drop(a,x,m->options);
+ } else if(auto* m=g.as<torch::nn::Dropout3d>())           { c=Cast::drop3d; drop(a,x,m->options);
+ } else if(auto* m=g.as<torch::nn::FeatureDropout>())      { c=Cast::fdrop;  drop(a,x,m->options);
+ } else if(auto* m=g.as<torch::nn::AlphaDropout>())        { c=Cast::adrop;  drop(a,x,m->options);
+ } else if(auto* m=g.as<torch::nn::FeatureAlphaDropout>()) { c=Cast::fadrop; drop(a,x,m->options);
 
  } else if(auto* m=g.as<torch::nn::Conv1d>())         { c=Cast::conv1d; conv<1,torch::nn::Conv1dImpl>(a,x,m);
  } else if(auto* m=g.as<torch::nn::Conv2d>())         { c=Cast::conv2d; conv<2,torch::nn::Conv2dImpl>(a,x,m);
@@ -1503,12 +1479,12 @@ KAPI anytest(K x) {
   torch::nn::FeatureDropout(.5),
   torch::nn::FeatureDropout(),
   torch::nn::FeatureDropout(.2),
-  AlphaDropout(.5),
-  AlphaDropout(),
-  AlphaDropout(.2),
-  FeatureAlphaDropout(.5),
-  FeatureAlphaDropout(),
-  FeatureAlphaDropout(.25),
+  torch::nn::AlphaDropout(.5),
+  torch::nn::AlphaDropout(),
+  torch::nn::AlphaDropout(.2),
+  torch::nn::FeatureAlphaDropout(.5),
+  torch::nn::FeatureAlphaDropout(),
+  torch::nn::FeatureAlphaDropout(.25),
   ELU(),
   torch::nn::Embedding(4,10),
   torch::nn::FeatureDropout(.5),

@@ -111,11 +111,12 @@ enum class Cast:char {
 
  adaptavg1d,  adaptavg2d,  adaptavg3d,      //modules
  adaptmax1d,  adaptmax2d,  adaptmax3d,
- adropout,    avgpool1d,   avgpool2d,
+ adrop,       avgpool1d,   avgpool2d,
  avgpool3d,   batchnorm,   celu,
  conv1d,      conv2d,      conv3d,
- dropout,     elu,         embed,
- fadropout,   fdropout,
+ drop,        drop2d,      drop3d,
+ out,         elu,         embed,
+ fadrop,      fdrop,
  fmaxpool2d,  fmaxpool3d,
 
  gelu,        glu,         gru,
@@ -554,14 +555,14 @@ typedef struct {
   std::make_tuple(cs("tanh"),torch::nn::RNNActivation::Tanh)
  }};
 
- std::array<std::tuple<S,Cast>,64> module = {{  // module sym -> enum
+ std::array<std::tuple<S,Cast>,66> module = {{  // module sym -> enum
   std::make_tuple(cs("adaptavg1d"),      Cast::adaptavg1d),
   std::make_tuple(cs("adaptavg2d"),      Cast::adaptavg2d),
   std::make_tuple(cs("adaptavg3d"),      Cast::adaptavg3d),
   std::make_tuple(cs("adaptmax1d"),      Cast::adaptmax1d),
   std::make_tuple(cs("adaptmax2d"),      Cast::adaptmax2d),
   std::make_tuple(cs("adaptmax3d"),      Cast::adaptmax3d),
-  std::make_tuple(cs("adropout"),        Cast::adropout),
+  std::make_tuple(cs("adrop"),           Cast::adrop),
   std::make_tuple(cs("avgpool1d"),       Cast::avgpool1d),
   std::make_tuple(cs("avgpool2d"),       Cast::avgpool2d),
   std::make_tuple(cs("avgpool3d"),       Cast::avgpool3d),
@@ -570,12 +571,14 @@ typedef struct {
   std::make_tuple(cs("conv1d"),          Cast::conv1d),
   std::make_tuple(cs("conv2d"),          Cast::conv2d),
   std::make_tuple(cs("conv3d"),          Cast::conv3d),
-  std::make_tuple(cs("dropout"),         Cast::dropout),
+  std::make_tuple(cs("drop"),            Cast::drop),
+  std::make_tuple(cs("drop2d"),          Cast::drop2d),
+  std::make_tuple(cs("drop3d"),          Cast::drop3d),
   std::make_tuple(cs("elu"),             Cast::elu),
   std::make_tuple(cs("embed"),           Cast::embed),
   std::make_tuple(cs("expand"),          Cast::expand),
-  std::make_tuple(cs("fdropout"),        Cast::fdropout),
-  std::make_tuple(cs("fadrop"),          Cast::fadropout),
+  std::make_tuple(cs("fdrop"),           Cast::fdrop),
+  std::make_tuple(cs("fadrop"),          Cast::fadrop),
   std::make_tuple(cs("flatten"),         Cast::flatten),
   std::make_tuple(cs("fmaxpool2d"),      Cast::fmaxpool2d),
   std::make_tuple(cs("fmaxpool3d"),      Cast::fmaxpool3d),

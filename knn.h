@@ -647,35 +647,6 @@ class TORCH_API SoftshrinkImpl : public ShrinkImpl<SoftshrinkImpl> {
 };
 TORCH_MODULE(Softshrink);
 
-// ------------------------------------------------------------------------------------------
-// unable to use torch base class for dropout, add one here for alpha & feature alpha dropout
-// (using torch::nn::detail::DropoutImplBase compiles, but linker errors on reset member fn)
-// ------------------------------------------------------------------------------------------
-template <typename Derived> class DropoutImplBase : public torch::nn::Cloneable<Derived> {
- public:
-  DropoutImplBase() {}
-  explicit DropoutImplBase(torch::nn::DropoutOptions o) : options(o) {
-   TORCH_CHECK(options.p() >= 0, "Dropout rate must not be less than zero");
-   TORCH_CHECK(options.p() <= 1, "Dropout rate must not be greater than one");
-  }
-  void reset() {}
-  torch::nn::DropoutOptions options;
-};
-
-class TORCH_API AlphaDropoutImpl : public DropoutImplBase<AlphaDropoutImpl> {
- public:
-  using DropoutImplBase<AlphaDropoutImpl>::DropoutImplBase;
-  torch::Tensor forward(const torch::Tensor& t) {return torch::alpha_dropout(t,options.p(),this->is_training());}
-};
-TORCH_MODULE(AlphaDropout);
-
-class TORCH_API FeatureAlphaDropoutImpl : public DropoutImplBase<FeatureAlphaDropoutImpl> {
- public:
-  using DropoutImplBase<FeatureAlphaDropoutImpl>::DropoutImplBase;
-  torch::Tensor forward(const torch::Tensor& t) {return torch::feature_alpha_dropout(t,options.p(),this->is_training());}
-};
-TORCH_MODULE(FeatureAlphaDropout);
-
 // -------------------------------------------------------------
 //  flatten - typically from 2nd dimension on
 // -------------------------------------------------------------

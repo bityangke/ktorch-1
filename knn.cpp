@@ -605,12 +605,12 @@ template<size_t D,typename M> static void fpool(bool a,K x,const M* m) {
 // ----------------------------------------------------------------------------------
 // lppool - power-average pooling
 // ----------------------------------------------------------------------------------
-template<size_t D> static LPPoolOptions<D> lppool(K x,J i,Cast c) {
- LPPoolOptions<D> o(0,0);
+template<size_t D> static torch::nn::LPPoolOptions<D> lppool(K x,J i,Cast c) {
+ torch::nn::LPPoolOptions<D> o(0,0);
  bool pw=false,sz=false,st=false; Pairs p; J n=xargc(x,i,p);
  for(J j=0;j<n;++j) {
    switch(j) {
-    case 0: o.power      (mdouble(x,i+j,  c,Setting::power));   pw=true; break;
+    case 0: o.norm_type  (mdouble(x,i+j,  c,Setting::power));   pw=true; break;
     case 1: o.kernel_size(exarray<D>(x,i+j,c,Setting::size));   sz=true; break;
     case 2: o.stride     (exarray<D>(x,i+j,c,Setting::stride)); st=true; break;
     case 3: o.ceil_mode  (mbool    (x,i+j,c,Setting::ceiling)); break;
@@ -619,7 +619,7 @@ template<size_t D> static LPPoolOptions<D> lppool(K x,J i,Cast c) {
  }
  while(xpair(p))
   switch(mset(p.k)) {
-   case Setting::power:   o.power      (mdouble   (p,c)); pw=true; break;
+   case Setting::power:   o.norm_type  (mdouble   (p,c)); pw=true; break;
    case Setting::size:    o.kernel_size(exarray<D>(p,c)); sz=true; break;
    case Setting::stride:  o.stride     (exarray<D>(p,c)); st=true; break;
    case Setting::ceiling: o.ceil_mode  (mbool(p,c)); break;
@@ -632,14 +632,28 @@ template<size_t D> static LPPoolOptions<D> lppool(K x,J i,Cast c) {
 }
 
 template<size_t D,typename M> static void lppool(bool a,K x,const M* m) {
- LPPoolOptions<D> o=m->options, d(o.power(),o.kernel_size());
- OPTION(x, power, kf(o.power()));
+ torch::nn::LPPoolOptions<D> o=m->options, d(o.norm_type(),o.kernel_size());
+ OPTION(x, power, kf(o.norm_type()));
  OPTION(x, size,  KEX(o.kernel_size()));
  if(a || *o.stride()   != *d.stride())   OPTION(x, stride,  KEX(o.stride()));
  if(a || o.ceil_mode() != d.ceil_mode()) OPTION(x, ceiling, kb(o.ceil_mode()));
 }
 
-// no torch::nn::functional:lp_pool implemented yet (for version 1.3??)
+static K lppool(K x,Cast c) {
+ KTRY
+  TORCH_CHECK(!x->t, msym(c)," not implemented for ",kname(x->t));
+  Tensor r, *t=xten(x,0);
+  switch(c) {
+   case Cast::lppool1d: r=torch::nn::functional::lp_pool1d(t ? *t : kput(x,0), lppool<1>(x,1,c)); break;
+   case Cast::lppool2d: r=torch::nn::functional::lp_pool2d(t ? *t : kput(x,0), lppool<2>(x,1,c)); break;
+   default: AT_ERROR("Unrecognized LP pooling function");
+  }
+  return kresult(t,r);
+ KCATCH("lppool");
+}
+
+KAPI lppool1d(K x) {return lppool(x,Cast::lppool1d);}
+KAPI lppool2d(K x) {return lppool(x,Cast::lppool2d);}
 
 // ----------------------------------------------------------------------------------
 // pad - n-dimensional padding, specify even number of sizes and optional pad value
@@ -1107,8 +1121,8 @@ void mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) {
   case Cast::fmaxpool2d:   PUSH(q,n,FractionalMaxPool2d(fpool<2>(x,i,c))); break;
   case Cast::fmaxpool3d:   PUSH(q,n,FractionalMaxPool3d(fpool<3>(x,i,c))); break;
 
-  case Cast::lppool1d:     PUSH(q,n,LPPool1d(lppool<1>(x,i,c))); break;
-  case Cast::lppool2d:     PUSH(q,n,LPPool2d(lppool<2>(x,i,c))); break;
+  case Cast::lppool1d:     PUSH(q,n,torch::nn::LPPool1d(lppool<1>(x,i,c))); break;
+  case Cast::lppool2d:     PUSH(q,n,torch::nn::LPPool2d(lppool<2>(x,i,c))); break;
 
   case Cast::pad:          PUSH(q,n,(pad(x,i))); break;
   case Cast::reflect1d:    PUSH(q,n,ReflectionPad1d(rpad<1,torch::nn::ReflectionPad1dOptions>(x,i,c))); break;
@@ -1214,8 +1228,8 @@ void mopt(Module &g,bool a,K &v,J i) { //g:generic module, a:true if all options
  } else if(auto* m=g.as<FractionalMaxPool2d>()) { c=Cast::fmaxpool2d; fpool<2,FractionalMaxPool2dImpl>(a,x,m);
  } else if(auto* m=g.as<FractionalMaxPool3d>()) { c=Cast::fmaxpool3d; fpool<3,FractionalMaxPool3dImpl>(a,x,m);
 
- } else if(auto* m=g.as<LPPool1d>())         { c=Cast::lppool1d; lppool<1,LPPool1dImpl>(a,x,m);
- } else if(auto* m=g.as<LPPool2d>())         { c=Cast::lppool2d; lppool<2,LPPool2dImpl>(a,x,m);
+ } else if(auto* m=g.as<torch::nn::LPPool1d>())         { c=Cast::lppool1d; lppool<1,torch::nn::LPPool1dImpl>(a,x,m);
+ } else if(auto* m=g.as<torch::nn::LPPool2d>())         { c=Cast::lppool2d; lppool<2,torch::nn::LPPool2dImpl>(a,x,m);
 
  } else if(auto* m=g.as<Pad>())              { c=Cast::pad;         pad(a,x,m);
  } else if(auto* m=g.as<ReflectionPad1d>())  { c=Cast::reflect1d;   rpad(x,m);
@@ -1428,9 +1442,9 @@ void nnfn(K x) {
  fn(x, "adaptmax1d", KFN(adaptmax1d), 1);
  fn(x, "adaptmax2d", KFN(adaptmax2d), 1);
  fn(x, "adaptmax3d", KFN(adaptmax3d), 1);
- fn(x, "avgpool1d",  KFN(avgpool1d), 1);
- fn(x, "avgpool2d",  KFN(avgpool2d), 1);
- fn(x, "avgpool3d",  KFN(avgpool3d), 1);
+ fn(x, "avgpool1d",  KFN(avgpool1d),  1);
+ fn(x, "avgpool2d",  KFN(avgpool2d),  1);
+ fn(x, "avgpool3d",  KFN(avgpool3d),  1);
  fn(x, "celu",       KFN(kcelu), 1);
  fn(x, "elu",        KFN(kelu), 1);
  fn(x, "flatten",    KFN(kflatten), 1);
@@ -1441,6 +1455,8 @@ void nnfn(K x) {
  fn(x, "linear",     KFN(klinear), 1);
  fn(x, "logsigmoid", KFN(klogsigmoid), 1);
  fn(x, "logsoftmax", KFN(klogsoftmax), 1);
+ fn(x, "lppool1d",   KFN(lppool1d),   1);
+ fn(x, "lppool2d",   KFN(lppool2d),   1);
  fn(x, "maxpool1d",  KFN(maxpool1d), 1);
  fn(x, "maxpool2d",  KFN(maxpool2d), 1);
  fn(x, "maxpool3d",  KFN(maxpool3d), 1);
@@ -1499,8 +1515,8 @@ KAPI anytest(K x) {
   torch::nn::Linear(3,4),
   LogSigmoid(),
   LogSoftmax(1,torch::kDouble),
-  LPPool1d(2,3),
-  LPPool2d(2,3),
+  torch::nn::LPPool1d(2,3),
+  torch::nn::LPPool2d(2,3),
   torch::nn::MaxPool1d(2),
   torch::nn::MaxPool2d(2),
   torch::nn::MaxPool3d(2),

@@ -107,34 +107,34 @@ enum class Class:char {
 
 enum class Cast:char {
  undefined=0, 
- tensor,      sequential,  model,           //basic structures
+ tensor,      sequential,  model,           // basic structures
 
- adaptavg1d,  adaptavg2d,  adaptavg3d,      //modules
- adaptmax1d,  adaptmax2d,  adaptmax3d,
- adrop,       avgpool1d,   avgpool2d,
- avgpool3d,   batchnorm,   celu,
- conv1d,      conv2d,      conv3d,
- drop,        drop2d,      drop3d,
- out,         elu,         embed,
- fadrop,      fdrop,
- fmaxpool2d,  fmaxpool3d,
-
- gelu,        glu,         gru,
- hardshrink,  hardtanh,    leakyrelu,
- linear,      logsigmoid,  logsoftmax,
- lppool1d,    lppool2d,    lstm,
- maxpool1d,   maxpool2d,   maxpool3d,
- pad,         prelu,       reflect1d,
- reflect2d,   relu,        relu6,
+ adaptavg1d,  adaptavg2d,  adaptavg3d,      // modules
+ adaptmax1d,  adaptmax2d,  adaptmax3d, 
+ adrop,       avgpool1d,   avgpool2d,  
+ avgpool3d,   batchnorm,   celu,       
+ conv1d,      conv2d,      conv3d,     
+ drop,        drop2d,      drop3d,     
+ elu,         embed,       expand,     
+ fadrop,      fdrop,       flatten,    
+ fmaxpool2d,  fmaxpool3d,  gelu,       
+ glu,         gru,         hardshrink, 
+ hardtanh,    leakyrelu,   linear,     
+ logsigmoid,  logsoftmax,  lppool1d,   
+ lppool2d,    lstm,        maxpool1d,  
+ maxpool2d,   maxpool3d,   out,        
+ pad,         pad1d,       pad2d,      
+ pad3d,       prelu,       reflect1d,  
+ reflect2d,   relu,        relu6,      
  replicate1d, replicate2d, replicate3d,
- rnn,         rrelu,       selu,
- sigmoid,     softmax,     softmin,
- softplus,    softshrink,  softsign,
- tanh,        tanhshrink,  threshold,
- flatten,     squeeze,     unsqueeze,
- reshape,     expand,
+ reshape,     rnn,         rrelu,      
+ selu,        sigmoid,     softmax,    
+ softmin,     softplus,    softshrink, 
+ softsign,    squeeze,     tanh,       
+ tanhshrink,  threshold,   unsqueeze,  
+ zeropad2d,            
 
- bce,         bcelogits,   bcelogitw,      //loss fns
+ bce,         bcelogits,   bcelogitw,      // loss fns
  ce,          cosineloss,  ctc,
  hinge,       kl,          l1,
  margin,      mse,         multilabel,
@@ -142,7 +142,7 @@ enum class Cast:char {
  poissonloss, smoothl1,    softmargin,
  triplet,    
 
- adagrad,     adam,        lbfgs,          //optimizers
+ adagrad,     adam,        lbfgs,          // optimizers
  rmsprop,     sgd
 };
 
@@ -555,7 +555,7 @@ typedef struct {
   std::make_tuple(cs("tanh"),torch::nn::RNNActivation::Tanh)
  }};
 
- std::array<std::tuple<S,Cast>,66> module = {{  // module sym -> enum
+ std::array<std::tuple<S,Cast>,70> module = {{  // module sym -> enum
   std::make_tuple(cs("adaptavg1d"),      Cast::adaptavg1d),
   std::make_tuple(cs("adaptavg2d"),      Cast::adaptavg2d),
   std::make_tuple(cs("adaptavg3d"),      Cast::adaptavg3d),
@@ -598,6 +598,9 @@ typedef struct {
   std::make_tuple(cs("maxpool2d"),       Cast::maxpool2d),
   std::make_tuple(cs("maxpool3d"),       Cast::maxpool3d),
   std::make_tuple(cs("pad"),             Cast::pad),
+  std::make_tuple(cs("pad1d"),           Cast::pad1d),
+  std::make_tuple(cs("pad2d"),           Cast::pad2d),
+  std::make_tuple(cs("pad3d"),           Cast::pad3d),
   std::make_tuple(cs("prelu"),           Cast::prelu),
   std::make_tuple(cs("reflect1d"),       Cast::reflect1d),
   std::make_tuple(cs("reflect2d"),       Cast::reflect2d),
@@ -621,7 +624,8 @@ typedef struct {
   std::make_tuple(cs("tanh"),            Cast::tanh),
   std::make_tuple(cs("tanhshrink"),      Cast::tanhshrink),
   std::make_tuple(cs("threshold"),       Cast::threshold),
-  std::make_tuple(cs("unsqueeze"),       Cast::unsqueeze)
+  std::make_tuple(cs("unsqueeze"),       Cast::unsqueeze),
+  std::make_tuple(cs("zeropad2d"),       Cast::zeropad2d)
  }};
 
  std::array<std::tuple<S,Setting>,46> mset = {{      // module option sym -> enum

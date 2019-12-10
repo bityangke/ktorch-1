@@ -467,3 +467,19 @@ KAPI gan(K x) {
  //return kget(losses.reshape({kNumberOfEpochs,batches_per_epoch,2}));
 }
 
+KAPI gentest(K x) {
+ torch::nn::Sequential generator(
+    torch::nn::ConvTranspose2d(torch::nn::Conv2dOptions(100, 256, 4).bias(false).transposed(true)),
+    torch::nn::BatchNorm(256),
+    torch::nn::Functional(torch::relu),
+    torch::nn::ConvTranspose2d(torch::nn::Conv2dOptions(256, 128, 3).stride(2).padding(1).bias(false).transposed(true)),
+    torch::nn::BatchNorm(128),
+    torch::nn::Functional(torch::relu),
+    torch::nn::ConvTranspose2d(torch::nn::Conv2dOptions(128, 64, 4).stride(2).padding(1).bias(false).transposed(true)),
+    torch::nn::BatchNorm(64),
+    torch::nn::Functional(torch::relu),
+    torch::nn::ConvTranspose2d(torch::nn::Conv2dOptions(64, 1, 4).stride(2).padding(1).bias(false).transposed(true)),
+    torch::nn::Functional(torch::tanh));
+  generator(torch::randn({64,100,1,1}),256);
+  return (K)0;
+}

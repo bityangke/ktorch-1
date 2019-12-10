@@ -75,115 +75,21 @@ struct TORCH_API PadOptions {
  TORCH_ARG(torch::Scalar, value)=0;
 };
 
-/*
-namespace torch { namespace nn {
-template <size_t D>
-struct TORCH_API ReflectionPadOptions {
-  ReflectionPadOptions(ExpandingArray<D*2> padding) : padding_(padding) {}
-  TORCH_ARG(ExpandingArray<D*2>, padding);
-};
-using ReflectionPad1dOptions = ReflectionPadOptions<1>;
-using ReflectionPad2dOptions = ReflectionPadOptions<2>;
-
-template <size_t D>
-struct TORCH_API ReplicationPadOptions {
-  ReplicationPadOptions(ExpandingArray<D*2> padding) : padding_(padding) {}
-  TORCH_ARG(ExpandingArray<D*2>, padding);
-};
-
-using ReplicationPad1dOptions = ReplicationPadOptions<1>;
-using ReplicationPad2dOptions = ReplicationPadOptions<2>;
-using ReplicationPad3dOptions = ReplicationPadOptions<3>;
-}}
-*/
-
 // ------------------------------------------
 // constant pad n-dim
 // ------------------------------------------
 class TORCH_API PadImpl : public torch::nn::Cloneable<PadImpl> {
  public:
-  PadImpl(std::vector<int64_t> p) : PadImpl(PadOptions(p)) {}
-  explicit PadImpl(PadOptions o) : options(std::move(o)) {reset();}
+  PadImpl(std::vector<int64_t> p) : PadImpl(torch::nn::functional::PadFuncOptions(p)) {}
+  explicit PadImpl(const torch::nn::functional::PadFuncOptions& o) : options(o) {reset();}
   void reset() override {}
   torch::Tensor forward(const torch::Tensor& input) {
-   return torch::constant_pad_nd(input,options.pad(),options.value());
+   return {}; //torch::constant_pad_nd(input,options.pad(),options.value());
   }
-  PadOptions options;
+  torch::nn::functional::PadFuncOptions options;
 };
 
 TORCH_MODULE(Pad);
-
-// ------------------------------------------
-// reflection pad 1,2d
-// ------------------------------------------
-template <size_t D, typename Derived>
-class TORCH_API ReflectionPadImpl : public torch::nn::Cloneable<Derived> {
- public:
-  ReflectionPadImpl(torch::ExpandingArray<D*2> padding)
-      : ReflectionPadImpl(torch::nn::ReflectionPadOptions<D>(padding)) {}
-  explicit ReflectionPadImpl(const torch::nn::ReflectionPadOptions<D>& options_) : options(options_) {}
-  void reset() override {}
-  torch::nn::ReflectionPadOptions<D> options;
-};
-
-class TORCH_API ReflectionPad1dImpl : public ReflectionPadImpl<1, ReflectionPad1dImpl> {
- public:
-  using ReflectionPadImpl<1, ReflectionPad1dImpl>::ReflectionPadImpl;
-  torch::Tensor forward(const torch::Tensor& input) {
-   return torch::reflection_pad1d(input,options.padding());
-  }
-};
-
-class TORCH_API ReflectionPad2dImpl : public ReflectionPadImpl<2, ReflectionPad2dImpl> {
- public:
-  using ReflectionPadImpl<2, ReflectionPad2dImpl>::ReflectionPadImpl;
-  torch::Tensor forward(const torch::Tensor& input) {
-   return torch::reflection_pad2d(input,options.padding());
-  }
-};
-
-TORCH_MODULE(ReflectionPad1d);
-TORCH_MODULE(ReflectionPad2d);
-
-// ------------------------------------------
-// replication pad 1,2,3d
-// ------------------------------------------
-template <size_t D, typename Derived>
-class TORCH_API ReplicationPadImpl : public torch::nn::Cloneable<Derived> {
- public:
-  ReplicationPadImpl(torch::ExpandingArray<D*2> p) : ReplicationPadImpl(torch::nn::ReplicationPadOptions<D>(p)) {}
-  explicit ReplicationPadImpl(const torch::nn::ReplicationPadOptions<D> o) : options(o) {}
-  void reset() override {}
-  torch::nn::ReplicationPadOptions<D> options;
-};
-
-class TORCH_API ReplicationPad1dImpl : public ReplicationPadImpl<1, ReplicationPad1dImpl> {
- public:
-  using ReplicationPadImpl<1, ReplicationPad1dImpl>::ReplicationPadImpl;
-  torch::Tensor forward(const torch::Tensor& input) {
-   return torch::replication_pad1d(input,options.padding());
-  }
-};
-
-class TORCH_API ReplicationPad2dImpl : public ReplicationPadImpl<2, ReplicationPad2dImpl> {
- public:
-  using ReplicationPadImpl<2, ReplicationPad2dImpl>::ReplicationPadImpl;
-  torch::Tensor forward(const torch::Tensor& input) {
-   return torch::replication_pad2d(input,options.padding());
-  }
-};
-
-class TORCH_API ReplicationPad3dImpl : public ReplicationPadImpl<3, ReplicationPad3dImpl> {
- public:
-  using ReplicationPadImpl<3, ReplicationPad3dImpl>::ReplicationPadImpl;
-  torch::Tensor forward(const torch::Tensor& input) {
-   return torch::replication_pad3d(input,options.padding());
-  }
-};
-
-TORCH_MODULE(ReplicationPad1d);
-TORCH_MODULE(ReplicationPad2d);
-TORCH_MODULE(ReplicationPad3d);
 
 // ------------------------------------------------------------------------------
 // fns without args: logsigmoid,tanhshrink,softsign,tanh,sigmoid,gelu

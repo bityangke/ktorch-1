@@ -659,7 +659,7 @@ KAPI lppool2d(K x) {return lppool(x,Cast::lppool2d);}
 // pad - n-dimensional padding, specify even number of sizes and optional pad value
 // ----------------------------------------------------------------------------------
 static Pad pad(K x,J i) {
- IntArrayRef a; Scalar s=PadOptions().value(); Pairs p; J n=xargc(x,i,p); LongVector v;
+ IntArrayRef a; Scalar s=0; Pairs p; J n=xargc(x,i,p); LongVector v;
  if(!((n==0 && p.n) || (xsize(x,i,a) && (n==1 || (n==2 && xnum(x,i+1,s))))))
   AT_ERROR("Unrecognized arguments for padding module");
  while(xpair(p))
@@ -673,7 +673,7 @@ static Pad pad(K x,J i) {
  } else {
   AT_ERROR(a.size()," pad size(s) supplied, expecting pairs for left,right or left,right,top,bottom.. etc");
  }
- return Pad(PadOptions(v).value(s));
+ return Pad(torch::nn::functional::PadFuncOptions(v).value(s.toDouble()));
 }
 
 static void pad(bool a,K x,const PadImpl* m) {
@@ -684,9 +684,36 @@ static void pad(bool a,K x,const PadImpl* m) {
 }
 
 // ----------------------------------------------------------------------------------
-// rpad - reflect/replicate fixed dimension padding
+// cpad - constant pad w'fixed dimension and optional value (defaults to zero)
 // ----------------------------------------------------------------------------------
-template<size_t D,typename M> static M rpad(K x,J i,Cast c) {
+template<size_t D,typename M> static M cpad(K x,J i,Cast c) {
+ M o(0,0);
+ bool sz=false; Pairs p; J n=xargc(x,i,p);
+ for(J j=0;j<n;++j)
+   switch(j) {
+    case 0: o.padding(exarray<D*2>(x,i+j,c,Setting::pad)); sz=true; break;
+    case 1: o.value(mdouble(x,i+j,c,Setting::value)); break;
+    default: AT_ERROR(msym(c),": up to 2 positional args expected(padding;value), ",n," given");
+  }
+ while(xpair(p))
+  switch(mset(p.k)) {
+   case Setting::pad: o.padding(exarray<D*2>(p,c)); sz=true; break;
+   case Setting::value: o.value(mdouble(p,c)); break;
+   default: AT_ERROR("Unrecognized ",msym(c)," option: ",p.k); break;
+  }
+ TORCH_CHECK(sz, msym(c),": no padding sizes given");
+ return o;
+}
+
+template<typename M> static void cpad(K x,const M* m) {
+ OPTION(x, pad, KEX(m->options.padding()));
+ OPTION(x, pad, kf(m->options.value()));
+}
+
+// ----------------------------------------------------------------------------------
+// npad - reflect/replicate/zero pad w'fixed dimension
+// ----------------------------------------------------------------------------------
+template<size_t D,typename M> static M npad(K x,J i,Cast c) {
  M o(0);
  bool sz=false; Pairs p; J n=xargc(x,i,p);
  for(J j=0;j<n;++j)
@@ -703,7 +730,7 @@ template<size_t D,typename M> static M rpad(K x,J i,Cast c) {
  return o;
 }
 
-template<typename M> static void rpad(K x,const M* m) {
+template<typename M> static void npad(K x,const M* m) {
  OPTION(x, pad, KEX(m->options.padding()));
 }
 
@@ -1125,11 +1152,15 @@ void mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) {
   case Cast::lppool2d:     PUSH(q,n,torch::nn::LPPool2d(lppool<2>(x,i,c))); break;
 
   case Cast::pad:          PUSH(q,n,(pad(x,i))); break;
-  case Cast::reflect1d:    PUSH(q,n,ReflectionPad1d(rpad<1,torch::nn::ReflectionPad1dOptions>(x,i,c))); break;
-  case Cast::reflect2d:    PUSH(q,n,ReflectionPad2d(rpad<2,torch::nn::ReflectionPad2dOptions>(x,i,c))); break;
-  case Cast::replicate1d:  PUSH(q,n,ReplicationPad1d(rpad<1,torch::nn::ReplicationPad1dOptions>(x,i,c))); break;
-  case Cast::replicate2d:  PUSH(q,n,ReplicationPad2d(rpad<2,torch::nn::ReplicationPad2dOptions>(x,i,c))); break;
-  case Cast::replicate3d:  PUSH(q,n,ReplicationPad3d(rpad<3,torch::nn::ReplicationPad3dOptions>(x,i,c))); break;
+  case Cast::pad1d:        PUSH(q,n,torch::nn::ConstantPad1d(cpad<1,torch::nn::ConstantPad1dOptions>(x,i,c))); break;
+  case Cast::pad2d:        PUSH(q,n,torch::nn::ConstantPad2d(cpad<2,torch::nn::ConstantPad2dOptions>(x,i,c))); break;
+  case Cast::pad3d:        PUSH(q,n,torch::nn::ConstantPad3d(cpad<3,torch::nn::ConstantPad3dOptions>(x,i,c))); break;
+  case Cast::reflect1d:    PUSH(q,n,torch::nn::ReflectionPad1d(npad<1,torch::nn::ReflectionPad1dOptions>(x,i,c))); break;
+  case Cast::reflect2d:    PUSH(q,n,torch::nn::ReflectionPad2d(npad<2,torch::nn::ReflectionPad2dOptions>(x,i,c))); break;
+  case Cast::replicate1d:  PUSH(q,n,torch::nn::ReplicationPad1d(npad<1,torch::nn::ReplicationPad1dOptions>(x,i,c))); break;
+  case Cast::replicate2d:  PUSH(q,n,torch::nn::ReplicationPad2d(npad<2,torch::nn::ReplicationPad2dOptions>(x,i,c))); break;
+  case Cast::replicate3d:  PUSH(q,n,torch::nn::ReplicationPad3d(npad<3,torch::nn::ReplicationPad3dOptions>(x,i,c))); break;
+  case Cast::zeropad2d:    PUSH(q,n,torch::nn::ZeroPad2d(npad<2,torch::nn::ZeroPad2dOptions>(x,i,c))); break;
 
   case Cast::rnn:          PUSH(q,n,(rnn<torch::nn::RNN, torch::nn::RNNOptions> (s,x,i))); break;
   case Cast::gru:          PUSH(q,n,(rnn<torch::nn::GRU, torch::nn::GRUOptions> (s,x,i))); break;
@@ -1232,15 +1263,15 @@ void mopt(Module &g,bool a,K &v,J i) { //g:generic module, a:true if all options
  } else if(auto* m=g.as<torch::nn::LPPool2d>())         { c=Cast::lppool2d; lppool<2,torch::nn::LPPool2dImpl>(a,x,m);
 
  } else if(auto* m=g.as<Pad>())              { c=Cast::pad;         pad(a,x,m);
- } else if(auto* m=g.as<ReflectionPad1d>())  { c=Cast::reflect1d;   rpad(x,m);
- } else if(auto* m=g.as<ReflectionPad2d>())  { c=Cast::reflect2d;   rpad(x,m);
-/*
- } else if(auto* m=g.as<torch::nn::ReflectionPad1d>())  { c=Cast::reflect1d;   rpad(x,m);
- } else if(auto* m=g.as<torch::nn::ReflectionPad2d>())  { c=Cast::reflect2d;   rpad(x,m);
-*/
- } else if(auto* m=g.as<ReplicationPad1d>()) { c=Cast::replicate1d; rpad(x,m);
- } else if(auto* m=g.as<ReplicationPad2d>()) { c=Cast::replicate2d; rpad(x,m);
- } else if(auto* m=g.as<ReplicationPad3d>()) { c=Cast::replicate3d; rpad(x,m);
+ } else if(auto* m=g.as<torch::nn::ConstantPad1d>())    { c=Cast::pad1d;       cpad(x,m);
+ } else if(auto* m=g.as<torch::nn::ConstantPad2d>())    { c=Cast::pad2d;       cpad(x,m);
+ } else if(auto* m=g.as<torch::nn::ConstantPad3d>())    { c=Cast::pad3d;       cpad(x,m);
+ } else if(auto* m=g.as<torch::nn::ReflectionPad1d>())  { c=Cast::reflect1d;   npad(x,m);
+ } else if(auto* m=g.as<torch::nn::ReflectionPad2d>())  { c=Cast::reflect2d;   npad(x,m);
+ } else if(auto* m=g.as<torch::nn::ReplicationPad1d>()) { c=Cast::replicate1d; npad(x,m);
+ } else if(auto* m=g.as<torch::nn::ReplicationPad2d>()) { c=Cast::replicate2d; npad(x,m);
+ } else if(auto* m=g.as<torch::nn::ReplicationPad3d>()) { c=Cast::replicate3d; npad(x,m);
+ } else if(auto* m=g.as<torch::nn::ZeroPad2d>())        { c=Cast::zeropad2d;   npad(x,m);
 
  } else if(auto* m=g.as<torch::nn::RNN>())   { c=Cast::rnn;  rnn<torch::nn::RNNImpl,  torch::nn::RNNOptions> (a,x,m);
  } else if(auto* m=g.as<torch::nn::GRU>())   { c=Cast::gru;  rnn<torch::nn::GRUImpl,  torch::nn::GRUOptions> (a,x,m);
@@ -1527,11 +1558,11 @@ KAPI anytest(K x) {
   GELU(),
   ReLU(),
   ReLU6(),
-  ReflectionPad1d(2),
-  ReflectionPad2d(2),
-  ReplicationPad1d(2),
-  ReplicationPad2d(2),
-  ReplicationPad3d(2),
+  torch::nn::ReflectionPad1d(2),
+  torch::nn::ReflectionPad2d(2),
+  torch::nn::ReplicationPad1d(2),
+  torch::nn::ReplicationPad2d(2),
+  torch::nn::ReplicationPad3d(2),
   SELU(),
   Sigmoid(),
   Softsign(),

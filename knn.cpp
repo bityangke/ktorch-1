@@ -95,6 +95,8 @@ static K mvals(bool b,J n) {
 }
  
 // ----------------------------------------------------------------------------------------------------
+// covers of input checking fns with error msg specific to module settings and module names:
+// ----------------------------------------------------------------------------------------------------
 // mbool - check positional args or name-value pairs for boolean, else error w'module & option
 // int64 - check positional args or name-value pairs for long int, else error w'module & option
 // int64n - int64 but returns optional, i.e. nullopt if k value is null
@@ -658,29 +660,35 @@ KAPI lppool2d(K x) {return lppool(x,Cast::lppool2d);}
 // ----------------------------------------------------------------------------------
 // pad - n-dimensional padding, specify even number of sizes and optional pad value
 // ----------------------------------------------------------------------------------
-static Pad pad(K x,J i) {
- IntArrayRef a; Scalar s=0; Pairs p; J n=xargc(x,i,p); LongVector v;
- if(!((n==0 && p.n) || (xsize(x,i,a) && (n==1 || (n==2 && xnum(x,i+1,s))))))
-  AT_ERROR("Unrecognized arguments for padding module");
+static torch::nn::functional::PadFuncOptions pad(K x,J i,Cast c) {
+ torch::nn::functional::PadFuncOptions o({}); Pairs p; J n=xargc(x,i,p); IntArrayRef a;
+ for(J j=0;j<n;++j)
+   switch(j) {
+    case 0: TORCH_CHECK(xsize(x,i+j,a), msym(c),": expecting 1st arg of padding size(s)"); break;
+    case 1:
+     if(xsym(x,i+j)) break;
+     else if(n==2)  o.value(mdouble(x,i+j,c,Setting::value));
+     else AT_ERROR("pad: unrecognized 2nd arg, expecting mode or value");
+     break;
+    case 2: o.value(mdouble(x,i+j,c,Setting::value)); break;
+    default: AT_ERROR(msym(c),": up to 3 positional args expected(padding;mode;value), ",n," given");
+  }
  while(xpair(p))
   switch(mset(p.k)) {
    case Setting::pad:    psize(p,a); break;
-   case Setting::value:  pnum(p,s); break;
+   case Setting::mode:   ; break;
+   case Setting::value:  o.value(mdouble(p,c)); break;
    default: AT_ERROR("padding option: ",p.k," not recognized");
   }
- if(a.size()>0 && !(a.size() % 2)) {
-  for(auto j:a) v.push_back(j);
- } else {
-  AT_ERROR(a.size()," pad size(s) supplied, expecting pairs for left,right or left,right,top,bottom.. etc");
- }
- return Pad(torch::nn::functional::PadFuncOptions(v).value(s.toDouble()));
+ TORCH_CHECK(a.size()>0 && !(a.size() % 2),
+             a.size()," pad size(s) given, expecting pairs for left,right or left,right,top,bottom.. etc");
+ return o.pad(a.vec());
 }
 
 static void pad(bool a,K x,const PadImpl* m) {
- auto& p=m->options.pad(); 
- OPTION(x, pad, klist(p.size(),p.data()));
- if(a || !match(PadOptions().value(),m->options.value()))
-  OPTION(x, value, kscalar(m->options.value()));
+ const torch::nn::functional::PadFuncOptions d({}), &o=m->options;
+ OPTION(x, pad, klist(o.pad().size(),o.pad().data()));
+ if(a || o.value() != d.value()) OPTION(x, value, kf(o.value()));
 }
 
 // ----------------------------------------------------------------------------------
@@ -707,7 +715,7 @@ template<size_t D,typename M> static M cpad(K x,J i,Cast c) {
 
 template<typename M> static void cpad(K x,const M* m) {
  OPTION(x, pad, KEX(m->options.padding()));
- OPTION(x, pad, kf(m->options.value()));
+ OPTION(x, value, kf(m->options.value()));
 }
 
 // ----------------------------------------------------------------------------------
@@ -1151,7 +1159,7 @@ void mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) {
   case Cast::lppool1d:     PUSH(q,n,torch::nn::LPPool1d(lppool<1>(x,i,c))); break;
   case Cast::lppool2d:     PUSH(q,n,torch::nn::LPPool2d(lppool<2>(x,i,c))); break;
 
-  case Cast::pad:          PUSH(q,n,(pad(x,i))); break;
+  case Cast::pad:          PUSH(q,n,Pad(pad(x,i,c))); break;
   case Cast::pad1d:        PUSH(q,n,torch::nn::ConstantPad1d(cpad<1,torch::nn::ConstantPad1dOptions>(x,i,c))); break;
   case Cast::pad2d:        PUSH(q,n,torch::nn::ConstantPad2d(cpad<2,torch::nn::ConstantPad2dOptions>(x,i,c))); break;
   case Cast::pad3d:        PUSH(q,n,torch::nn::ConstantPad3d(cpad<3,torch::nn::ConstantPad3dOptions>(x,i,c))); break;
@@ -1262,7 +1270,7 @@ void mopt(Module &g,bool a,K &v,J i) { //g:generic module, a:true if all options
  } else if(auto* m=g.as<torch::nn::LPPool1d>())         { c=Cast::lppool1d; lppool<1,torch::nn::LPPool1dImpl>(a,x,m);
  } else if(auto* m=g.as<torch::nn::LPPool2d>())         { c=Cast::lppool2d; lppool<2,torch::nn::LPPool2dImpl>(a,x,m);
 
- } else if(auto* m=g.as<Pad>())              { c=Cast::pad;         pad(a,x,m);
+ } else if(auto* m=g.as<Pad>())                         { c=Cast::pad;         pad(a,x,m);
  } else if(auto* m=g.as<torch::nn::ConstantPad1d>())    { c=Cast::pad1d;       cpad(x,m);
  } else if(auto* m=g.as<torch::nn::ConstantPad2d>())    { c=Cast::pad2d;       cpad(x,m);
  } else if(auto* m=g.as<torch::nn::ConstantPad3d>())    { c=Cast::pad3d;       cpad(x,m);

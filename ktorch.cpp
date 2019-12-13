@@ -53,6 +53,7 @@ bool xhelp(K x,S &s) {
 // ksizeof - given k type, return size of element, e.g. KF -> 8
 // maptype - map k data type to/from torch type
 // mapattr - make attr enum to symbol
+// emap - map sym -> enum (enum used to pick variant member, e.g. torch::kMean)
 // ------------------------------------------------------------------------------------------
 bool match(const Scalar &x,const Scalar &y) {
  if(x.isIntegral(false)) {
@@ -174,6 +175,12 @@ S mapattr(Attr a) {
  AT_ERROR("Unrecognized attribute: ", (I)a);
 }
 
+Enum emap(S s) {
+ for(const auto &m:env().enums)
+  if(std::get<0>(m)==s) return std::get<1>(m);
+ AT_ERROR("Unrecognized symbol: ",s);
+}
+
 // ------------------------------------------------------------------------------------------
 // statekey - map from state attribute enumeration to symbol, e.g. State::parms -> `parms
 // statekeys - return dictionary keys for full state: class,module,name,options,parms,buffers
@@ -274,6 +281,8 @@ bool xmixed(K x,J m) {      // check up to m elements of k value for mixed types
  return false;
 }
 
+bool xsym(K x) {return x->t==-KS;}
+bool xsym(K x,J i) {return xind(x,i) && xsym(kK(x)[i]);}
 bool xsym(K x,S &s) {return (x->t==-KS) ? s=x->s,true : false;}
 bool xsym(K x,J i,S &s) {return xind(x,i) && xsym(kK(x)[i],s);}
 bool xsyms(K x,S &s) {
@@ -1369,7 +1378,8 @@ KAPI png(K x) {
 // initialize globals: device counts, device sym-int mapping, etc.
 // kinit - called when shared library is first opened
 // -----------------------------------------------------------------------------------------
-Env& env() {static Env e; return e;}
+Env&  env()  {static Env  e; return e;}
+Esym& esym() {static Esym e; return e;}
 std::unordered_set<J>& pointer() {static std::unordered_set<J> p; return p;}
 
 static void kinit() __attribute__((constructor));

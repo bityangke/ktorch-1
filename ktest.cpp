@@ -42,6 +42,23 @@ KAPI cudamem(K x) {
  KCATCH("cuda memory");
 }
 
+void padmode(torch::nn::functional::PadFuncOptions& o,Enum j) {
+ switch(j) {
+  case Enum::constant: o.mode(torch::kConstant); break;
+  case Enum::circular: o.mode(torch::kCircular); break;
+  default: AT_ERROR("unrecognized mode for padding"); break;
+ }
+}
+
+KAPI kenum(K x) {
+ torch::nn::functional::PadFuncOptions o({});
+ std::cerr << ENUM(o.mode()) << "\n";
+ padmode(o,Enum::circular);
+ std::cerr << ENUM(o.mode()) << "\n";
+ o.mode(torch::kReplicate);
+ std::cerr << ENUM(o.mode()) << "\n";
+ return (K)0;
+}
 KAPI kdata(K x,K y) {
  KTRY
   int64_t i=0;

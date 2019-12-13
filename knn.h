@@ -65,16 +65,6 @@ class TORCH_API FractionalMaxPool3dImpl : public FractionalMaxPoolImpl<3, Fracti
 TORCH_MODULE(FractionalMaxPool2d);
 TORCH_MODULE(FractionalMaxPool3d);
 
-// -------------------------------------------------------------------------------
-// flexible/fixed-dim padding options for constant/reflect/replicate padding
-// -------------------------------------------------------------------------------
-struct TORCH_API PadOptions {
- PadOptions(std::vector<int64_t> p) : pad_(std::move(p)) {}
- PadOptions() {}
- TORCH_ARG(std::vector<int64_t>, pad);
- TORCH_ARG(torch::Scalar, value)=0;
-};
-
 // ------------------------------------------
 // constant pad n-dim
 // ------------------------------------------

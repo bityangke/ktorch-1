@@ -658,16 +658,27 @@ KAPI lppool1d(K x) {return lppool(x,Cast::lppool1d);}
 KAPI lppool2d(K x) {return lppool(x,Cast::lppool2d);}
 
 // ----------------------------------------------------------------------------------
+// padmode - match k xymbol to std::variant style enumeration
 // pad - n-dimensional padding, specify even number of sizes and optional pad value
 // ----------------------------------------------------------------------------------
+static void padmode(torch::nn::functional::PadFuncOptions& o,S s) {
+ switch(emap(s)) {
+  case Enum::constant:  o.mode(torch::kConstant); break;
+  case Enum::reflect:   o.mode(torch::kReflect); break;
+  case Enum::replicate: o.mode(torch::kReplicate); break;
+  case Enum::circular:  o.mode(torch::kCircular); break;
+  default: AT_ERROR("unrecognized padding mode: ",s); break;
+ }
+}
+
 static torch::nn::functional::PadFuncOptions pad(K x,J i,Cast c) {
- torch::nn::functional::PadFuncOptions o({}); Pairs p; J n=xargc(x,i,p); IntArrayRef a;
+ torch::nn::functional::PadFuncOptions o({}); S s; Pairs p; J n=xargc(x,i,p); IntArrayRef a;
  for(J j=0;j<n;++j)
    switch(j) {
     case 0: TORCH_CHECK(xsize(x,i+j,a), msym(c),": expecting 1st arg of padding size(s)"); break;
     case 1:
-     if(xsym(x,i+j)) break;
-     else if(n==2)  o.value(mdouble(x,i+j,c,Setting::value));
+     if(xsym(x,i+j,s)) padmode(o,s);
+     else if(n==2)     o.value(mdouble(x,i+j,c,Setting::value));
      else AT_ERROR("pad: unrecognized 2nd arg, expecting mode or value");
      break;
     case 2: o.value(mdouble(x,i+j,c,Setting::value)); break;
@@ -676,7 +687,7 @@ static torch::nn::functional::PadFuncOptions pad(K x,J i,Cast c) {
  while(xpair(p))
   switch(mset(p.k)) {
    case Setting::pad:    psize(p,a); break;
-   case Setting::mode:   ; break;
+   case Setting::mode:   padmode(o,psym(p)); break;
    case Setting::value:  o.value(mdouble(p,c)); break;
    default: AT_ERROR("padding option: ",p.k," not recognized");
   }
@@ -688,7 +699,8 @@ static torch::nn::functional::PadFuncOptions pad(K x,J i,Cast c) {
 static void pad(bool a,K x,const PadImpl* m) {
  const torch::nn::functional::PadFuncOptions d({}), &o=m->options;
  OPTION(x, pad, klist(o.pad().size(),o.pad().data()));
- if(a || o.value() != d.value()) OPTION(x, value, kf(o.value()));
+ if(a || ESYM(o.mode()) != ESYM(d.mode())) OPTION(x, mode,  ks(ESYM(o.mode())));
+ if(a || o.value()      != d.value())      OPTION(x, value, kf(o.value()));
 }
 
 // ----------------------------------------------------------------------------------

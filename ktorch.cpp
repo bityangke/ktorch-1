@@ -16,8 +16,8 @@ S krrbuf(const char *s) {
  return strncat(b, s, sizeof(b)-1);
 }
 
-void dictadd(K x, S s,K v){K *k=kK(x); js(&k[0],cs(s)); jk(&k[1],v);}
-void dictadd(K x,const char* s,K v){K *k=kK(x); js(&k[0],cs(s)); jk(&k[1],v);}
+void dictadd(K x,       char* s, K v){K *k=kK(x); js(&k[0],cs(s)); jk(&k[1],v);}
+void dictadd(K x, const char* s, K v){K *k=kK(x); js(&k[0],cs(s)); jk(&k[1],v);}
 
 bool xind(K x,J i) {return !x->t && -1<i && i<x->n;}
 K kptr(void *v){J j=(intptr_t)v; pointer().insert(j); return knk(1,kj(j));}
@@ -178,7 +178,7 @@ S mapattr(Attr a) {
 Enum emap(S s) {
  for(const auto &m:env().enums)
   if(std::get<0>(m)==s) return std::get<1>(m);
- AT_ERROR("Unrecognized symbol: ",s);
+ return Enum::undefined;
 }
 
 // ------------------------------------------------------------------------------------------

@@ -42,23 +42,79 @@ KAPI cudamem(K x) {
  KCATCH("cuda memory");
 }
 
-void padmode(torch::nn::functional::PadFuncOptions& o,Enum j) {
- switch(j) {
-  case Enum::constant: o.mode(torch::kConstant); break;
-  case Enum::circular: o.mode(torch::kCircular); break;
-  default: AT_ERROR("unrecognized mode for padding"); break;
- }
+#define ENUMTEST(name) \
+{ \
+  v = torch::k##name; \
+  std::cerr << torch::enumtype::get_enum_name(v) << " " << ESYM(v) << "\n"; \
 }
 
-KAPI kenum(K x) {
- torch::nn::functional::PadFuncOptions o({});
- std::cerr << ENUM(o.mode()) << "\n";
- padmode(o,Enum::circular);
- std::cerr << ENUM(o.mode()) << "\n";
- o.mode(torch::kReplicate);
- std::cerr << ENUM(o.mode()) << "\n";
+KAPI enumtest(K ) {
+  c10::variant<
+    torch::enumtype::kLinear,
+    torch::enumtype::kConv1D,
+    torch::enumtype::kConv2D,
+    torch::enumtype::kConv3D,
+    torch::enumtype::kConvTranspose1D,
+    torch::enumtype::kConvTranspose2D,
+    torch::enumtype::kConvTranspose3D,
+    torch::enumtype::kSigmoid,
+    torch::enumtype::kTanh,
+    torch::enumtype::kReLU,
+    torch::enumtype::kLeakyReLU,
+    torch::enumtype::kFanIn,
+    torch::enumtype::kFanOut,
+    torch::enumtype::kConstant,
+    torch::enumtype::kReflect,
+    torch::enumtype::kReplicate,
+    torch::enumtype::kCircular,
+    torch::enumtype::kNearest,
+    torch::enumtype::kBilinear,
+    torch::enumtype::kBicubic,
+    torch::enumtype::kTrilinear,
+    torch::enumtype::kArea,
+    torch::enumtype::kSum,
+    torch::enumtype::kMean,
+    torch::enumtype::kMax,
+    torch::enumtype::kNone,
+    torch::enumtype::kBatchMean,
+    torch::enumtype::kZeros,
+    torch::enumtype::kBorder,
+    torch::enumtype::kReflection
+  > v;
+
+  ENUMTEST(Linear)
+  ENUMTEST(Conv1D)
+  ENUMTEST(Conv2D)
+  ENUMTEST(Conv3D)
+  ENUMTEST(ConvTranspose1D)
+  ENUMTEST(ConvTranspose2D)
+  ENUMTEST(ConvTranspose3D)
+  ENUMTEST(Sigmoid)
+  ENUMTEST(Tanh)
+  ENUMTEST(ReLU)
+  ENUMTEST(LeakyReLU)
+  ENUMTEST(FanIn)
+  ENUMTEST(FanOut)
+  ENUMTEST(Constant)
+  ENUMTEST(Reflect)
+  ENUMTEST(Replicate)
+  ENUMTEST(Circular)
+  ENUMTEST(Nearest)
+  ENUMTEST(Bilinear)
+  ENUMTEST(Bicubic)
+  ENUMTEST(Trilinear)
+  ENUMTEST(Area)
+  ENUMTEST(Sum)
+  ENUMTEST(Mean)
+  ENUMTEST(Max)
+  ENUMTEST(None)
+  ENUMTEST(BatchMean)
+  ENUMTEST(Zeros)
+  ENUMTEST(Border)
+  ENUMTEST(Reflection)
  return (K)0;
 }
+
 KAPI kdata(K x,K y) {
  KTRY
   int64_t i=0;

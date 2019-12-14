@@ -82,18 +82,10 @@ class TORCH_API PadImpl : public torch::nn::Cloneable<PadImpl> {
 TORCH_MODULE(Pad);
 
 // ------------------------------------------------------------------------------
-// fns without args: gelu
+// fns without args:
 // also fns w'inplace as only arg: relu,relu6,selu
 // (inplace=true doesn't seem to work with Sequential->forward() )
 // ------------------------------------------------------------------------------
-class TORCH_API GELUImpl : public torch::nn::Cloneable<GELUImpl> {
- public:
-  GELUImpl() = default;
-  void reset() override {}
-  torch::Tensor forward(const torch::Tensor& t) {return torch::gelu(t);}
-};
-TORCH_MODULE(GELU);
-
 class TORCH_API ReLUImpl : public torch::nn::Cloneable<ReLUImpl> {
  public:
   ReLUImpl() = default;

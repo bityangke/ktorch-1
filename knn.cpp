@@ -1191,7 +1191,7 @@ void mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) {
   case Cast::softsign:     noarg(s,x,i); PUSH(q,n,torch::nn::Softsign()); break;
   case Cast::tanh:         noarg(s,x,i); PUSH(q,n,torch::nn::Tanh()); break;
   case Cast::tanhshrink:   noarg(s,x,i); PUSH(q,n,torch::nn::Tanhshrink()); break;
-  case Cast::gelu:         noarg(s,x,i); PUSH(q,n,GELU()); break;
+  case Cast::gelu:         noarg(s,x,i); PUSH(q,n,torch::nn::GELU()); break;
   case Cast::relu:         noarg(s,x,i); PUSH(q,n,ReLU()); break;
   case Cast::selu:         noarg(s,x,i); PUSH(q,n,SELU()); break;
   case Cast::relu6:        noarg(s,x,i); PUSH(q,n,ReLU6()); break;
@@ -1302,6 +1302,7 @@ void mopt(Module &g,bool a,K &v,J i) { //g:generic module, a:true if all options
  } else if(g.as<torch::nn::Softsign>())           { c=Cast::softsign;
  } else if(g.as<torch::nn::Tanh>())               { c=Cast::tanh;
  } else if(g.as<torch::nn::Tanhshrink>())         { c=Cast::tanhshrink;
+ } else if(g.as<torch::nn::GELU>())               { c=Cast::gelu;
  } else if(g.as<ReLU>())               { c=Cast::relu;
  } else if(g.as<SELU>())               { c=Cast::selu;
  } else if(g.as<ReLU6>())              { c=Cast::relu6;
@@ -1575,7 +1576,7 @@ KAPI anytest(K x) {
   Pad(LongVector{1,1}),
   torch::nn::RNN(4,5),
   RReLU(.125,.333),
-  GELU(),
+  torch::nn::GELU(),
   ReLU(),
   ReLU6(),
   torch::nn::ReflectionPad1d(2),

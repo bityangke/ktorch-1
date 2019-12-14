@@ -1186,11 +1186,11 @@ void mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) {
   case Cast::gru:          PUSH(q,n,(rnn<torch::nn::GRU, torch::nn::GRUOptions> (s,x,i))); break;
   case Cast::lstm:         PUSH(q,n,(rnn<torch::nn::LSTM,torch::nn::LSTMOptions>(s,x,i))); break;
 
-  case Cast::logsigmoid:   noarg(s,x,i); PUSH(q,n,LogSigmoid()); break;
-  case Cast::sigmoid:      noarg(s,x,i); PUSH(q,n,Sigmoid()); break;
-  case Cast::softsign:     noarg(s,x,i); PUSH(q,n,Softsign()); break;
-  case Cast::tanh:         noarg(s,x,i); PUSH(q,n,Tanh()); break;
-  case Cast::tanhshrink:   noarg(s,x,i); PUSH(q,n,Tanhshrink()); break;
+  case Cast::logsigmoid:   noarg(s,x,i); PUSH(q,n,torch::nn::LogSigmoid()); break;
+  case Cast::sigmoid:      noarg(s,x,i); PUSH(q,n,torch::nn::Sigmoid()); break;
+  case Cast::softsign:     noarg(s,x,i); PUSH(q,n,torch::nn::Softsign()); break;
+  case Cast::tanh:         noarg(s,x,i); PUSH(q,n,torch::nn::Tanh()); break;
+  case Cast::tanhshrink:   noarg(s,x,i); PUSH(q,n,torch::nn::Tanhshrink()); break;
   case Cast::gelu:         noarg(s,x,i); PUSH(q,n,GELU()); break;
   case Cast::relu:         noarg(s,x,i); PUSH(q,n,ReLU()); break;
   case Cast::selu:         noarg(s,x,i); PUSH(q,n,SELU()); break;
@@ -1297,11 +1297,11 @@ void mopt(Module &g,bool a,K &v,J i) { //g:generic module, a:true if all options
  } else if(auto* m=g.as<torch::nn::GRU>())   { c=Cast::gru;  rnn<torch::nn::GRUImpl,  torch::nn::GRUOptions> (a,x,m);
  } else if(auto* m=g.as<torch::nn::LSTM>())  { c=Cast::lstm; rnn<torch::nn::LSTMImpl, torch::nn::LSTMOptions>(a,x,m);
 
- } else if(g.as<LogSigmoid>())         { c=Cast::logsigmoid;
- } else if(g.as<Sigmoid>())            { c=Cast::sigmoid;
- } else if(g.as<Softsign>())           { c=Cast::softsign;
- } else if(g.as<Tanh>())               { c=Cast::tanh;
- } else if(g.as<Tanhshrink>())         { c=Cast::tanhshrink;
+ } else if(g.as<torch::nn::LogSigmoid>())         { c=Cast::logsigmoid;
+ } else if(g.as<torch::nn::Sigmoid>())            { c=Cast::sigmoid;
+ } else if(g.as<torch::nn::Softsign>())           { c=Cast::softsign;
+ } else if(g.as<torch::nn::Tanh>())               { c=Cast::tanh;
+ } else if(g.as<torch::nn::Tanhshrink>())         { c=Cast::tanhshrink;
  } else if(g.as<ReLU>())               { c=Cast::relu;
  } else if(g.as<SELU>())               { c=Cast::selu;
  } else if(g.as<ReLU6>())              { c=Cast::relu6;
@@ -1564,7 +1564,7 @@ KAPI anytest(K x) {
   torch::nn::LSTM(4,5),
   LeakyReLU(.1),
   torch::nn::Linear(3,4),
-  LogSigmoid(),
+  torch::nn::LogSigmoid(),
   LogSoftmax(1,torch::kDouble),
   torch::nn::LPPool1d(2,3),
   torch::nn::LPPool2d(2,3),
@@ -1584,14 +1584,14 @@ KAPI anytest(K x) {
   torch::nn::ReplicationPad2d(2),
   torch::nn::ReplicationPad3d(2),
   SELU(),
-  Sigmoid(),
-  Softsign(),
+  torch::nn::Sigmoid(),
+  torch::nn::Softsign(),
   Softmax(-1),
   Softmin(1),
   Softplus(1,20),
   Softshrink(.5),
-  Tanh(),
-  Tanhshrink(),
+  torch::nn::Tanh(),
+  torch::nn::Tanhshrink(),
   Threshold(.1,20),
   Flatten(),
   Flatten(1),

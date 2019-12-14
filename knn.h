@@ -82,50 +82,10 @@ class TORCH_API PadImpl : public torch::nn::Cloneable<PadImpl> {
 TORCH_MODULE(Pad);
 
 // ------------------------------------------------------------------------------
-// fns without args: logsigmoid,tanhshrink,softsign,tanh,sigmoid,gelu
+// fns without args: gelu
 // also fns w'inplace as only arg: relu,relu6,selu
 // (inplace=true doesn't seem to work with Sequential->forward() )
 // ------------------------------------------------------------------------------
-class TORCH_API LogSigmoidImpl : public torch::nn::Cloneable<LogSigmoidImpl> {
- public:
-  LogSigmoidImpl() = default;
-  void reset() override {}
-  torch::Tensor forward(const torch::Tensor& input) {return torch::log_sigmoid(input);}
-};
-TORCH_MODULE(LogSigmoid);
-
-class TORCH_API TanhshrinkImpl : public torch::nn::Cloneable<TanhshrinkImpl> {
- public:
-  TanhshrinkImpl() = default;
-  void reset() override {}
-  torch::Tensor forward(const torch::Tensor& input) {return input - input.tanh();}
-};
-TORCH_MODULE(Tanhshrink);
-
-class TORCH_API SoftsignImpl : public torch::nn::Cloneable<SoftsignImpl> {
- public:
-  SoftsignImpl() = default;
-  void reset() override {}
-  torch::Tensor forward(const torch::Tensor& input) {return input / (input.abs() + 1);}
-};
-TORCH_MODULE(Softsign);
-
-class TORCH_API TanhImpl : public torch::nn::Cloneable<TanhImpl> {
- public:
-  TanhImpl() = default;
-  void reset() override {}
-  torch::Tensor forward(const torch::Tensor& input) {return input.tanh();}
-};
-TORCH_MODULE(Tanh);
-
-class TORCH_API SigmoidImpl : public torch::nn::Cloneable<SigmoidImpl> {
- public:
-  SigmoidImpl() = default;
-  void reset() override {}
-  torch::Tensor forward(const torch::Tensor& input) {return input.sigmoid();}
-};
-TORCH_MODULE(Sigmoid);
-
 class TORCH_API GELUImpl : public torch::nn::Cloneable<GELUImpl> {
  public:
   GELUImpl() = default;

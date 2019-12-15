@@ -553,6 +553,6 @@ KAPI gentest(K x) {
     torch::nn::Functional(torch::relu),
     torch::nn::ConvTranspose2d(torch::nn::Conv2dOptions(64, 1, 4).stride(2).padding(1).bias(false).transposed(true)),
     torch::nn::Functional(torch::tanh));
-  generator(torch::randn({64,100,1,1}),256);
+  //generator(torch::randn({64,100,1,1}),256);
   return (K)0;
 }

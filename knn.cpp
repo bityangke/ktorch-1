@@ -551,7 +551,7 @@ static K adapt(K x,Cast c) {
    case Cast::adaptavg1d: r=torch::nn::functional::adaptive_avg_pool1d(t ? *t : kput(x,0), adapt<1,torch::nn::AdaptiveAvgPool1dOptions>(x,1,c)); break;
    case Cast::adaptavg2d: r=torch::nn::functional::adaptive_avg_pool2d(t ? *t : kput(x,0), adapt<2,torch::nn::AdaptiveAvgPool2dOptions>(x,1,c)); break;
    case Cast::adaptavg3d: r=torch::nn::functional::adaptive_avg_pool3d(t ? *t : kput(x,0), adapt<3,torch::nn::AdaptiveAvgPool3dOptions>(x,1,c)); break;
-   default: AT_ERROR("Unrecognized avg pooling function");
+   default: AT_ERROR("Unrecognized adaptive pooling function");
   }
   return kresult(t,r);
  KCATCH("adaptive pooling");
@@ -813,31 +813,58 @@ KAPI ksoftmax   (K x) {return soft(x, "softmax",    torch::softmax);}
 KAPI klogsoftmax(K x) {return soft(x, "logsoftmax", torch::log_softmax);}
 
 // ------------------------------------------------------------------------------------
-// noarg:  activation functions without arguments or only inplace=true/false
-//         logsigmoid,sigmoid,softsign,tanh,tanhshrink,relu,relu6,selu
+// noarg:  activation fns w'out args, logsigmoid,sigmoid,softsign,tanh,tanhshrink
 // ------------------------------------------------------------------------------------
 static void noarg(S s,K x,J i) {if(!xnone(x,i))AT_ERROR("No arguments expected for ",s," module");}
 
 using Ft = Tensor (*)(const Tensor&);
-
 static K noarg(const char* s,Ft f, K x) {
  KTRY
-  Tensor t; bool p=xten(x,t);
-  return kresult(p, f(p ? t : kput(x)));
+  Tensor *t=xten(x); return kresult(t, f(t ? *t : kput(x)));
  KCATCH(s);
 }
 
-static Tensor relu6(     const Tensor &t) {return torch::hardtanh(t,0.0,6.0);}
-static Tensor softsign(  const Tensor &t) {return t/(t.abs()+1);}
-static Tensor tanhshrink(const Tensor &t) {return t-t.tanh();}
+KAPI kgelu(K x)       {return noarg("gelu",       torch::gelu,                       x);}
+KAPI klogsigmoid(K x) {return noarg("logsigmoid", torch::log_sigmoid,                x);}
+KAPI ksoftsign(K x)   {return noarg("softsign",   torch::nn::functional::softsign,   x);}
+KAPI ktanhshrink(K x) {return noarg("tanhshrink", torch::nn::functional::tanhshrink, x);}
 
-KAPI kgelu(K x)       {return noarg("gelu",       torch::gelu,        x);}
-KAPI krelu(K x)       {return noarg("relu",       torch::relu,        x);}
-KAPI krelu6(K x)      {return noarg("relu6",      relu6,              x);}
-KAPI kselu(K x)       {return noarg("selu",       torch::selu,        x);}
-KAPI klogsigmoid(K x) {return noarg("logsigmoid", torch::log_sigmoid, x);}
-KAPI ksoftsign(K x)   {return noarg("softsign",   softsign,           x);}
-KAPI ktanhshrink(K x) {return noarg("tanhshrink", tanhshrink,         x);}
+// ------------------------------------------------------------------------------------
+// activation fns with inplace flag as only arg: relu,relu6,selu
+// ------------------------------------------------------------------------------------
+static bool inplace(K x,J i,Cast c) {
+ bool b=false; Pairs p; J n=xargc(x,i,p);
+ if(n)
+  TORCH_CHECK(xbool(x,i,b) && n==1, msym(c),": unrecognized option(s), expecting single boolean flag");
+ while(xpair(p)) {
+  TORCH_CHECK(mset(p.k)==Setting::inplace, msym(c),": unrecognized option: ",p.k);
+  b=mbool(p,c);
+ }
+ return b;
+}
+
+static void inplace(bool a,K x,bool b) {if(a || b) OPTION(x, inplace, kb(b));}
+
+static K inplace(K x,Cast c,const char *e) {
+ KTRY
+  Tensor r,t; bool b=false,p=false;
+  if(xten(x,t))        p=true;
+  else if(xten(x,0,t)) p=true, b=inplace(x,1,c);
+  else if(xmixed(x,2)) t=kput(x,0), inplace(x,1,c); // check options, flag unused
+  else                 t=kput(x);
+  switch(c) {
+   case Cast::relu:  r=torch::nn::functional::relu(t,b); break;
+   case Cast::relu6: r=torch::nn::functional::relu6(t,b); break;
+   case Cast::selu:  r=torch::nn::functional::selu(t,b); break;
+   default: AT_ERROR("unrecognized activation function");
+  }
+  return b ? (K)0 : kresult(p,r);
+ KCATCH(e);
+}
+
+KAPI krelu(K x)  {return inplace(x, Cast::relu,  "relu");}
+KAPI krelu6(K x) {return inplace(x, Cast::relu6, "relu6");}
+KAPI kselu(K x)  {return inplace(x, Cast::selu,  "selu");}
 
 // ------------------------------------------------------------------------------------
 //     activation functions with a single numeric scalar option
@@ -1192,9 +1219,10 @@ void mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) {
   case Cast::tanh:         noarg(s,x,i); PUSH(q,n,torch::nn::Tanh()); break;
   case Cast::tanhshrink:   noarg(s,x,i); PUSH(q,n,torch::nn::Tanhshrink()); break;
   case Cast::gelu:         noarg(s,x,i); PUSH(q,n,torch::nn::GELU()); break;
-  case Cast::relu:         noarg(s,x,i); PUSH(q,n,ReLU()); break;
-  case Cast::selu:         noarg(s,x,i); PUSH(q,n,SELU()); break;
-  case Cast::relu6:        noarg(s,x,i); PUSH(q,n,ReLU6()); break;
+
+  case Cast::relu:         PUSH(q,n, torch::nn::ReLU(inplace(x,i,c))); break;
+  case Cast::relu6:        PUSH(q,n,torch::nn::ReLU6(inplace(x,i,c))); break;
+  case Cast::selu:         PUSH(q,n, torch::nn::SELU(inplace(x,i,c))); break;
 
   case Cast::softmax:      PUSH(q,n,(soft<Softmax>   (s,x,i))); break;
   case Cast::softmin:      PUSH(q,n,(soft<Softmin>   (s,x,i))); break;
@@ -1297,15 +1325,15 @@ void mopt(Module &g,bool a,K &v,J i) { //g:generic module, a:true if all options
  } else if(auto* m=g.as<torch::nn::GRU>())   { c=Cast::gru;  rnn<torch::nn::GRUImpl,  torch::nn::GRUOptions> (a,x,m);
  } else if(auto* m=g.as<torch::nn::LSTM>())  { c=Cast::lstm; rnn<torch::nn::LSTMImpl, torch::nn::LSTMOptions>(a,x,m);
 
- } else if(g.as<torch::nn::LogSigmoid>())         { c=Cast::logsigmoid;
- } else if(g.as<torch::nn::Sigmoid>())            { c=Cast::sigmoid;
- } else if(g.as<torch::nn::Softsign>())           { c=Cast::softsign;
- } else if(g.as<torch::nn::Tanh>())               { c=Cast::tanh;
- } else if(g.as<torch::nn::Tanhshrink>())         { c=Cast::tanhshrink;
- } else if(g.as<torch::nn::GELU>())               { c=Cast::gelu;
- } else if(g.as<ReLU>())               { c=Cast::relu;
- } else if(g.as<SELU>())               { c=Cast::selu;
- } else if(g.as<ReLU6>())              { c=Cast::relu6;
+ } else if(g.as<torch::nn::LogSigmoid>())    { c=Cast::logsigmoid;
+ } else if(g.as<torch::nn::Sigmoid>())       { c=Cast::sigmoid;
+ } else if(g.as<torch::nn::Softsign>())      { c=Cast::softsign;
+ } else if(g.as<torch::nn::Tanh>())          { c=Cast::tanh;
+ } else if(g.as<torch::nn::Tanhshrink>())    { c=Cast::tanhshrink;
+ } else if(g.as<torch::nn::GELU>())          { c=Cast::gelu;
+ } else if(auto* m=g.as<torch::nn::ReLU>())  { c=Cast::relu;  inplace(a,x,m->options.inplace());
+ } else if(auto* m=g.as<torch::nn::SELU>())  { c=Cast::selu;  inplace(a,x,m->options.inplace());
+ } else if(auto* m=g.as<torch::nn::ReLU6>()) { c=Cast::relu6; inplace(a,x,m->options.inplace());
 
  } else if(auto* m=g.as<Softmax>())    { c=Cast::softmax;    soft(a,x,m);
  } else if(auto* m=g.as<Softmin>())    { c=Cast::softmin;    soft(a,x,m);
@@ -1577,14 +1605,17 @@ KAPI anytest(K x) {
   torch::nn::RNN(4,5),
   RReLU(.125,.333),
   torch::nn::GELU(),
-  ReLU(),
-  ReLU6(),
+  torch::nn::ReLU(),
+  torch::nn::ReLU(true),
+  torch::nn::ReLU6(),
+  torch::nn::ReLU6(true),
   torch::nn::ReflectionPad1d(2),
   torch::nn::ReflectionPad2d(2),
   torch::nn::ReplicationPad1d(2),
   torch::nn::ReplicationPad2d(2),
   torch::nn::ReplicationPad3d(2),
-  SELU(),
+  torch::nn::SELU(),
+  torch::nn::SELU(true),
   torch::nn::Sigmoid(),
   torch::nn::Softsign(),
   Softmax(-1),

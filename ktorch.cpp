@@ -250,6 +250,7 @@ K statedict(State e,K x,J j) {  // e:enum, e.g. State::options, x:dict/table, j:
 // --------------------------------------------------------------------------------------
 // xnull  - true if null, i.e. (::)
 // xempty - true if null or empty K list without type, i.e. :: or ()
+// atype  - find base type of array by continually looking at 1st element
 // xmixed - true if up to m elements of k value has mixed types/lengths
 // xsym - if arg is k symbol, return true and set sym, else false
 // xsyms - if sym scalar or non-empty sym list, set 1st sym and return true
@@ -266,16 +267,18 @@ bool xnull(K x,J i) {return xind(x,i) && xnull(kK(x)[i]);}
 bool xempty(K x) {return xnull(x) ? true : (x->t ? false : x->n==0);}
 bool xempty(K x,J i) {return xind(x,i) && xempty(kK(x)[i]);}
 
+static A atype(K x) {return (x->t || !x->n) ? x->t : atype(kK(x)[0]);}
+
 bool xmixed(K x,J m) {      // check up to m elements of k value for mixed types/lengths
  A t; J i,n;
  if(!x->t)                                              // if general list
   if(x->n > 1) {                                        // with more than 1 element
-   t=kK(x)[0]->t;                                       // 1st type encountered
+   t=atype(kK(x)[0]);                                   // 1st base type encountered
    if(t>19) return true;                                // enums,maps,etc.
    n=t<0 ? 1 : kK(x)[0]->n;                             // 1st size
    if(m>x->n) m=x->n;                                   // check up to m elements
    for(i=1;i<m;++i)
-    if(t != kK(x)[i]->t) return true;                   // different data type or scalar vs list
+    if(t != atype(kK(x)[i])) return true;               // different data type or scalar vs list
     else if(n != (t<0 ? 1 : kK(x)[i]->n)) return true;  // different length
   }
  return false;

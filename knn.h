@@ -65,50 +65,21 @@ class TORCH_API FractionalMaxPool3dImpl : public FractionalMaxPoolImpl<3, Fracti
 TORCH_MODULE(FractionalMaxPool2d);
 TORCH_MODULE(FractionalMaxPool3d);
 
-// ------------------------------------------
-// constant pad n-dim
-// ------------------------------------------
+// --------------------------------------------------------------------------
+// general pad: create module to match functional call with size, mode, value
+// --------------------------------------------------------------------------
 class TORCH_API PadImpl : public torch::nn::Cloneable<PadImpl> {
  public:
   PadImpl(std::vector<int64_t> p) : PadImpl(torch::nn::functional::PadFuncOptions(p)) {}
   explicit PadImpl(const torch::nn::functional::PadFuncOptions& o) : options(o) {reset();}
   void reset() override {}
   torch::Tensor forward(const torch::Tensor& input) {
-   return {}; //torch::constant_pad_nd(input,options.pad(),options.value());
+   return torch::nn::functional::pad(input,options);
   }
   torch::nn::functional::PadFuncOptions options;
 };
 
 TORCH_MODULE(Pad);
-
-// ------------------------------------------------------------------------------
-// fns without args:
-// also fns w'inplace as only arg: relu,relu6,selu
-// (inplace=true doesn't seem to work with Sequential->forward() )
-// ------------------------------------------------------------------------------
-class TORCH_API ReLUImpl : public torch::nn::Cloneable<ReLUImpl> {
- public:
-  ReLUImpl() = default;
-  void reset() override {}
-  torch::Tensor forward(const torch::Tensor& t) {return t.relu();}
-};
-TORCH_MODULE(ReLU);
-
-class TORCH_API SELUImpl : public torch::nn::Cloneable<SELUImpl> {
- public:
-  SELUImpl() = default;
-  void reset() override {}
-  torch::Tensor forward(const torch::Tensor& t) {return torch::selu(t);}
-};
-TORCH_MODULE(SELU);
-
-class TORCH_API ReLU6Impl : public torch::nn::Cloneable<ReLU6Impl> {
- public:
-  ReLU6Impl() = default;
-  void reset() override {}
-  torch::Tensor forward(const torch::Tensor& t) {return torch::hardtanh(t,0.0,6.0);}
-};
-TORCH_MODULE(ReLU6);
 
 // -------------------------------------------------------------
 // softmax, softmin & logsoftmax activation layers

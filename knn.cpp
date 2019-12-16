@@ -876,12 +876,9 @@ KAPI kselu(K x)  {return inplace(x, Cast::selu,  "selu");}
 // ------------------------------------------------------------------------------------
 static void default1(Cast c,Setting &k,Scalar &v) {  // given module type, get setting & default value
  switch(c) {
-  case Cast::glu:        k=Setting::dim;    v=GLUOptions().dim(); break;
   case Cast::elu:
   case Cast::celu:       k=Setting::alpha;  v=ExpOptions().alpha(); break;
   case Cast::leakyrelu:  k=Setting::slope;  v=LeakyOptions().slope(); break;
-  case Cast::hardshrink:
-  case Cast::softshrink: k=Setting::lambda; v=ShrinkOptions().lambda(); break;
   default: AT_ERROR("Unexpected module type: ",(I)c," unable to get default scalar setting");
  }
 }
@@ -920,14 +917,71 @@ static K fn1(Cast c,const char* s,K x,Fts f) {
 }
 
 static Tensor elu(const Tensor& t,Scalar v) {return torch::elu(t,v);}          // torch fn has two additional scalars
-static Tensor glu(const Tensor& t,Scalar v) {return torch::glu(t,v.toLong());} // torch fn uses int64_t for dimension
 
 KAPI kelu(K x)        {return fn1(Cast::elu,        "elu",        x, elu);}
-KAPI kglu(K x)        {return fn1(Cast::glu,        "glu",        x, glu);}
 KAPI kcelu(K x)       {return fn1(Cast::celu,       "celu",       x, torch::celu);}
 KAPI kleakyrelu(K x)  {return fn1(Cast::leakyrelu,  "leakyrelu",  x, torch::leaky_relu);}
-KAPI khardshrink(K x) {return fn1(Cast::hardshrink, "hardshrink", x, torch::hardshrink);}
-KAPI ksoftshrink(K x) {return fn1(Cast::softshrink, "softshrink", x, torch::softshrink);}
+
+// ------------------------------------------------------------------------------------
+// glu - gated linear unit, accepts single integer option: dimension (default = -1)
+// ------------------------------------------------------------------------------------
+static int64_t dim(K x,J i,Cast c=Cast::glu);
+static int64_t dim(K x,J i,Cast c) {
+ int64_t d=torch::nn::GLUOptions().dim(); Pairs p; J n=xargc(x,i,p);
+ if(n==1) d=int64(x,i,c,Setting::dim);
+ TORCH_CHECK(n<2,"glu: unrecognized positional option(s), expecting single dimension");
+ while(xpair(p)) {
+  TORCH_CHECK(mset(p.k)==Setting::dim,"Unrecognized option: ",p.k); d=int64(p,c);
+ }
+ return d;
+}
+
+static void dim(bool a,Cast c,K x,int64_t d) {if(a || d != torch::nn::GLUOptions().dim()) OPTION(x,dim,kj(d));}
+
+KAPI glu(K x) {
+ KTRY
+  bool p; auto o=torch::nn::functional::GLUFuncOptions(); Tensor t;
+  if(xten(x,t))        p=true; 
+  else if(xten(x,0,t)) p=true, o.dim(dim(x,1));
+  else if(xmixed(x,2)) p=false,o.dim(dim(x,1)), t=kput(x,0);
+  else                 p=false,t=kput(x);
+  return kresult(p,torch::nn::functional::glu(t,o));
+ KCATCH("glu");
+}
+
+// ------------------------------------------------------------------------------------
+// hardshrink, softshrink - module/function requires single parm: lambda
+// ------------------------------------------------------------------------------------
+static double lambda(Cast c) {
+ return c==Cast::hardshrink ? torch::nn::HardshrinkOptions().lambda() 
+                            : torch::nn::SoftshrinkOptions().lambda();
+}
+
+static double lambda(K x,J i,Cast c) {
+ double l=lambda(c); Pairs p; J n=xargc(x,i,p);
+ if(n==1) l=mdouble(x,i,c,Setting::lambda);
+ TORCH_CHECK(n<2,msym(c),": unrecognized positional option(s), expecting lambda, e.g. 0.5");
+ while(xpair(p)) {
+  TORCH_CHECK(mset(p.k)==Setting::lambda,"Unrecognized option: ",p.k); l=mdouble(p,c);
+ }
+ return l;
+}
+
+static void lambda(bool a,Cast c,K x,double l) {if(a || l != lambda(c)) OPTION(x,lambda,kf(l));}
+
+static K shrink(K x, Cast c, const char* s) {
+ KTRY
+  bool p; double l; Tensor t;
+  if(xten(x,t))        p=true, l=lambda(c);
+  else if(xten(x,0,t)) p=true, l=lambda(x,1,c);
+  else if(xmixed(x,2)) p=false,l=lambda(x,1,c), t=kput(x,0);
+  else                 p=false,l=lambda(c),     t=kput(x);
+  return kresult(p,c==Cast::hardshrink ? torch::softshrink(t,l) : torch::hardshrink(t,l));
+ KCATCH(s);
+}
+
+KAPI hardshrink(K x) {return shrink(x, Cast::hardshrink, "hardshrink");}
+KAPI softshrink(K x) {return shrink(x, Cast::softshrink, "softshrink");}
 
 // ------------------------------------------------------------------------------------
 //      activation functions with up to two scalars, e.g. min/max, lower/upper
@@ -1039,8 +1093,8 @@ KAPI kprelu(K x) {
 //         - return options used given a flatten module used
 //         - call flatten as function given input/tensor and optional start & end dimensions
 // ----------------------------------------------------------------------------------------------------
-static FlattenOptions flatten(K x,J i) {
- FlattenOptions o; int64_t s=o.start_dim(),e=o.end_dim(); Pairs p; J n=xargc(x,i,p);
+static torch::nn::FlattenOptions flatten(K x,J i) {
+ torch::nn::FlattenOptions o; int64_t s=o.start_dim(),e=o.end_dim(); Pairs p; J n=xargc(x,i,p);
  if(!(n==0 || (xint64(x,i,s) && (n==1 || (n==2 && xint64(x,i+1,e))))))
   AT_ERROR("flatten: unrecognized arg(s)");
  while(xpair(p))
@@ -1052,8 +1106,8 @@ static FlattenOptions flatten(K x,J i) {
  return o.start_dim(s).end_dim(e);
 }
 
-static void flatten(bool a,K x,const FlattenImpl* m) {
- FlattenOptions d,o=m->options;
+static void flatten(bool a,K x,const torch::nn::FlattenImpl* m) {
+ torch::nn::FlattenOptions d,o=m->options;
  if(a || d.start_dim() != o.start_dim()) OPTION(x, start, kj(o.start_dim()));
  if(a || d.end_dim()   != o.end_dim())   OPTION(x, end,   kj(o.end_dim()));
 }
@@ -1227,18 +1281,18 @@ void mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) {
   case Cast::softmax:      PUSH(q,n,(soft<Softmax>   (s,x,i))); break;
   case Cast::softmin:      PUSH(q,n,(soft<Softmin>   (s,x,i))); break;
   case Cast::logsoftmax:   PUSH(q,n,(soft<LogSoftmax>(s,x,i))); break;
-  case Cast::flatten:      PUSH(q,n,Flatten(flatten(x,i))); break;
+  case Cast::flatten:      PUSH(q,n,torch::nn::Flatten(flatten(x,i))); break;
   case Cast::squeeze:      PUSH(q,n,Squeeze(squeeze(x,i,c))); break;
   case Cast::unsqueeze:    PUSH(q,n,Unsqueeze(squeeze(x,i,c))); break;
   case Cast::expand:       PUSH(q,n,Expand(getsize(x,i,c))); break;
   case Cast::reshape:      PUSH(q,n,Reshape(getsize(x,i,c))); break;
 
-  case Cast::glu:          arg1(c,s,x,i,v); PUSH(q,n,GLU(v.toLong())); break;
   case Cast::elu:          arg1(c,s,x,i,v); PUSH(q,n,ELU(v)); break;
   case Cast::celu:         arg1(c,s,x,i,v); PUSH(q,n,CELU(v)); break;
   case Cast::leakyrelu:    arg1(c,s,x,i,v); PUSH(q,n,LeakyReLU(v)); break;
-  case Cast::hardshrink:   arg1(c,s,x,i,v); PUSH(q,n,Hardshrink(v)); break;
-  case Cast::softshrink:   arg1(c,s,x,i,v); PUSH(q,n,Softshrink(v)); break;
+  case Cast::glu:          PUSH(q,n,torch::nn::GLU(dim(x,i,c))); break;
+  case Cast::hardshrink:   PUSH(q,n,torch::nn::Hardshrink(lambda(x,i,c))); break;
+  case Cast::softshrink:   PUSH(q,n,torch::nn::Softshrink(lambda(x,i,c))); break;
   
   case Cast::prelu:        arg2(c,s,x,i,v,w);  PUSH(q,n,PReLU(v.toLong(),w.toDouble())); break;
   case Cast::rrelu:        arg2(c,s,x,i,v,w);  PUSH(q,n,RReLU(v,w)); break;
@@ -1338,18 +1392,18 @@ void mopt(Module &g,bool a,K &v,J i) { //g:generic module, a:true if all options
  } else if(auto* m=g.as<Softmax>())    { c=Cast::softmax;    soft(a,x,m);
  } else if(auto* m=g.as<Softmin>())    { c=Cast::softmin;    soft(a,x,m);
  } else if(auto* m=g.as<LogSoftmax>()) { c=Cast::logsoftmax; soft(a,x,m);
- } else if(auto* m=g.as<Flatten>())    { c=Cast::flatten;    flatten(a,x,m);
+ } else if(auto* m=g.as<torch::nn::Flatten>())    { c=Cast::flatten;    flatten(a,x,m);
  } else if(auto* m=g.as<Squeeze>())    { c=Cast::squeeze;    squeeze(a,x,m->options);
  } else if(auto* m=g.as<Unsqueeze>())  { c=Cast::unsqueeze;  squeeze(a,x,m->options);
  } else if(auto* m=g.as<Expand>())     { c=Cast::expand;     getsize(a,x,m->options);
  } else if(auto* m=g.as<Reshape>())    { c=Cast::reshape;    getsize(a,x,m->options);
 
- } else if(auto* m=g.as<GLU>())        { c=Cast::glu;        setting1(a,c,x,m->options.dim());
  } else if(auto* m=g.as<ELU>())        { c=Cast::elu;        setting1(a,c,x,m->options.alpha());
  } else if(auto* m=g.as<CELU>())       { c=Cast::celu;       setting1(a,c,x,m->options.alpha());
  } else if(auto* m=g.as<LeakyReLU>())  { c=Cast::leakyrelu;  setting1(a,c,x,m->options.slope());
- } else if(auto* m=g.as<Hardshrink>()) { c=Cast::hardshrink; setting1(a,c,x,m->options.lambda());
- } else if(auto* m=g.as<Softshrink>()) { c=Cast::softshrink; setting1(a,c,x,m->options.lambda());
+ } else if(auto* m=g.as<torch::nn::GLU>())        { c=Cast::glu;        dim(a,c,x,m->options.dim());
+ } else if(auto* m=g.as<torch::nn::Hardshrink>()) { c=Cast::hardshrink; lambda(a,c,x,m->options.lambda());
+ } else if(auto* m=g.as<torch::nn::Softshrink>()) { c=Cast::softshrink; lambda(a,c,x,m->options.lambda());
 
  } else if(auto* m=g.as<PReLU>())      { c=Cast::prelu;      setting2(a,c,x,m->options.in(),        m->options.init());
  } else if(auto* m=g.as<RReLU>())      { c=Cast::rrelu;      setting2(a,c,x,m->options.lower(),     m->options.upper());
@@ -1514,45 +1568,44 @@ K seqattr(const Sequential& q,A k,Attr a) {
 // module fns defined in k namespace
 // ----------------------------------
 void nnfn(K x) {
- fn(x, "seq",        KFN(seq), 1);           // api function for module create/query
-
- fn(x, "adaptavg1d", KFN(adaptavg1d), 1);    // functional form of modules/activations
- fn(x, "adaptavg2d", KFN(adaptavg2d), 1);
- fn(x, "adaptavg3d", KFN(adaptavg3d), 1);
- fn(x, "adaptmax1d", KFN(adaptmax1d), 1);
- fn(x, "adaptmax2d", KFN(adaptmax2d), 1);
- fn(x, "adaptmax3d", KFN(adaptmax3d), 1);
- fn(x, "avgpool1d",  KFN(avgpool1d),  1);
- fn(x, "avgpool2d",  KFN(avgpool2d),  1);
- fn(x, "avgpool3d",  KFN(avgpool3d),  1);
- fn(x, "celu",       KFN(kcelu), 1);
- fn(x, "elu",        KFN(kelu), 1);
- fn(x, "flatten",    KFN(kflatten), 1);
- fn(x, "glu",        KFN(kglu), 1);
- fn(x, "hardshrink", KFN(khardshrink), 1);
- fn(x, "hardtanh",   KFN(khardtanh), 1);
- fn(x, "leakyrelu",  KFN(kleakyrelu), 1);
- fn(x, "linear",     KFN(klinear), 1);
+ fn(x, "seq",        KFN(seq), 1);            // api function for module create/query
+ fn(x, "adaptavg1d", KFN(adaptavg1d),  1);    // functional form of modules/activations
+ fn(x, "adaptavg2d", KFN(adaptavg2d),  1);
+ fn(x, "adaptavg3d", KFN(adaptavg3d),  1);
+ fn(x, "adaptmax1d", KFN(adaptmax1d),  1);
+ fn(x, "adaptmax2d", KFN(adaptmax2d),  1);
+ fn(x, "adaptmax3d", KFN(adaptmax3d),  1);
+ fn(x, "avgpool1d",  KFN(avgpool1d),   1);
+ fn(x, "avgpool2d",  KFN(avgpool2d),   1);
+ fn(x, "avgpool3d",  KFN(avgpool3d),   1);
+ fn(x, "celu",       KFN(kcelu),       1);
+ fn(x, "elu",        KFN(kelu),        1);
+ fn(x, "flatten",    KFN(kflatten),    1);
+ fn(x, "glu",        KFN(glu),         1);
+ fn(x, "hardshrink", KFN(hardshrink),  1);
+ fn(x, "hardtanh",   KFN(khardtanh),   1);
+ fn(x, "leakyrelu",  KFN(kleakyrelu),  1);
+ fn(x, "linear",     KFN(klinear),     1);
  fn(x, "logsigmoid", KFN(klogsigmoid), 1);
  fn(x, "logsoftmax", KFN(klogsoftmax), 1);
- fn(x, "lppool1d",   KFN(lppool1d),   1);
- fn(x, "lppool2d",   KFN(lppool2d),   1);
- fn(x, "maxpool1d",  KFN(maxpool1d), 1);
- fn(x, "maxpool2d",  KFN(maxpool2d), 1);
- fn(x, "maxpool3d",  KFN(maxpool3d), 1);
- fn(x, "prelu",      KFN(kprelu), 1);
- fn(x, "gelu",       KFN(kgelu), 1);
- fn(x, "relu",       KFN(krelu), 1);
- fn(x, "relu6",      KFN(krelu6), 1);
- fn(x, "rrelu",      KFN(krrelu), 1);
- fn(x, "selu",       KFN(kselu), 1);
- fn(x, "softmax",    KFN(ksoftmax), 1);
- fn(x, "softmin",    KFN(ksoftmin), 1);
- fn(x, "softplus",   KFN(ksoftplus), 1);
- fn(x, "softsign",   KFN(ksoftsign), 1);
- fn(x, "softshrink", KFN(ksoftshrink), 1);
+ fn(x, "lppool1d",   KFN(lppool1d),    1);
+ fn(x, "lppool2d",   KFN(lppool2d),    1);
+ fn(x, "maxpool1d",  KFN(maxpool1d),   1);
+ fn(x, "maxpool2d",  KFN(maxpool2d),   1);
+ fn(x, "maxpool3d",  KFN(maxpool3d),   1);
+ fn(x, "prelu",      KFN(kprelu),      1);
+ fn(x, "gelu",       KFN(kgelu),       1);
+ fn(x, "relu",       KFN(krelu),       1);
+ fn(x, "relu6",      KFN(krelu6),      1);
+ fn(x, "rrelu",      KFN(krrelu),      1);
+ fn(x, "selu",       KFN(kselu),       1);
+ fn(x, "softmax",    KFN(ksoftmax),    1);
+ fn(x, "softmin",    KFN(ksoftmin),    1);
+ fn(x, "softplus",   KFN(ksoftplus),   1);
+ fn(x, "softsign",   KFN(ksoftsign),   1);
+ fn(x, "softshrink", KFN(softshrink),  1);
  fn(x, "tanhshrink", KFN(ktanhshrink), 1);
- fn(x, "threshold",  KFN(kthreshold), 1);
+ fn(x, "threshold",  KFN(kthreshold),  1);
 }
 
 KAPI anytest(K x) {
@@ -1586,9 +1639,10 @@ KAPI anytest(K x) {
   torch::nn::FeatureDropout(.5),
   FractionalMaxPool2d(FractionalMaxPoolOptions<2>(3).ratio(.5)),
   FractionalMaxPool3d(FractionalMaxPoolOptions<3>(3).ratio(.5)),
-  GLU(),
+  torch::nn::GLU(),
+  torch::nn::GLU(2),
   torch::nn::GRU(4,5),
-  Hardshrink(.5),
+  torch::nn::Hardshrink(.5),
   Hardtanh(-1,1),
   torch::nn::LSTM(4,5),
   LeakyReLU(.1),
@@ -1621,13 +1675,13 @@ KAPI anytest(K x) {
   Softmax(-1),
   Softmin(1),
   Softplus(1,20),
-  Softshrink(.5),
+  torch::nn::Softshrink(.5),
   torch::nn::Tanh(),
   torch::nn::Tanhshrink(),
   Threshold(.1,20),
-  Flatten(),
-  Flatten(1),
-  Flatten(1,-1),
+  torch::nn::Flatten(),
+  //torch::nn::Flatten(1),
+  //torch::nn::Flatten(1,-1),
   Squeeze(),
   Squeeze(SqueezeOptions().inplace(true)),
   Squeeze(-1),

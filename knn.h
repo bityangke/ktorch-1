@@ -237,26 +237,6 @@ class TORCH_API RReLUImpl : public torch::nn::Cloneable<RReLUImpl> {
 TORCH_MODULE(RReLU);
 
 // -----------------------------------------------------------------------------
-// glu - gated linear unit (splitting input along selected dimension)
-// -----------------------------------------------------------------------------
-struct TORCH_API GLUOptions {
- GLUOptions(int64_t d) : dim_(d) {}
- GLUOptions() {}
- TORCH_ARG(int64_t, dim)=-1;
-};
-
-class TORCH_API GLUImpl : public torch::nn::Cloneable<GLUImpl> {
- public:
-  GLUImpl() = default;
-  GLUImpl(int64_t d) : GLUImpl(GLUOptions(d)) {}
-  explicit GLUImpl(GLUOptions o) : options(std::move(o)) {reset();}
-  void reset() override {}
-  torch::Tensor forward(const torch::Tensor& t) {return torch::glu(t,options.dim());}
-  GLUOptions options;
-};
-TORCH_MODULE(GLU);
-
-// -----------------------------------------------------------------------------
 // threshold - thresholds each element of input tensor
 // -----------------------------------------------------------------------------
 struct TORCH_API ThresholdOptions {
@@ -323,59 +303,6 @@ class TORCH_API HardtanhImpl : public torch::nn::Cloneable<HardtanhImpl> {
   HardtanhOptions options;
 };
 TORCH_MODULE(Hardtanh);
-
-// -------------------------------------------------------------
-//  hardshrink, softshrink
-// -------------------------------------------------------------
-struct TORCH_API ShrinkOptions {
- ShrinkOptions(torch::Scalar a) : lambda_(a) {}
- ShrinkOptions() {}
- TORCH_ARG(torch::Scalar, lambda)=0.5;
-};
-
-template <typename Derived>
-class ShrinkImpl : public torch::nn::Cloneable<Derived> {
- public:
-  ShrinkImpl(torch::Scalar a) : ShrinkImpl(ShrinkOptions(a)) {}
-  explicit ShrinkImpl(ShrinkOptions o) : options(std::move(o)) {reset();}
-  void reset() override {}
-  ShrinkOptions options;
-};
-
-class TORCH_API HardshrinkImpl : public ShrinkImpl<HardshrinkImpl> {
- public:
-  using ShrinkImpl<HardshrinkImpl>::ShrinkImpl;
-  torch::Tensor forward(const torch::Tensor& t) {return t.hardshrink(options.lambda());}
-};
-TORCH_MODULE(Hardshrink);
-
-class TORCH_API SoftshrinkImpl : public ShrinkImpl<SoftshrinkImpl> {
- public:
-  using ShrinkImpl<SoftshrinkImpl>::ShrinkImpl;
-  torch::Tensor forward(const torch::Tensor& t) {return torch::softshrink(t,options.lambda());}
-};
-TORCH_MODULE(Softshrink);
-
-// -------------------------------------------------------------
-//  flatten - typically from 2nd dimension on
-// -------------------------------------------------------------
-struct TORCH_API FlattenOptions {
- FlattenOptions(int64_t s=1,int64_t e=-1) : start_dim_(s),end_dim_(e) {}
- TORCH_ARG(int64_t, start_dim);
- TORCH_ARG(int64_t,   end_dim);
-};
-
-class FlattenImpl : public torch::nn::Cloneable<FlattenImpl> {
- public:
-  FlattenImpl(int64_t s=1,int64_t e=-1) : FlattenImpl(FlattenOptions(s,e)) {}
-  explicit FlattenImpl(const FlattenOptions& o) : options(o) {reset();}
-  void reset() override {}
-  torch::Tensor forward(const torch::Tensor& t) {
-   return torch::flatten(t,options.start_dim(),options.end_dim());
-  };
-  FlattenOptions options;
-};
-TORCH_MODULE(Flatten);
 
 // -------------------------------------------------------------
 //  squeeze - remove dimension(s) from tensor

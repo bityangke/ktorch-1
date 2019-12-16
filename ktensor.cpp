@@ -121,12 +121,10 @@ void kputscalar(K x,Tensor &t) {
   AT_ERROR("Unable to translate k ",kname(x->t)," to scalar tensor");
 }
 
-static void kdepth(K x,I i,A k,Ksize &s){
+static void kdepth(K x,I i,H k,Ksize &s){
  if(x->t < 0) {
   AT_ERROR("Unable to map mixed array to tensor: ",kname(x->t)," encountered at depth ",i);
-// } else if(i && x->n==0) {
-//   AT_ERROR("No empty dimension at lower depth");
- } else if(k) {                   // if base type already encountered
+ } else if(k != nh) {             // if base type already encountered
   I j=s.size()-1;                 // last size index
   if(x->n != s[i]) {              // check that dimensions are consistent
    AT_ERROR("Dimension mismatch at depth ",i,", ",s[i]," vs ",x->n);
@@ -138,12 +136,12 @@ static void kdepth(K x,I i,A k,Ksize &s){
  }
 }
 
-static void kputs(K x,I i,A &k,Ksize &s,J &b,S &p,Tensor &t) {
+static void kputs(K x,I i,H &k,Ksize &s,J &b,S &p,Tensor &t) {
  kdepth(x,i,k,s);
- if(x->t) {  // if base data type
-  if(!k)  {  // if first encounter w'base data type
+ if(x->t || !x->n) {     // if base data type or empty
+  if(k==nh)  {           // if first encounter w'base data type
    k=x->t;
-   t=torch::empty(s, torch::device(torch::kCPU).dtype(maptype(k)).layout(torch::kStrided));
+   t=k ? torch::empty(s, maptype(k)) : torch::empty(s);
    b=t.element_size() * s[i];  // bytes to copy
    p=(S)t.data_ptr();          // contiguous data pointer
   }
@@ -154,7 +152,7 @@ static void kputs(K x,I i,A &k,Ksize &s,J &b,S &p,Tensor &t) {
 }
 
 Tensor kput(K x) {        
- A k=0;                    // fill w'base data type for nested k value
+ H k=nh;                   // fill w'base data type for nested k value
  J b=0;                    // fill w'bytes to copy
  Ksize s;                  // fill w'k array size at each depth
  S p=nullptr;              // data pointer for created tensor
@@ -301,12 +299,7 @@ static K tensormode(K x,S s,Tensormode m) {
 
 static K tensorput(K x) {
  Tensor r,t; TensorOptions o;
- if(xempty(x))
-  t=torch::empty({0});
- else if((xopt(x,1,o) || xten(x,1,r)) && x->n==2)
-  t=xempty(x,0) ? torch::empty({0},o) : kput(x,0);
- else
-  t=kput(x);
+ t=((xopt(x,1,o) || xten(x,1,r)) && x->n==2) ? kput(x,0) : kput(x);
  if(r.defined()) {
   r.resize_(t.sizes()).copy_(t,true);
   return (K)0;

@@ -824,10 +824,10 @@ static K noarg(const char* s,Ft f, K x) {
  KCATCH(s);
 }
 
-KAPI kgelu(K x)       {return noarg("gelu",       torch::gelu,                       x);}
-KAPI klogsigmoid(K x) {return noarg("logsigmoid", torch::log_sigmoid,                x);}
-KAPI ksoftsign(K x)   {return noarg("softsign",   torch::nn::functional::softsign,   x);}
-KAPI ktanhshrink(K x) {return noarg("tanhshrink", torch::nn::functional::tanhshrink, x);}
+KAPI gelu(K x)       {return noarg("gelu",       torch::gelu,                       x);}
+KAPI logsigmoid(K x) {return noarg("logsigmoid", torch::log_sigmoid,                x);}
+KAPI softsign(K x)   {return noarg("softsign",   torch::nn::functional::softsign,   x);}
+KAPI tanhshrink(K x) {return noarg("tanhshrink", torch::nn::functional::tanhshrink, x);}
 
 // ------------------------------------------------------------------------------------
 // activation fns with inplace flag as only arg: relu,relu6,selu
@@ -845,82 +845,114 @@ static bool inplace(K x,J i,Cast c) {
 
 static void inplace(bool a,K x,bool b) {if(a || b) OPTION(x, inplace, kb(b));}
 
-static K inplace(K x,Cast c,const char *e) {
+// ------------------------------------------------------------------------------------
+//  elu,celu - exponential & continuously differentiable linear unit
+//             accepts optional alpha & inplace flag
+// ------------------------------------------------------------------------------------
+template<typename O> static O alpha(K x,J i,Cast c) {
+ O o; Pairs p; bool b; J n=xargc(x,i,p);
+ if(n==1) {
+  if(xbool(x,i,b))
+    o.inplace(b);
+  else
+    o.alpha(mdouble(x,i,c,Setting::alpha));
+ } else if(n==2) {
+   o.alpha(mdouble(x,i,   c, Setting::alpha));
+   o.inplace(mbool(x,i+1, c, Setting::inplace));
+ } else if(n) {
+  AT_ERROR(msym(c), ": unrecognized positional option(s), expecting alpha, inplace flag, or (alpha;inplace flag)");
+ }
+ while(xpair(p))
+  switch(mset(p.k)) {
+   case Setting::alpha:   o.alpha(mdouble(p,c)); break;
+   case Setting::inplace: o.inplace(mbool(p,c)); break;
+   default: AT_ERROR(msym(c)," option: ",p.k," not recognized");
+  }
+ return o;
+}
+
+template<typename O>static void alpha(bool a,Cast c,K x,const O& o) {
+ O d;
+ if(a || o.alpha()   != d.alpha())   OPTION(x, alpha,   kf(o.alpha()));
+ if(a || o.inplace() != d.inplace()) OPTION(x, inplace, kb(o.inplace()));
+}
+
+// ------------------------------------------------------------------------------------
+//  leakyrelu - allow a small positive gradient(slope) when x<0
+// ------------------------------------------------------------------------------------
+static torch::nn::LeakyReLUOptions slope(K x,J i,Cast c) {
+ torch::nn::LeakyReLUOptions o; Pairs p; bool b; J n=xargc(x,i,p);
+ if(n==1) {
+  if(xbool(x,i,b))
+    o.inplace(b);
+  else
+    o.negative_slope(mdouble(x,i,c,Setting::slope));
+ } else if(n==2) {
+   o.negative_slope(mdouble(x, i, c, Setting::slope));
+   o.inplace(mbool(x,i+1, c, Setting::inplace));
+ } else if(n) {
+  AT_ERROR(msym(c), ": unrecognized positional option(s), expecting slope, inplace flag, or (slope;inplace flag)");
+ }
+ while(xpair(p))
+  switch(mset(p.k)) {
+   case Setting::slope:   o.negative_slope(mdouble(p,c)); break;
+   case Setting::inplace: o.inplace(mbool(p,c)); break;
+   default: AT_ERROR(msym(c)," option: ",p.k," not recognized");
+  }
+ return o;
+}
+
+static void slope(bool a,Cast c,K x,const torch::nn::LeakyReLUOptions& o) {
+ torch::nn::LeakyReLUOptions d;
+ if(a || o.negative_slope()   != d.negative_slope()) OPTION(x, slope,   kf(o.negative_slope()));
+ if(a || o.inplace()          != d.inplace())        OPTION(x, inplace, kb(o.inplace()));
+}
+
+// ------------------------------------------------------------------------------------
+// functional form of relu, relu6, selu, elu, celu, leakyrelu
+// ------------------------------------------------------------------------------------
+static K krelu(K x,Cast c,const char* s) {
  KTRY
-  Tensor r,t; bool b=false,p=false;
-  if(xten(x,t))        p=true;
-  else if(xten(x,0,t)) p=true, b=inplace(x,1,c);
-  else if(xmixed(x,2)) t=kput(x,0), inplace(x,1,c); // check options, flag unused
-  else                 t=kput(x);
+  bool a,b,p; Tensor r,t;
+  if(xten(x,t))        p=true, a=false;
+  else if(xten(x,0,t)) p=true, a=true;
+  else if(xmixed(x,3)) p=false,a=true, t=kput(x,0);
+  else                 p=false,a=false,t=kput(x);
   switch(c) {
-   case Cast::relu:  r=torch::nn::functional::relu(t,b); break;
-   case Cast::relu6: r=torch::nn::functional::relu6(t,b); break;
-   case Cast::selu:  r=torch::nn::functional::selu(t,b); break;
-   default: AT_ERROR("unrecognized activation function");
+   case Cast::relu:  b=a ? inplace(x,1,c) : false; r=torch::nn::functional::relu(t,b); break;
+   case Cast::relu6: b=a ? inplace(x,1,c) : false; r=torch::nn::functional::relu6(t,b); break;
+   case Cast::selu:  b=a ? inplace(x,1,c) : false; r=torch::nn::functional::selu(t,b); break;
+   case Cast::elu: {
+    auto o=a ? alpha<torch::nn::ELUOptions> (x,1,c) : torch::nn::ELUOptions();
+    b=p && o.inplace();
+    r=torch::nn::functional::elu(t,o);
+    break;
+   }
+   case Cast::celu: {
+    auto o=a ? alpha<torch::nn::CELUOptions> (x,1,c) : torch::nn::CELUOptions();
+    b=p && o.inplace();
+    r=torch::nn::functional::celu(t,o);
+    break;
+   }
+   case Cast::leakyrelu: {
+    auto o=a ? slope(x,1,c) : torch::nn::LeakyReLUOptions();
+    b=p && o.inplace();
+    r=torch::nn::functional::leaky_relu(t,o);
+    break;
+   }
+   default: 
+    AT_ERROR("Unrecognized activiation function");
   }
   return b ? (K)0 : kresult(p,r);
- KCATCH(e);
-}
-
-KAPI krelu(K x)  {return inplace(x, Cast::relu,  "relu");}
-KAPI krelu6(K x) {return inplace(x, Cast::relu6, "relu6");}
-KAPI kselu(K x)  {return inplace(x, Cast::selu,  "selu");}
-
-// ------------------------------------------------------------------------------------
-//     activation functions with a single numeric scalar option
-// ------------------------------------------------------------------------------------
-// default1 - set default scalar value given function enumeration
-// arg1     - process x for scalar, e.g. (t;.5) or (t;(`alpha;.5))
-// setting1 - given scalar, compare with default and set entry in k dictionary
-// fn1      - call activation directly (no module)
-// ------------------------------------------------------------------------------------
-static void default1(Cast c,Setting &k,Scalar &v) {  // given module type, get setting & default value
- switch(c) {
-  case Cast::elu:
-  case Cast::celu:       k=Setting::alpha;  v=ExpOptions().alpha(); break;
-  case Cast::leakyrelu:  k=Setting::slope;  v=LeakyOptions().slope(); break;
-  default: AT_ERROR("Unexpected module type: ",(I)c," unable to get default scalar setting");
- }
-}
-
-static void arg1(Cast c,const char* s,K x,J i,Scalar& v) { // check argument(s) for single numeric scalar or named, e.g. (`alpha;.01)
- Pairs p; Setting k; J n=xargc(x,i,p); default1(c,k,v);
- if(!(n || p.n)) return;
- if(!(n==0 || (n==1 && xnum(x,i,v))))
-  AT_ERROR("Unrecognized argument(s) for ",s," module");
- while(xpair(p))
-  if(mset(p.k) == k)
-   pnum(p,v);
-  else
-   AT_ERROR("Unrecognized option: ",p.k,", ",s," module expects single scalar option: ",mset(k));
- if(c==Cast::glu && !v.isIntegral(false))
-  AT_ERROR("Dimension for gated linear unit must be given as an integer");
-}
-
-static void setting1(bool a,Cast c,K x,const Scalar &w) {
- Setting k; Scalar v; default1(c,k,v);
- if(a || !match(v,w)) dictadd(x,mset(k),kscalar(w));
-}
-
-using Fts = Tensor (*)(const Tensor&, Scalar);
-
-static K fn1(Cast c,const char* s,K x,Fts f) {
- KTRY
-  Tensor t; Setting k; Scalar v;
-  if(xten(x,t))
-   return default1(c,k,v), kten(f(t,v));
-  else if(xten(x,0,t) || xmixed(x,2))
-   return arg1(c,s,x,1,v), t.defined() ? kten(f(t,v)) : kget(f(kput(x,0),v));
-  else
-   return default1(c,k,v), kget(f(kput(x),v));
  KCATCH(s);
 }
 
-static Tensor elu(const Tensor& t,Scalar v) {return torch::elu(t,v);}          // torch fn has two additional scalars
-
-KAPI kelu(K x)        {return fn1(Cast::elu,        "elu",        x, elu);}
-KAPI kcelu(K x)       {return fn1(Cast::celu,       "celu",       x, torch::celu);}
-KAPI kleakyrelu(K x)  {return fn1(Cast::leakyrelu,  "leakyrelu",  x, torch::leaky_relu);}
+KAPI      relu(K x) {return krelu(x, Cast::relu,      "relu");}
+KAPI     relu6(K x) {return krelu(x, Cast::relu6,     "relu6");}
+KAPI      selu(K x) {return krelu(x, Cast::selu,      "selu");}
+KAPI       elu(K x) {return krelu(x, Cast::elu,       "elu");}
+KAPI      celu(K x) {return krelu(x, Cast::celu,      "celu");}
+KAPI leakyrelu(K x) {return krelu(x, Cast::leakyrelu, "leakyrelu");}
 
 // ------------------------------------------------------------------------------------
 // glu - gated linear unit, accepts single integer option: dimension (default = -1)
@@ -1287,9 +1319,9 @@ void mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) {
   case Cast::expand:       PUSH(q,n,Expand(getsize(x,i,c))); break;
   case Cast::reshape:      PUSH(q,n,Reshape(getsize(x,i,c))); break;
 
-  case Cast::elu:          arg1(c,s,x,i,v); PUSH(q,n,ELU(v)); break;
-  case Cast::celu:         arg1(c,s,x,i,v); PUSH(q,n,CELU(v)); break;
-  case Cast::leakyrelu:    arg1(c,s,x,i,v); PUSH(q,n,LeakyReLU(v)); break;
+  case Cast::elu:          PUSH(q,n,torch::nn::ELU (alpha<torch::nn::ELUOptions> (x,i,c))); break;
+  case Cast::celu:         PUSH(q,n,torch::nn::CELU(alpha<torch::nn::CELUOptions>(x,i,c))); break;
+  case Cast::leakyrelu:    PUSH(q,n,torch::nn::LeakyReLU(slope(x,i,c))); break;
   case Cast::glu:          PUSH(q,n,torch::nn::GLU(dim(x,i,c))); break;
   case Cast::hardshrink:   PUSH(q,n,torch::nn::Hardshrink(lambda(x,i,c))); break;
   case Cast::softshrink:   PUSH(q,n,torch::nn::Softshrink(lambda(x,i,c))); break;
@@ -1385,6 +1417,7 @@ void mopt(Module &g,bool a,K &v,J i) { //g:generic module, a:true if all options
  } else if(g.as<torch::nn::Tanh>())          { c=Cast::tanh;
  } else if(g.as<torch::nn::Tanhshrink>())    { c=Cast::tanhshrink;
  } else if(g.as<torch::nn::GELU>())          { c=Cast::gelu;
+
  } else if(auto* m=g.as<torch::nn::ReLU>())  { c=Cast::relu;  inplace(a,x,m->options.inplace());
  } else if(auto* m=g.as<torch::nn::SELU>())  { c=Cast::selu;  inplace(a,x,m->options.inplace());
  } else if(auto* m=g.as<torch::nn::ReLU6>()) { c=Cast::relu6; inplace(a,x,m->options.inplace());
@@ -1398,9 +1431,9 @@ void mopt(Module &g,bool a,K &v,J i) { //g:generic module, a:true if all options
  } else if(auto* m=g.as<Expand>())     { c=Cast::expand;     getsize(a,x,m->options);
  } else if(auto* m=g.as<Reshape>())    { c=Cast::reshape;    getsize(a,x,m->options);
 
- } else if(auto* m=g.as<ELU>())        { c=Cast::elu;        setting1(a,c,x,m->options.alpha());
- } else if(auto* m=g.as<CELU>())       { c=Cast::celu;       setting1(a,c,x,m->options.alpha());
- } else if(auto* m=g.as<LeakyReLU>())  { c=Cast::leakyrelu;  setting1(a,c,x,m->options.slope());
+ } else if(auto* m=g.as<torch::nn::ELU>())        { c=Cast::elu;  alpha(a,c,x,m->options);
+ } else if(auto* m=g.as<torch::nn::CELU>())       { c=Cast::celu; alpha(a,c,x,m->options);
+ } else if(auto* m=g.as<torch::nn::LeakyReLU>())  { c=Cast::leakyrelu;  slope(a,c,x,m->options);
  } else if(auto* m=g.as<torch::nn::GLU>())        { c=Cast::glu;        dim(a,c,x,m->options.dim());
  } else if(auto* m=g.as<torch::nn::Hardshrink>()) { c=Cast::hardshrink; lambda(a,c,x,m->options.lambda());
  } else if(auto* m=g.as<torch::nn::Softshrink>()) { c=Cast::softshrink; lambda(a,c,x,m->options.lambda());
@@ -1578,15 +1611,15 @@ void nnfn(K x) {
  fn(x, "avgpool1d",  KFN(avgpool1d),   1);
  fn(x, "avgpool2d",  KFN(avgpool2d),   1);
  fn(x, "avgpool3d",  KFN(avgpool3d),   1);
- fn(x, "celu",       KFN(kcelu),       1);
- fn(x, "elu",        KFN(kelu),        1);
+ fn(x, "celu",       KFN(celu),        1);
+ fn(x, "elu",        KFN(elu),         1);
  fn(x, "flatten",    KFN(kflatten),    1);
  fn(x, "glu",        KFN(glu),         1);
  fn(x, "hardshrink", KFN(hardshrink),  1);
  fn(x, "hardtanh",   KFN(khardtanh),   1);
- fn(x, "leakyrelu",  KFN(kleakyrelu),  1);
+ fn(x, "leakyrelu",  KFN(leakyrelu),   1);
  fn(x, "linear",     KFN(klinear),     1);
- fn(x, "logsigmoid", KFN(klogsigmoid), 1);
+ fn(x, "logsigmoid", KFN(logsigmoid),  1);
  fn(x, "logsoftmax", KFN(klogsoftmax), 1);
  fn(x, "lppool1d",   KFN(lppool1d),    1);
  fn(x, "lppool2d",   KFN(lppool2d),    1);
@@ -1594,17 +1627,17 @@ void nnfn(K x) {
  fn(x, "maxpool2d",  KFN(maxpool2d),   1);
  fn(x, "maxpool3d",  KFN(maxpool3d),   1);
  fn(x, "prelu",      KFN(kprelu),      1);
- fn(x, "gelu",       KFN(kgelu),       1);
- fn(x, "relu",       KFN(krelu),       1);
- fn(x, "relu6",      KFN(krelu6),      1);
+ fn(x, "gelu",       KFN(gelu),        1);
+ fn(x, "relu",       KFN(relu),        1);
+ fn(x, "relu6",      KFN(relu6),       1);
  fn(x, "rrelu",      KFN(krrelu),      1);
- fn(x, "selu",       KFN(kselu),       1);
+ fn(x, "selu",       KFN(selu),        1);
  fn(x, "softmax",    KFN(ksoftmax),    1);
  fn(x, "softmin",    KFN(ksoftmin),    1);
  fn(x, "softplus",   KFN(ksoftplus),   1);
- fn(x, "softsign",   KFN(ksoftsign),   1);
+ fn(x, "softsign",   KFN(softsign),    1);
  fn(x, "softshrink", KFN(softshrink),  1);
- fn(x, "tanhshrink", KFN(ktanhshrink), 1);
+ fn(x, "tanhshrink", KFN(tanhshrink),  1);
  fn(x, "threshold",  KFN(kthreshold),  1);
 }
 
@@ -1620,7 +1653,7 @@ KAPI anytest(K x) {
   torch::nn::AvgPool2d(2),
   torch::nn::AvgPool3d(2),
   torch::nn::BatchNorm(5),
-  CELU(1.0),
+  torch::nn::CELU(torch::nn::CELUOptions().alpha(1.0)),
   torch::nn::Conv1d(1,2,3),
   torch::nn::Conv2d(1,2,3),
   torch::nn::Conv3d(1,2,3),
@@ -1634,7 +1667,7 @@ KAPI anytest(K x) {
   torch::nn::FeatureAlphaDropout(.5),
   torch::nn::FeatureAlphaDropout(),
   torch::nn::FeatureAlphaDropout(.25),
-  ELU(),
+  torch::nn::ELU(),
   torch::nn::Embedding(4,10),
   torch::nn::FeatureDropout(.5),
   FractionalMaxPool2d(FractionalMaxPoolOptions<2>(3).ratio(.5)),
@@ -1645,7 +1678,7 @@ KAPI anytest(K x) {
   torch::nn::Hardshrink(.5),
   Hardtanh(-1,1),
   torch::nn::LSTM(4,5),
-  LeakyReLU(.1),
+  torch::nn::LeakyReLU(),
   torch::nn::Linear(3,4),
   torch::nn::LogSigmoid(),
   LogSoftmax(1,torch::kDouble),

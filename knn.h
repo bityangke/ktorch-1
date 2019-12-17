@@ -156,64 +156,6 @@ class TORCH_API PReLUImpl : public torch::nn::Cloneable<PReLUImpl> {
 };
 TORCH_MODULE(PReLU);
 
-// -----------------------------------------------------------------
-//  elu,celu - exponential & continuously differentiable linear unit
-// -----------------------------------------------------------------
-struct TORCH_API ExpOptions {
- ExpOptions(torch::Scalar a) : alpha_(a) {}
- ExpOptions() {}
- TORCH_ARG(torch::Scalar, alpha)=1.0;
-};
-
-template <typename Derived>
-class ExpImpl : public torch::nn::Cloneable<Derived> {
- public:
-  ExpImpl(torch::Scalar a) : ExpImpl(ExpOptions(a)) {}
-  explicit ExpImpl(ExpOptions o) : options(std::move(o)) {reset();}
-  ExpImpl() = default;
-  void reset() override {}
-  ExpOptions options;
-};
-
-class TORCH_API ELUImpl : public ExpImpl<ELUImpl> {
- public:
-  using ExpImpl<ELUImpl>::ExpImpl;
-  torch::Tensor forward(const torch::Tensor& t) {
-   return torch::elu(t,options.alpha());
-  }
-};
-TORCH_MODULE(ELU);
-
-class TORCH_API CELUImpl : public ExpImpl<CELUImpl> {
- public:
-  using ExpImpl<CELUImpl>::ExpImpl;
-  torch::Tensor forward(const torch::Tensor& t) {
-   return torch::celu(t,options.alpha());
-  }
-};
-TORCH_MODULE(CELU);
-
-// -----------------------------------------------------------------
-// leakyrelu - allow a small positive gradient(slope) when x<0
-// -----------------------------------------------------------------
-struct TORCH_API LeakyOptions {
- LeakyOptions(torch::Scalar s) : slope_(s) {}
- LeakyOptions() {}
- TORCH_ARG(torch::Scalar, slope)=0.01;
-};
-
-class TORCH_API LeakyReLUImpl : public torch::nn::Cloneable<LeakyReLUImpl> {
- public:
-  LeakyReLUImpl(torch::Scalar s) : LeakyReLUImpl(LeakyOptions(s)) {}
-  explicit LeakyReLUImpl(LeakyOptions o) : options(std::move(o)) {reset();}
-  void reset() override {}
-  torch::Tensor forward(const torch::Tensor& t) {
-   return torch::leaky_relu(t,options.slope());
-  }
- LeakyOptions options;
-};
-TORCH_MODULE(LeakyReLU);
-
 // -----------------------------------------------------------------------------
 // rrelu - randomized leakyrelu w'uniform random slope within given lo,hi bounds
 // -----------------------------------------------------------------------------

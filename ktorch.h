@@ -128,7 +128,7 @@ enum class Cast:char {
  reflect2d,   relu,        relu6,      
  replicate1d, replicate2d, replicate3d,
  reshape,     rnn,         rrelu,      
- selu,        sigmoid,     softmax,    
+ selu,        sigmoid,     softmax,     softmax2d,
  softmin,     softplus,    softshrink, 
  softsign,    squeeze,     tanh,       
  tanhshrink,  threshold,   unsqueeze,  
@@ -569,7 +569,7 @@ typedef struct {
   std::make_tuple(cs("tanh"),torch::nn::RNNActivation::Tanh)
  }};
 
- std::array<std::tuple<S,Cast>,70> module = {{  // module sym -> enum
+ std::array<std::tuple<S,Cast>,71> module = {{  // module sym -> enum
   std::make_tuple(cs("adaptavg1d"),      Cast::adaptavg1d),
   std::make_tuple(cs("adaptavg2d"),      Cast::adaptavg2d),
   std::make_tuple(cs("adaptavg3d"),      Cast::adaptavg3d),
@@ -630,6 +630,7 @@ typedef struct {
   std::make_tuple(cs("sequential"),      Cast::sequential),
   std::make_tuple(cs("sigmoid"),         Cast::sigmoid),
   std::make_tuple(cs("softmax"),         Cast::softmax),
+  std::make_tuple(cs("softmax2d"),       Cast::softmax2d),
   std::make_tuple(cs("softmin"),         Cast::softmin),
   std::make_tuple(cs("softplus"),        Cast::softplus),
   std::make_tuple(cs("softshrink"),      Cast::softshrink),

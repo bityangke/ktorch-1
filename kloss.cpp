@@ -1,5 +1,27 @@
 #include "ktorch.h"
 #include "kloss.h"
+/*
+
+  return F::detail::               l1_loss(input, target, options.reduction());
+  return F::detail::                kl_div(input, target, options.reduction());
+  return F::detail::              mse_loss(input, target, options.reduction());
+  return F::detail::      soft_margin_loss(input, target, options.reduction());
+  return F::detail::        smooth_l1_loss(input, target, options.reduction());
+  return F::detail::multilabel_margin_loss(input, target, options.reduction());
+
+  return F::detail::binary_cross_entropy(input, target, options.weight(), options.reduction());
+  return F::detail::hinge_embedding_loss(input, target, options.margin(), options.reduction());
+  return F::detail::multi_margin_loss(input, target, options.p(), options.margin(), options.weight(), options.reduction());
+  return F::detail::cosine_embedding_loss(input1, input2, target, options.margin(), options.reduction());
+  return F::detail::multilabel_soft_margin_loss(input, target, options.weight(), options.reduction());
+  return F::detail::triplet_margin_loss( anchor, positive, negative, options.margin(), options.p(), options.eps(), options.swap(), options.reduction());
+  return F::detail::ctc_loss( log_probs, targets, input_lengths, target_lengths, options.blank(), options.reduction(), options.zero_infinity()); }
+  return F::detail::poisson_nll_loss( log_input, target, options.log_input(), options.full(), options.eps(), options.reduction());
+  return F::detail::margin_ranking_loss(input1, input2, target, options.margin(), options.reduction());
+  return F::detail::nll_loss( input, target, weight, options.ignore_index(), options.reduction());
+  return F::detail::cross_entropy( input, target, weight, options.ignore_index(), options.reduction()); }
+  return F::detail::binary_cross_entropy_with_logits(input, target, options.weight(), options.reduction(), options.pos_weight());
+*/
 
 // append a loss option to a k dictionary given dict,name & value
 #define OPTION(x,k,v) dictadd(x, lset(Setting::k), v)

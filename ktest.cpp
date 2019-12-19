@@ -42,13 +42,30 @@ KAPI cudamem(K x) {
  KCATCH("cuda memory");
 }
 
+typedef c10::variant<torch::enumtype::kNone, torch::enumtype::kMean, torch::enumtype::kSum> reduce1;
+typedef c10::variant<torch::enumtype::kNone, torch::enumtype::kBatchMean, torch::enumtype::kSum, torch::enumtype::kMean> reduce2;
+
+static reduce1 getreduce(K x) {
+ reduce1 r;
+ r=torch::kSum;
+ return r;
+}
+
+KAPI losstest(K x) {
+ auto l=torch::nn::L1Loss(torch::nn::L1LossOptions().reduction(getreduce(x)));
+ std::cerr << l << "\n";
+ std::cerr << torch::enumtype::get_enum_name(l->options.reduction()) << "\n";
+ std::cerr << ESYM(l->options.reduction()) << "\n";
+ return (K)0;
+}
+
 #define ENUMTEST(name) \
 { \
   v = torch::k##name; \
   std::cerr << torch::enumtype::get_enum_name(v) << " " << ESYM(v) << "\n"; \
 }
 
-KAPI enumtest(K ) {
+KAPI enumtest(K x) {
   c10::variant<
     torch::enumtype::kLinear,
     torch::enumtype::kConv1D,

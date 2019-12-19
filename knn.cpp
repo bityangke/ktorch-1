@@ -786,10 +786,6 @@ static void soft(bool a,K x,const M *m) {
 
 using SoftFn = Tensor (*)(const Tensor&, int64_t, c10::optional<ScalarType>);
 
-static Tensor softmin(const Tensor& a,int64_t d,c10::optional<ScalarType> t) {
- return torch::softmax(-a,d,t);
-}
-
 static K soft(K x,const char* s,SoftFn f) {
  KTRY
   J d; c10::optional<ScalarType> t=c10::nullopt; Tensor a;
@@ -808,9 +804,9 @@ static K soft(K x,const char* s,SoftFn f) {
  KCATCH(s);
 }
 
-KAPI ksoftmin   (K x) {return soft(x, "softmin",    softmin);}
-KAPI ksoftmax   (K x) {return soft(x, "softmax",    torch::softmax);}
-KAPI klogsoftmax(K x) {return soft(x, "logsoftmax", torch::log_softmax);}
+KAPI ksoftmin   (K x) {return soft(x, "softmin",    torch::nn::functional::detail::softmin);}
+KAPI ksoftmax   (K x) {return soft(x, "softmax",    torch::nn::functional::detail::softmax);}
+KAPI klogsoftmax(K x) {return soft(x, "logsoftmax", torch::nn::functional::detail::log_softmax);}
 
 // ------------------------------------------------------------------------------------
 // noarg:  activation fns w'out args, logsigmoid,sigmoid,softsign,tanh,tanhshrink
@@ -909,9 +905,31 @@ static void slope(bool a,Cast c,K x,const torch::nn::LeakyReLUOptions& o) {
 }
 
 // ------------------------------------------------------------------------------------
-// functional form of relu, relu6, selu, elu, celu, leakyrelu
+// hardshrink, softshrink - module/function requires single parm: lambda
 // ------------------------------------------------------------------------------------
-static K krelu(K x,Cast c,const char* s) {
+static double lambda(Cast c) {
+ return c==Cast::hardshrink ? torch::nn::HardshrinkOptions().lambda() 
+                            : torch::nn::SoftshrinkOptions().lambda();
+}
+
+static double lambda(K x,J i,Cast c) {
+ double l=lambda(c); Pairs p; J n=xargc(x,i,p);
+ if(n==1) l=mdouble(x,i,c,Setting::lambda);
+ TORCH_CHECK(n<2,msym(c),": unrecognized positional option(s), expecting lambda, e.g. 0.5");
+ while(xpair(p)) {
+  TORCH_CHECK(mset(p.k)==Setting::lambda,"Unrecognized option: ",p.k); l=mdouble(p,c);
+ }
+ return l;
+}
+
+static void lambda(bool a,Cast c,K x,double l) {if(a || l != lambda(c)) OPTION(x,lambda,kf(l));}
+
+// ------------------------------------------------------------------------------------
+// functional form of activation fns with single optional arg
+//   relu,relu6,selu (inplace flag), elu,celu(alpha), leakyrelu(slope),
+//   hardshrink,softshrink(lambda)
+// ------------------------------------------------------------------------------------
+static K kact(K x,Cast c,const char* s) {
  KTRY
   bool a,b,p; Tensor r,t;
   if(xten(x,t))        p=true, a=false;
@@ -940,6 +958,8 @@ static K krelu(K x,Cast c,const char* s) {
     r=torch::nn::functional::leaky_relu(t,o);
     break;
    }
+   case Cast::hardshrink: b=false; r=torch::hardshrink(t,a ? lambda(x,1,c) : lambda(c)); break;
+   case Cast::softshrink: b=false; r=torch::softshrink(t,a ? lambda(x,1,c) : lambda(c)); break;
    default: 
     AT_ERROR("Unrecognized activiation function");
   }
@@ -947,12 +967,14 @@ static K krelu(K x,Cast c,const char* s) {
  KCATCH(s);
 }
 
-KAPI      relu(K x) {return krelu(x, Cast::relu,      "relu");}
-KAPI     relu6(K x) {return krelu(x, Cast::relu6,     "relu6");}
-KAPI      selu(K x) {return krelu(x, Cast::selu,      "selu");}
-KAPI       elu(K x) {return krelu(x, Cast::elu,       "elu");}
-KAPI      celu(K x) {return krelu(x, Cast::celu,      "celu");}
-KAPI leakyrelu(K x) {return krelu(x, Cast::leakyrelu, "leakyrelu");}
+KAPI       relu(K x) {return kact(x, Cast::relu,       "relu");}
+KAPI      relu6(K x) {return kact(x, Cast::relu6,      "relu6");}
+KAPI       selu(K x) {return kact(x, Cast::selu,       "selu");}
+KAPI        elu(K x) {return kact(x, Cast::elu,        "elu");}
+KAPI       celu(K x) {return kact(x, Cast::celu,       "celu");}
+KAPI  leakyrelu(K x) {return kact(x, Cast::leakyrelu,  "leakyrelu");}
+KAPI hardshrink(K x) {return kact(x, Cast::hardshrink, "hardshrink");}
+KAPI softshrink(K x) {return kact(x, Cast::softshrink, "softshrink");}
 
 // ------------------------------------------------------------------------------------
 // glu - gated linear unit, accepts single integer option: dimension (default = -1)
@@ -982,40 +1004,6 @@ KAPI glu(K x) {
 }
 
 // ------------------------------------------------------------------------------------
-// hardshrink, softshrink - module/function requires single parm: lambda
-// ------------------------------------------------------------------------------------
-static double lambda(Cast c) {
- return c==Cast::hardshrink ? torch::nn::HardshrinkOptions().lambda() 
-                            : torch::nn::SoftshrinkOptions().lambda();
-}
-
-static double lambda(K x,J i,Cast c) {
- double l=lambda(c); Pairs p; J n=xargc(x,i,p);
- if(n==1) l=mdouble(x,i,c,Setting::lambda);
- TORCH_CHECK(n<2,msym(c),": unrecognized positional option(s), expecting lambda, e.g. 0.5");
- while(xpair(p)) {
-  TORCH_CHECK(mset(p.k)==Setting::lambda,"Unrecognized option: ",p.k); l=mdouble(p,c);
- }
- return l;
-}
-
-static void lambda(bool a,Cast c,K x,double l) {if(a || l != lambda(c)) OPTION(x,lambda,kf(l));}
-
-static K shrink(K x, Cast c, const char* s) {
- KTRY
-  bool p; double l; Tensor t;
-  if(xten(x,t))        p=true, l=lambda(c);
-  else if(xten(x,0,t)) p=true, l=lambda(x,1,c);
-  else if(xmixed(x,2)) p=false,l=lambda(x,1,c), t=kput(x,0);
-  else                 p=false,l=lambda(c),     t=kput(x);
-  return kresult(p,c==Cast::hardshrink ? torch::softshrink(t,l) : torch::hardshrink(t,l));
- KCATCH(s);
-}
-
-KAPI hardshrink(K x) {return shrink(x, Cast::hardshrink, "hardshrink");}
-KAPI softshrink(K x) {return shrink(x, Cast::softshrink, "softshrink");}
-
-// ------------------------------------------------------------------------------------
 //      activation functions with up to two scalars, e.g. min/max, lower/upper
 // ------------------------------------------------------------------------------------
 // default2 - set default scalar values given function enumeration
@@ -1027,18 +1015,23 @@ KAPI softshrink(K x) {return shrink(x, Cast::softshrink, "softshrink");}
 static void default2(Cast c,Setting& k1,Setting& k2,Scalar& v1,Scalar& v2) { //given cast, set keys & default values
  switch(c) {
   case Cast::prelu:
+   // num_parameters(int64), init;
    k1=Setting::in;                    k2=Setting::init;
    v1=PReLUOptions().in();            v2=PReLUOptions().init(); break;
   case Cast::rrelu:
+   // lower, upper, inplace -- functional has training flag
    k1=Setting::lower;                 k2=Setting::upper;
    v1=RReLUOptions().lower();         v2=RReLUOptions().upper(); break;
   case Cast::hardtanh:
+   // min_val, max_val, inplace
    k1=Setting::min;                   k2=Setting::max;
    v1=HardtanhOptions().min();        v2=HardtanhOptions().max(); break;
   case Cast::softplus:
+   // beta, threshold
    k1=Setting::beta;                  k2=Setting::threshold;
    v1=SoftplusOptions().beta();       v2=SoftplusOptions().threshold(); break;
   case Cast::threshold:
+   // threshold, value, inplace
    k1=Setting::threshold;             k2=Setting::value; 
    v1=ThresholdOptions().threshold(); v2=ThresholdOptions().value(); break;
   default: AT_ERROR("Unexpected module type: ",(I)c," unable to get default settings");
@@ -1302,6 +1295,7 @@ void mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) {
   case Cast::logsigmoid:   noarg(s,x,i); PUSH(q,n,torch::nn::LogSigmoid()); break;
   case Cast::sigmoid:      noarg(s,x,i); PUSH(q,n,torch::nn::Sigmoid()); break;
   case Cast::softsign:     noarg(s,x,i); PUSH(q,n,torch::nn::Softsign()); break;
+  case Cast::softmax2d:    noarg(s,x,i); PUSH(q,n,torch::nn::Softmax2d()); break;
   case Cast::tanh:         noarg(s,x,i); PUSH(q,n,torch::nn::Tanh()); break;
   case Cast::tanhshrink:   noarg(s,x,i); PUSH(q,n,torch::nn::Tanhshrink()); break;
   case Cast::gelu:         noarg(s,x,i); PUSH(q,n,torch::nn::GELU()); break;
@@ -1414,6 +1408,7 @@ void mopt(Module &g,bool a,K &v,J i) { //g:generic module, a:true if all options
  } else if(g.as<torch::nn::LogSigmoid>())    { c=Cast::logsigmoid;
  } else if(g.as<torch::nn::Sigmoid>())       { c=Cast::sigmoid;
  } else if(g.as<torch::nn::Softsign>())      { c=Cast::softsign;
+ } else if(g.as<torch::nn::Softmax2d>())     { c=Cast::softmax2d;
  } else if(g.as<torch::nn::Tanh>())          { c=Cast::tanh;
  } else if(g.as<torch::nn::Tanhshrink>())    { c=Cast::tanhshrink;
  } else if(g.as<torch::nn::GELU>())          { c=Cast::gelu;

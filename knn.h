@@ -82,54 +82,6 @@ class TORCH_API PadImpl : public torch::nn::Cloneable<PadImpl> {
 TORCH_MODULE(Pad);
 
 // -------------------------------------------------------------
-// softmax, softmin & logsoftmax activation layers
-// -------------------------------------------------------------
-struct TORCH_API SoftOptions {
- SoftOptions(int64_t d) : dim_(d) {}
- SoftOptions(int64_t d,c10::optional<torch::ScalarType> t) : dim_(d),dtype_(t) {}
- SoftOptions() {}
- TORCH_ARG(int64_t, dim);
- TORCH_ARG(c10::optional<torch::ScalarType>, dtype)=c10::nullopt;
-};
-
-template <typename Derived>
-class SoftImpl : public torch::nn::Cloneable<Derived> {
- public:
-  SoftImpl(int64_t d) : SoftImpl(SoftOptions(d)) {}
-  SoftImpl(int64_t d,c10::optional<torch::ScalarType> t) : SoftImpl(SoftOptions(d,t)) {}
-  explicit SoftImpl(SoftOptions o) : options(std::move(o)) {reset();}
-  void reset() override {}
-  SoftOptions options;
-};
-
-class TORCH_API SoftmaxImpl : public SoftImpl<SoftmaxImpl> {
- public:
-  using SoftImpl<SoftmaxImpl>::SoftImpl;
-  torch::Tensor forward(const torch::Tensor& input) {
-   return input.softmax(options.dim(),options.dtype());
-  }
-};
-TORCH_MODULE(Softmax);
-
-class TORCH_API SoftminImpl : public SoftImpl<SoftminImpl> {
- public:
-  using SoftImpl<SoftminImpl>::SoftImpl;
-  torch::Tensor forward(const torch::Tensor& input) {
-   return (-input).softmax(options.dim(),options.dtype());
-  }
-};
-TORCH_MODULE(Softmin);
-
-class TORCH_API LogSoftmaxImpl : public SoftImpl<LogSoftmaxImpl> {
- public:
-  using SoftImpl<LogSoftmaxImpl>::SoftImpl;
-  torch::Tensor forward(const torch::Tensor& input) {
-   return input.log_softmax(options.dim(),options.dtype());
-  }
-};
-TORCH_MODULE(LogSoftmax);
-
-// -------------------------------------------------------------
 //  prelu - parametric rectified linear unit
 // -------------------------------------------------------------
 struct TORCH_API PReLUOptions {

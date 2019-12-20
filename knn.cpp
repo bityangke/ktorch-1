@@ -754,60 +754,6 @@ template<typename M> static void npad(K x,const M* m) {
  OPTION(x, pad, KEX(m->options.padding()));
 }
 
-// ----------------------------------------------------------------------------------
-//  softmax, softmin, logsoftmax layers
-// ----------------------------------------------------------------------------------
-static J softdim(size_t d) {return !(d==0 || d==1 || d==3);}
-
-static void softargs(const char* s,K x,J i,J &d,c10::optional<ScalarType>& t) { 
- t=c10::nullopt; Pairs p; J n=xargc(x,i,p);
- if(!((n==0 && p.n) || (xlong(x,i,d) && (n==1 || (n==2 && xtype(x,i+1,t))))))
-  AT_ERROR("Unrecognized arguments for ",s,", expecting dim or (dim;type)");
- while(xpair(p))
-  switch(mset(p.k)) {
-   case Setting::dim:  d=plong(p); break;
-   case Setting::type: t=ptype(p); break;
-   default: AT_ERROR("Unrecognized ",s," option: ",p.k); break;
-  }
- if(d==nj) 
-  AT_ERROR("specify the dimension along which ",s," will be computed");
-}
-
-template<typename M>
-static M soft(S s,K x,J i) {J d=nj; c10::optional<ScalarType> t; softargs(s,x,i,d,t); return M(d,t);}
-
-template<typename M>
-static void soft(bool a,K x,const M *m) {
- SoftOptions o=m->options, d(o.dim());
- OPTION(x, dim, kj(o.dim()));
- if((a || o.dtype() != d.dtype()) && o.dtype())
-  OPTION(x, type, ks(stype(o.dtype())));
-}
-
-using SoftFn = Tensor (*)(const Tensor&, int64_t, c10::optional<ScalarType>);
-
-static K soft(K x,const char* s,SoftFn f) {
- KTRY
-  J d; c10::optional<ScalarType> t=c10::nullopt; Tensor a;
-  if(xten(x,a)) {
-    return kten(f(a,softdim(a.dim()),t));
-  } else if(xten(x,0,a)) {
-    d=softdim(a.dim()); softargs(s,x,1,d,t);
-    return kten(f(a,d,t));
-  } else if(xmixed(x,3)) {
-    a=kput(kK(x)[0]); d=softdim(a.dim()); softargs(s,x,1,d,t);
-    return kget(f(a,d,t));
-  } else {
-    a=kput(x);
-    return kget(f(a,softdim(a.dim()),t));
-  }
- KCATCH(s);
-}
-
-KAPI ksoftmin   (K x) {return soft(x, "softmin",    torch::nn::functional::detail::softmin);}
-KAPI ksoftmax   (K x) {return soft(x, "softmax",    torch::nn::functional::detail::softmax);}
-KAPI klogsoftmax(K x) {return soft(x, "logsoftmax", torch::nn::functional::detail::log_softmax);}
-
 // ------------------------------------------------------------------------------------
 // noarg:  activation fns w'out args, logsigmoid,sigmoid,softsign,tanh,tanhshrink
 // ------------------------------------------------------------------------------------
@@ -925,10 +871,48 @@ static double lambda(K x,J i,Cast c) {
 static void lambda(bool a,Cast c,K x,double l) {if(a || l != lambda(c)) OPTION(x,lambda,kf(l));}
 
 // ------------------------------------------------------------------------------------
-// functional form of activation fns with single optional arg
-//   relu,relu6,selu (inplace flag), elu,celu(alpha), leakyrelu(slope),
-//   hardshrink,softshrink(lambda)
+// glu & softmax,softmax,logsoftmax (modules only) accepts single dimension
 // ------------------------------------------------------------------------------------
+static int64_t dim(Cast c) { return c==Cast::glu ? torch::nn::GLUOptions().dim() : nj;}
+
+static int64_t dim(K x,J i,Cast c) {
+ int64_t d=dim(c); Pairs p; J n=xargc(x,i,p);
+ if(n==1) d=int64(x,i,c,Setting::dim);
+ TORCH_CHECK(n<2, msym(c),": unrecognized positional option(s), expecting single dimension");
+ while(xpair(p)) {
+  TORCH_CHECK(mset(p.k)==Setting::dim,"Unrecognized option: ",p.k); d=int64(p,c);
+ }
+ TORCH_CHECK(d!=nj, msym(c),": no dimension given");
+ return d;
+}
+
+static void dim(bool a,Cast c,K x,int64_t d) {if(a || d != dim(c)) OPTION(x,dim,kj(d));}
+
+// ----------------------------------------------------------------------------------
+// softmax,softmin,logsoftmax: functional form requires dim & optional data type
+// softdim: get default dimension from input tensor dimensions (deprecated)
+// ----------------------------------------------------------------------------------
+static J softdim(size_t d) {return !(d==0 || d==1 || d==3);}
+
+static void softargs(K x,J i,Cast c,J &d,c10::optional<ScalarType>& s) { 
+ s=c10::nullopt; Pairs p; J n=xargc(x,i,p);
+ if(!((n==0 && p.n) || (xlong(x,i,d) && (n==1 || (n==2 && xtype(x,i+1,s))))))
+  AT_ERROR(msym(c),": unrecognized arg(s), expecting dim or (dim;data type)");
+ while(xpair(p))
+  switch(mset(p.k)) {
+   case Setting::dim:  d=plong(p); break;
+   case Setting::type: s=ptype(p); break;
+   default: AT_ERROR("Unrecognized ",msym(c)," option: ",p.k); break;
+  }
+ if(d==nj) 
+  AT_ERROR("specify the dimension along which ",msym(c)," will be computed");
+}
+
+// -----------------------------------------------------------------------------------------
+// functional form of activation fns:
+//   relu,relu6,selu (inplace flag), elu,celu(alpha & inplace), leakyrelu(slope & inplace),
+//   hardshrink,softshrink(lambda), glu(dim)
+// -----------------------------------------------------------------------------------------
 static K kact(K x,Cast c,const char* s) {
  KTRY
   bool a,b,p; Tensor r,t;
@@ -960,6 +944,19 @@ static K kact(K x,Cast c,const char* s) {
    }
    case Cast::hardshrink: b=false; r=torch::hardshrink(t,a ? lambda(x,1,c) : lambda(c)); break;
    case Cast::softshrink: b=false; r=torch::softshrink(t,a ? lambda(x,1,c) : lambda(c)); break;
+   case Cast::glu:        b=false; r=torch::nn::functional::glu(t,a ? dim(x,1,c) : dim(c)); break;
+   case Cast::softmin:
+   case Cast::softmax:
+   case Cast::logsoftmax: {
+    b=false; auto d=softdim(t.dim()); c10::optional<ScalarType> s; if(a) softargs(x,1,c,d,s);
+    switch(c) {
+     case Cast::softmin:    r=torch::nn::functional::detail::softmin(t,d,s); break;
+     case Cast::softmax:    r=torch::nn::functional::detail::softmax(t,d,s); break;
+     case Cast::logsoftmax: r=torch::nn::functional::detail::log_softmax(t,d,s); break;
+     default: AT_ERROR("Unrecognized activation function");
+    }
+    break;
+   }
    default: 
     AT_ERROR("Unrecognized activiation function");
   }
@@ -975,33 +972,10 @@ KAPI       celu(K x) {return kact(x, Cast::celu,       "celu");}
 KAPI  leakyrelu(K x) {return kact(x, Cast::leakyrelu,  "leakyrelu");}
 KAPI hardshrink(K x) {return kact(x, Cast::hardshrink, "hardshrink");}
 KAPI softshrink(K x) {return kact(x, Cast::softshrink, "softshrink");}
-
-// ------------------------------------------------------------------------------------
-// glu - gated linear unit, accepts single integer option: dimension (default = -1)
-// ------------------------------------------------------------------------------------
-static int64_t dim(K x,J i,Cast c=Cast::glu);
-static int64_t dim(K x,J i,Cast c) {
- int64_t d=torch::nn::GLUOptions().dim(); Pairs p; J n=xargc(x,i,p);
- if(n==1) d=int64(x,i,c,Setting::dim);
- TORCH_CHECK(n<2,"glu: unrecognized positional option(s), expecting single dimension");
- while(xpair(p)) {
-  TORCH_CHECK(mset(p.k)==Setting::dim,"Unrecognized option: ",p.k); d=int64(p,c);
- }
- return d;
-}
-
-static void dim(bool a,Cast c,K x,int64_t d) {if(a || d != torch::nn::GLUOptions().dim()) OPTION(x,dim,kj(d));}
-
-KAPI glu(K x) {
- KTRY
-  bool p; auto o=torch::nn::functional::GLUFuncOptions(); Tensor t;
-  if(xten(x,t))        p=true; 
-  else if(xten(x,0,t)) p=true, o.dim(dim(x,1));
-  else if(xmixed(x,2)) p=false,o.dim(dim(x,1)), t=kput(x,0);
-  else                 p=false,t=kput(x);
-  return kresult(p,torch::nn::functional::glu(t,o));
- KCATCH("glu");
-}
+KAPI        glu(K x) {return kact(x, Cast::glu,        "glu");}
+KAPI    softmin(K x) {return kact(x, Cast::softmin,    "softmin");}
+KAPI    softmax(K x) {return kact(x, Cast::softmax,    "softmax");}
+KAPI logsoftmax(K x) {return kact(x, Cast::logsoftmax, "logsoftmax");}
 
 // ------------------------------------------------------------------------------------
 //      activation functions with up to two scalars, e.g. min/max, lower/upper
@@ -1304,9 +1278,9 @@ void mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) {
   case Cast::relu6:        PUSH(q,n,torch::nn::ReLU6(inplace(x,i,c))); break;
   case Cast::selu:         PUSH(q,n, torch::nn::SELU(inplace(x,i,c))); break;
 
-  case Cast::softmax:      PUSH(q,n,(soft<Softmax>   (s,x,i))); break;
-  case Cast::softmin:      PUSH(q,n,(soft<Softmin>   (s,x,i))); break;
-  case Cast::logsoftmax:   PUSH(q,n,(soft<LogSoftmax>(s,x,i))); break;
+  case Cast::softmax:      PUSH(q,n,torch::nn::Softmax(dim(x,i,c))); break;
+  case Cast::softmin:      PUSH(q,n,torch::nn::Softmin(dim(x,i,c))); break;
+  case Cast::logsoftmax:   PUSH(q,n,torch::nn::LogSoftmax(dim(x,i,c))); break;
   case Cast::flatten:      PUSH(q,n,torch::nn::Flatten(flatten(x,i))); break;
   case Cast::squeeze:      PUSH(q,n,Squeeze(squeeze(x,i,c))); break;
   case Cast::unsqueeze:    PUSH(q,n,Unsqueeze(squeeze(x,i,c))); break;
@@ -1417,9 +1391,9 @@ void mopt(Module &g,bool a,K &v,J i) { //g:generic module, a:true if all options
  } else if(auto* m=g.as<torch::nn::SELU>())  { c=Cast::selu;  inplace(a,x,m->options.inplace());
  } else if(auto* m=g.as<torch::nn::ReLU6>()) { c=Cast::relu6; inplace(a,x,m->options.inplace());
 
- } else if(auto* m=g.as<Softmax>())    { c=Cast::softmax;    soft(a,x,m);
- } else if(auto* m=g.as<Softmin>())    { c=Cast::softmin;    soft(a,x,m);
- } else if(auto* m=g.as<LogSoftmax>()) { c=Cast::logsoftmax; soft(a,x,m);
+ } else if(auto* m=g.as<torch::nn::Softmax>())    { c=Cast::softmax;    OPTION(x, dim, kj(m->options.dim()));
+ } else if(auto* m=g.as<torch::nn::Softmin>())    { c=Cast::softmin;    OPTION(x, dim, kj(m->options.dim()));
+ } else if(auto* m=g.as<torch::nn::LogSoftmax>()) { c=Cast::logsoftmax; OPTION(x, dim, kj(m->options.dim()));
  } else if(auto* m=g.as<torch::nn::Flatten>())    { c=Cast::flatten;    flatten(a,x,m);
  } else if(auto* m=g.as<Squeeze>())    { c=Cast::squeeze;    squeeze(a,x,m->options);
  } else if(auto* m=g.as<Unsqueeze>())  { c=Cast::unsqueeze;  squeeze(a,x,m->options);
@@ -1615,7 +1589,7 @@ void nnfn(K x) {
  fn(x, "leakyrelu",  KFN(leakyrelu),   1);
  fn(x, "linear",     KFN(klinear),     1);
  fn(x, "logsigmoid", KFN(logsigmoid),  1);
- fn(x, "logsoftmax", KFN(klogsoftmax), 1);
+ fn(x, "logsoftmax", KFN(logsoftmax),  1);
  fn(x, "lppool1d",   KFN(lppool1d),    1);
  fn(x, "lppool2d",   KFN(lppool2d),    1);
  fn(x, "maxpool1d",  KFN(maxpool1d),   1);
@@ -1627,8 +1601,8 @@ void nnfn(K x) {
  fn(x, "relu6",      KFN(relu6),       1);
  fn(x, "rrelu",      KFN(krrelu),      1);
  fn(x, "selu",       KFN(selu),        1);
- fn(x, "softmax",    KFN(ksoftmax),    1);
- fn(x, "softmin",    KFN(ksoftmin),    1);
+ fn(x, "softmax",    KFN(softmax),     1);
+ fn(x, "softmin",    KFN(softmin),     1);
  fn(x, "softplus",   KFN(ksoftplus),   1);
  fn(x, "softsign",   KFN(softsign),    1);
  fn(x, "softshrink", KFN(softshrink),  1);
@@ -1676,7 +1650,7 @@ KAPI anytest(K x) {
   torch::nn::LeakyReLU(),
   torch::nn::Linear(3,4),
   torch::nn::LogSigmoid(),
-  LogSoftmax(1,torch::kDouble),
+  torch::nn::LogSoftmax(1), //,torch::kDouble),
   torch::nn::LPPool1d(2,3),
   torch::nn::LPPool2d(2,3),
   torch::nn::MaxPool1d(2),
@@ -1700,8 +1674,8 @@ KAPI anytest(K x) {
   torch::nn::SELU(true),
   torch::nn::Sigmoid(),
   torch::nn::Softsign(),
-  Softmax(-1),
-  Softmin(1),
+  torch::nn::Softmax(-1),
+  torch::nn::Softmin(1),
   Softplus(1,20),
   torch::nn::Softshrink(.5),
   torch::nn::Tanh(),

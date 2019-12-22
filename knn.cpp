@@ -908,12 +908,56 @@ static void softargs(K x,J i,Cast c,J &d,c10::optional<ScalarType>& s) {
   AT_ERROR("specify the dimension along which ",msym(c)," will be computed");
 }
 
+// -----------------------------------------------------------------------------------
+// rrelu - randomized leaky relu, functional form has an additional flag for training
+// -----------------------------------------------------------------------------------
+static void rrelu(K x,J i,Cast c,bool fn,bool& tr,bool& in,double& lo,double& up) {
+ Pairs p; J n=xargc(x,i,p); torch::nn::functional::RReLUFuncOptions o;
+ lo=o.lower(); up=o.upper(); in=o.inplace(); tr=o.training();
+ if(n) {
+  if(fn) {
+   TORCH_CHECK((n==1 && (xdouble(x,i,lo) || xbool(x,i,tr))) ||
+               (n==2 &&  xdouble(x,i,lo) && (xdouble(x,i+1,up) || xbool(x,i+1,tr))) ||
+               (n==3 &&  xdouble(x,i,lo) &&  xdouble(x,i+1,up) && xbool(x,i+2,tr))  ||
+               (n==4 &&  xdouble(x,i,lo) &&  xdouble(x,i+1,up) && xbool(x,i+2,tr) && xbool(x,i+3,in)),
+               "rrelu: unexpected positional arg(s), expects (lower;upper;train flag;inplace flag)");
+  } else {
+   TORCH_CHECK((n==1 && (xdouble(x,i,lo) || xbool(x,i,in))) ||
+               (n==2 &&  xdouble(x,i,lo) && (xdouble(x,i+1,up) || xbool(x,i+1,in))) ||
+               (n==3 &&  xdouble(x,i,lo) &&  xdouble(x,i+1,up) && xbool(x,i+2,in)),
+               "rrelu: unexpected positional arg(s), expects (lower;upper;inplace flag)");
+  }
+ }
+ while(xpair(p))
+  switch(mset(p.k)) {
+   case Setting::lower:   lo=mdouble(p,c); break;
+   case Setting::upper:   up=mdouble(p,c); break;
+   case Setting::train:   TORCH_CHECK(fn,"rrelu: training flag not set for module"); tr=mbool(p,c);   break;
+   case Setting::inplace: in=mbool(p,c);   break;
+   default: AT_ERROR("rrelu option: ",p.k," not recognized");
+  }
+}
+
+// return options for rrelu module
+static torch::nn::RReLUOptions rrelu(K x,J i,Cast c) {
+ double lo,up; bool in,tr; rrelu(x,i,c,false,tr,in,lo,up);
+ return torch::nn::RReLUOptions().lower(lo).upper(up).inplace(in);
+}
+
+// retrieve options from rrelu module
+static void rrelu(bool a,K x,const torch::nn::RReLUOptions& o) {
+ torch::nn::RReLUOptions d;
+ if(a || d.lower()   != o.lower())   OPTION(x, lower,   kf(o.lower()));
+ if(a || d.upper()   != o.upper())   OPTION(x, upper,   kf(o.upper()));
+ if(a || d.inplace() != o.inplace()) OPTION(x, inplace, kb(o.inplace()));
+}
+
 // -----------------------------------------------------------------------------------------
 // functional form of activation fns:
 //   relu,relu6,selu (inplace flag), elu,celu(alpha & inplace), leakyrelu(slope & inplace),
 //   hardshrink,softshrink(lambda), glu(dim)
 // -----------------------------------------------------------------------------------------
-static K kact(K x,Cast c,const char* s) {
+static K act(K x,Cast c,const char* s) {
  KTRY
   bool a,b,p; Tensor r,t;
   if(xten(x,t))        p=true, a=false;
@@ -926,20 +970,17 @@ static K kact(K x,Cast c,const char* s) {
    case Cast::selu:  b=a ? inplace(x,1,c) : false; r=torch::nn::functional::selu(t,b); break;
    case Cast::elu: {
     auto o=a ? alpha<torch::nn::ELUOptions> (x,1,c) : torch::nn::ELUOptions();
-    b=p && o.inplace();
-    r=torch::nn::functional::elu(t,o);
+    b=o.inplace(); r=torch::nn::functional::elu(t,o);
     break;
    }
    case Cast::celu: {
     auto o=a ? alpha<torch::nn::CELUOptions> (x,1,c) : torch::nn::CELUOptions();
-    b=p && o.inplace();
-    r=torch::nn::functional::celu(t,o);
+    b=o.inplace(); r=torch::nn::functional::celu(t,o);
     break;
    }
    case Cast::leakyrelu: {
     auto o=a ? slope(x,1,c) : torch::nn::LeakyReLUOptions();
-    b=p && o.inplace();
-    r=torch::nn::functional::leaky_relu(t,o);
+    b=o.inplace(); r=torch::nn::functional::leaky_relu(t,o);
     break;
    }
    case Cast::hardshrink: b=false; r=torch::hardshrink(t,a ? lambda(x,1,c) : lambda(c)); break;
@@ -957,25 +998,31 @@ static K kact(K x,Cast c,const char* s) {
     }
     break;
    }
+   case Cast::rrelu: {
+    double lo,up; bool tr; rrelu(a ? x : nullptr,1,c,false,tr,b,lo,up);
+    r=torch::nn::functional::detail::rrelu(t,lo,up,tr,b);
+    break;
+   }
    default: 
     AT_ERROR("Unrecognized activiation function");
   }
-  return b ? (K)0 : kresult(p,r);
+  return (b && p) ? (K)0 : kresult(p,r);
  KCATCH(s);
 }
 
-KAPI       relu(K x) {return kact(x, Cast::relu,       "relu");}
-KAPI      relu6(K x) {return kact(x, Cast::relu6,      "relu6");}
-KAPI       selu(K x) {return kact(x, Cast::selu,       "selu");}
-KAPI        elu(K x) {return kact(x, Cast::elu,        "elu");}
-KAPI       celu(K x) {return kact(x, Cast::celu,       "celu");}
-KAPI  leakyrelu(K x) {return kact(x, Cast::leakyrelu,  "leakyrelu");}
-KAPI hardshrink(K x) {return kact(x, Cast::hardshrink, "hardshrink");}
-KAPI softshrink(K x) {return kact(x, Cast::softshrink, "softshrink");}
-KAPI        glu(K x) {return kact(x, Cast::glu,        "glu");}
-KAPI    softmin(K x) {return kact(x, Cast::softmin,    "softmin");}
-KAPI    softmax(K x) {return kact(x, Cast::softmax,    "softmax");}
-KAPI logsoftmax(K x) {return kact(x, Cast::logsoftmax, "logsoftmax");}
+KAPI       relu(K x) {return act(x, Cast::relu,       "relu");}
+KAPI      relu6(K x) {return act(x, Cast::relu6,      "relu6");}
+KAPI       selu(K x) {return act(x, Cast::selu,       "selu");}
+KAPI        elu(K x) {return act(x, Cast::elu,        "elu");}
+KAPI       celu(K x) {return act(x, Cast::celu,       "celu");}
+KAPI  leakyrelu(K x) {return act(x, Cast::leakyrelu,  "leakyrelu");}
+KAPI hardshrink(K x) {return act(x, Cast::hardshrink, "hardshrink");}
+KAPI softshrink(K x) {return act(x, Cast::softshrink, "softshrink");}
+KAPI        glu(K x) {return act(x, Cast::glu,        "glu");}
+KAPI    softmin(K x) {return act(x, Cast::softmin,    "softmin");}
+KAPI    softmax(K x) {return act(x, Cast::softmax,    "softmax");}
+KAPI logsoftmax(K x) {return act(x, Cast::logsoftmax, "logsoftmax");}
+KAPI      Rrelu(K x) {return act(x, Cast::rrelu,      "rrelu");}
 
 // ------------------------------------------------------------------------------------
 //      activation functions with up to two scalars, e.g. min/max, lower/upper
@@ -988,14 +1035,6 @@ KAPI logsoftmax(K x) {return kact(x, Cast::logsoftmax, "logsoftmax");}
 // ------------------------------------------------------------------------------------
 static void default2(Cast c,Setting& k1,Setting& k2,Scalar& v1,Scalar& v2) { //given cast, set keys & default values
  switch(c) {
-  case Cast::prelu:
-   // num_parameters(int64), init;
-   k1=Setting::in;                    k2=Setting::init;
-   v1=PReLUOptions().in();            v2=PReLUOptions().init(); break;
-  case Cast::rrelu:
-   // lower, upper, inplace -- functional has training flag
-   k1=Setting::lower;                 k2=Setting::upper;
-   v1=RReLUOptions().lower();         v2=RReLUOptions().upper(); break;
   case Cast::hardtanh:
    // min_val, max_val, inplace
    k1=Setting::min;                   k2=Setting::max;
@@ -1013,7 +1052,6 @@ static void default2(Cast c,Setting& k1,Setting& k2,Scalar& v1,Scalar& v2) { //g
 }
 
 static void arg2(bool r,Cast c,const char* s,K x,J i,bool &b,Scalar& v1,Scalar& v2) {
- // r:true for functional rrelu, b:training flag  (only used for functional rrelu)
  Pairs p; Setting e,k1,k2; J n=xargc(x,i,p); b=false; default2(c,k1,k2,v1,v2);
  if(!(n || p.n)) return;
  if(r && xbool(x,n+i-1,b)) n--;
@@ -1030,8 +1068,6 @@ static void arg2(bool r,Cast c,const char* s,K x,J i,bool &b,Scalar& v1,Scalar& 
   else
    AT_ERROR("Unrecognized option: ",p.k,", ",s," expects options: ",mset(k1),",",mset(k2));
  }
- if(c==Cast::prelu && !v1.isIntegral(false))
-  AT_ERROR("Parameterized ReLU expects number of learnable parameters to be integer, either 1 or number of inputs");
 }
 
 // version for modules without special handling for function version of rrelu()
@@ -1066,15 +1102,36 @@ static K fn2(Cast c,const char* s,K x,Ftss f) {
  KCATCH(s);
 }
 
-Tensor rrelu(const Tensor& t,Scalar a,Scalar b) {return torch::rrelu(t,a,b);}  // rrelu, train=false
-
-KAPI krrelu(K x)     {return fn2(Cast::rrelu,     "rrelu",     x, rrelu);}
 KAPI khardtanh(K x)  {return fn2(Cast::hardtanh,  "hardtanh",  x, torch::hardtanh);}
 KAPI ksoftplus(K x)  {return fn2(Cast::softplus,  "softplus",  x, torch::softplus);}
 KAPI kthreshold(K x) {return fn2(Cast::threshold, "threshold", x, torch::threshold);}
 
-// parameterized relu as function requires weight directly rather than module's count & initial value
-KAPI kprelu(K x) {
+// -------------------------------------------------------------------------------------------
+// prelu: parameterized relu
+//        module accepts 1 or number of input parameters and optional initalization value
+//        functional form requires weight directly rather than module's count & initial value
+// -------------------------------------------------------------------------------------------
+static torch::nn::PReLUOptions prelu(K x,J i,Cast c) {
+ torch::nn::PReLUOptions o; auto m=o.num_parameters();auto w=o.init(); Pairs p; J n=xargc(x,i,p);
+ if(n) TORCH_CHECK((n==1 && (xint64(x,i,m) || xdouble(x,i,w))) ||
+                   (n==2 &&  xint64(x,i,m) && xdouble(x,i+1,w)),
+                   "prelu: expecting 1-2 positional args in,init or (in;init)");
+ while(xpair(p))
+  switch(mset(p.k)) {
+   case Setting::in:    m=int64(p,c); break;
+   case Setting::init:  w=mdouble(p,c); break;
+   default: AT_ERROR("prelu option: ",p.k," not recognized");
+  }
+ return o.num_parameters(m).init(w);
+}
+
+static void prelu(bool a,K x,const torch::nn::PReLUOptions& o) {
+ torch::nn::PReLUOptions d;
+ if(a || d.num_parameters() != o.num_parameters()) OPTION(x, in,   kj(o.num_parameters()));
+ if(a || d.init()           != o.init())           OPTION(x, init, kf(o.init()));
+}
+
+KAPI Prelu(K x) {
  KTRY
   bool p; Tensor t,w;
   if(!x->t && x->n==2)
@@ -1293,9 +1350,9 @@ void mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) {
   case Cast::glu:          PUSH(q,n,torch::nn::GLU(dim(x,i,c))); break;
   case Cast::hardshrink:   PUSH(q,n,torch::nn::Hardshrink(lambda(x,i,c))); break;
   case Cast::softshrink:   PUSH(q,n,torch::nn::Softshrink(lambda(x,i,c))); break;
-  
-  case Cast::prelu:        arg2(c,s,x,i,v,w);  PUSH(q,n,PReLU(v.toLong(),w.toDouble())); break;
-  case Cast::rrelu:        arg2(c,s,x,i,v,w);  PUSH(q,n,RReLU(v,w)); break;
+  case Cast::prelu:        PUSH(q,n,torch::nn::PReLU(prelu(x,i,c))); break;
+  case Cast::rrelu:        PUSH(q,n,torch::nn::RReLU(rrelu(x,i,c))); break;
+
   case Cast::hardtanh:     arg2(c,s,x,i,v,w);  PUSH(q,n,Hardtanh(v,w)); break;
   case Cast::softplus:     arg2(c,s,x,i,v,w);  PUSH(q,n,Softplus(v,w)); break;
   case Cast::threshold:    arg2(c,s,x,i,v,w);  PUSH(q,n,Threshold(v,w)); break;
@@ -1407,8 +1464,8 @@ void mopt(Module &g,bool a,K &v,J i) { //g:generic module, a:true if all options
  } else if(auto* m=g.as<torch::nn::Hardshrink>()) { c=Cast::hardshrink; lambda(a,c,x,m->options.lambda());
  } else if(auto* m=g.as<torch::nn::Softshrink>()) { c=Cast::softshrink; lambda(a,c,x,m->options.lambda());
 
- } else if(auto* m=g.as<PReLU>())      { c=Cast::prelu;      setting2(a,c,x,m->options.in(),        m->options.init());
- } else if(auto* m=g.as<RReLU>())      { c=Cast::rrelu;      setting2(a,c,x,m->options.lower(),     m->options.upper());
+ } else if(auto* m=g.as<torch::nn::PReLU>())      { c=Cast::prelu;      prelu(a,x,m->options);
+ } else if(auto* m=g.as<torch::nn::RReLU>())      { c=Cast::rrelu;      rrelu(a,x,m->options);
  } else if(auto* m=g.as<Hardtanh>())   { c=Cast::hardtanh;   setting2(a,c,x,m->options.min(),       m->options.max());
  } else if(auto* m=g.as<Softplus>())   { c=Cast::softplus;   setting2(a,c,x,m->options.beta(),      m->options.threshold());
  } else if(auto* m=g.as<Threshold>())  { c=Cast::threshold;  setting2(a,c,x,m->options.threshold(), m->options.value());
@@ -1595,11 +1652,11 @@ void nnfn(K x) {
  fn(x, "maxpool1d",  KFN(maxpool1d),   1);
  fn(x, "maxpool2d",  KFN(maxpool2d),   1);
  fn(x, "maxpool3d",  KFN(maxpool3d),   1);
- fn(x, "prelu",      KFN(kprelu),      1);
+ fn(x, "prelu",      KFN(Prelu),       1);
  fn(x, "gelu",       KFN(gelu),        1);
  fn(x, "relu",       KFN(relu),        1);
  fn(x, "relu6",      KFN(relu6),       1);
- fn(x, "rrelu",      KFN(krrelu),      1);
+ fn(x, "rrelu",      KFN(Rrelu),       1);
  fn(x, "selu",       KFN(selu),        1);
  fn(x, "softmax",    KFN(softmax),     1);
  fn(x, "softmin",    KFN(softmin),     1);
@@ -1656,10 +1713,10 @@ KAPI anytest(K x) {
   torch::nn::MaxPool1d(2),
   torch::nn::MaxPool2d(2),
   torch::nn::MaxPool3d(2),
-  PReLU(1),
+  torch::nn::PReLU(torch::nn::PReLUOptions().num_parameters(1)),
   Pad(LongVector{1,1}),
   torch::nn::RNN(4,5),
-  RReLU(.125,.333),
+  torch::nn::RReLU(),
   torch::nn::GELU(),
   torch::nn::ReLU(),
   torch::nn::ReLU(true),

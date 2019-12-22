@@ -81,55 +81,6 @@ class TORCH_API PadImpl : public torch::nn::Cloneable<PadImpl> {
 
 TORCH_MODULE(Pad);
 
-// -------------------------------------------------------------
-//  prelu - parametric rectified linear unit
-// -------------------------------------------------------------
-struct TORCH_API PReLUOptions {
- PReLUOptions(int64_t n) : in_(n) {}
- PReLUOptions(int64_t n,double w) : in_(n),init_(w) {}
- PReLUOptions() {}
- TORCH_ARG(int64_t, in)=1;
- TORCH_ARG(double, init)=.25;
-};
-
-class TORCH_API PReLUImpl : public torch::nn::Cloneable<PReLUImpl> {
- public:
-  PReLUImpl(int64_t n) : PReLUImpl(PReLUOptions(n)) {}
-  PReLUImpl(int64_t n,double w) : PReLUImpl(PReLUOptions(n,w)) {}
-  explicit PReLUImpl(PReLUOptions o) : options(std::move(o)) {reset();}
-  void reset() override {
-   weight=torch::nn::Module::register_parameter("weight",torch::empty({options.in()}).fill_(options.init()));
-  }
-  torch::Tensor forward(const torch::Tensor& t) {
-   return torch::prelu(t,weight.to(t.dtype()));
-  }
-  PReLUOptions options;
-  torch::Tensor weight;
-};
-TORCH_MODULE(PReLU);
-
-// -----------------------------------------------------------------------------
-// rrelu - randomized leakyrelu w'uniform random slope within given lo,hi bounds
-// -----------------------------------------------------------------------------
-struct TORCH_API RReLUOptions {
- RReLUOptions(torch::Scalar l,torch::Scalar u) : lower_(l),upper_(u) {}
- RReLUOptions() {}
- TORCH_ARG(torch::Scalar, lower)=1.0 / 8.0;
- TORCH_ARG(torch::Scalar, upper)=1.0 / 3.0;
-};
-
-class TORCH_API RReLUImpl : public torch::nn::Cloneable<RReLUImpl> {
- public:
-  RReLUImpl(torch::Scalar l,torch::Scalar u) : RReLUImpl(RReLUOptions(l,u)) {}
-  explicit RReLUImpl(RReLUOptions o) : options(std::move(o)) {reset();}
-  void reset() override {}
-  torch::Tensor forward(const torch::Tensor& t) {
-   return torch::rrelu(t,options.lower(),options.upper(),this->is_training());
-  }
- RReLUOptions options;
-};
-TORCH_MODULE(RReLU);
-
 // -----------------------------------------------------------------------------
 // threshold - thresholds each element of input tensor
 // -----------------------------------------------------------------------------

@@ -916,15 +916,15 @@ static void rrelu(K x,J i,Cast c,bool fn,bool& tr,bool& in,double& lo,double& up
  lo=o.lower(); up=o.upper(); in=o.inplace(); tr=o.training();
  if(n) {
   if(fn) {
-   TORCH_CHECK((n==1 && (xdouble(x,i,lo) || xbool(x,i,tr))) ||
-               (n==2 &&  xdouble(x,i,lo) && (xdouble(x,i+1,up) || xbool(x,i+1,tr))) ||
-               (n==3 &&  xdouble(x,i,lo) &&  xdouble(x,i+1,up) && xbool(x,i+2,tr))  ||
-               (n==4 &&  xdouble(x,i,lo) &&  xdouble(x,i+1,up) && xbool(x,i+2,tr) && xbool(x,i+3,in)),
+   TORCH_CHECK((n==1 && (xnum(x,i,lo) || xbool(x,i,tr))) ||
+               (n==2 &&  xnum(x,i,lo) && (xnum(x,i+1,up) || xbool(x,i+1,tr))) ||
+               (n==3 &&  xnum(x,i,lo) &&  xnum(x,i+1,up) && xbool(x,i+2,tr))  ||
+               (n==4 &&  xnum(x,i,lo) &&  xnum(x,i+1,up) && xbool(x,i+2,tr) && xbool(x,i+3,in)),
                "rrelu: unexpected positional arg(s), expects (lower;upper;train flag;inplace flag)");
   } else {
-   TORCH_CHECK((n==1 && (xdouble(x,i,lo) || xbool(x,i,in))) ||
-               (n==2 &&  xdouble(x,i,lo) && (xdouble(x,i+1,up) || xbool(x,i+1,in))) ||
-               (n==3 &&  xdouble(x,i,lo) &&  xdouble(x,i+1,up) && xbool(x,i+2,in)),
+   TORCH_CHECK((n==1 && (xnum(x,i,lo) || xbool(x,i,in))) ||
+               (n==2 &&  xnum(x,i,lo) && (xnum(x,i+1,up) || xbool(x,i+1,in))) ||
+               (n==3 &&  xnum(x,i,lo) &&  xnum(x,i+1,up) && xbool(x,i+2,in)),
                "rrelu: unexpected positional arg(s), expects (lower;upper;inplace flag)");
   }
  }
@@ -953,43 +953,112 @@ static void rrelu(bool a,K x,const torch::nn::RReLUOptions& o) {
 }
 
 // -----------------------------------------------------------------------------------------
+// hardtanh - computationally cheaper version of tanh, straight line at min,max
+// -----------------------------------------------------------------------------------------
+static torch::nn::HardtanhOptions hardtanh(K x,J i,Cast c) {
+ Pairs p; J n=xargc(x,i,p); torch::nn::HardtanhOptions o;
+ bool b=o.inplace(); double v1=o.min_val(),v2=o.max_val();
+ if(n) {
+  TORCH_CHECK((n==1 && (xnum(x,i,v1) || xbool(x,i,b))) ||
+              (n==2 &&  xnum(x,i,v1) && (xnum(x,i+1,v2) || xbool(x,i+1,b))) ||
+              (n==3 &&  xnum(x,i,v1) &&  xnum(x,i+1,v2) && xbool(x,i+2,b)),
+              "hardtanh: unexpected positional arg(s), expects (min;max;inplace flag)");
+ }
+ while(xpair(p))
+  switch(mset(p.k)) {
+   case Setting::min:     v1=mdouble(p,c); break;
+   case Setting::max:     v2=mdouble(p,c); break;
+   case Setting::inplace: b=mbool(p,c); break;
+   default: AT_ERROR("hardtanh option: ",p.k," not recognized");
+  }
+ return o.min_val(v1).max_val(v2).inplace(b);
+}
+
+static void hardtanh(bool a,K x,const torch::nn::HardtanhOptions& o) {
+ torch::nn::HardtanhOptions d;
+ if(a || d.min_val() != o.min_val()) OPTION(x, min,     kf(o.min_val()));
+ if(a || d.max_val() != o.max_val()) OPTION(x, max,     kf(o.max_val()));
+ if(a || d.inplace() != o.inplace()) OPTION(x, inplace, kb(o.inplace()));
+}
+
+// -----------------------------------------------------------------------------------------
+// softplus - smooth approximation to relu, can constrain to always be positive
+// -----------------------------------------------------------------------------------------
+static torch::nn::SoftplusOptions softplus(K x,J i,Cast c) {
+ Pairs p; J n=xargc(x,i,p); torch::nn::SoftplusOptions o; double v1=o.beta(),v2=o.threshold();
+ if(n) {
+  TORCH_CHECK(xnum(x,i,v1) && (n==1 || (n==2 && xnum(x,i+1,v2))),
+              "softplus: unexpected positional arg(s), expects (beta;threshold)");
+ }
+ while(xpair(p))
+  switch(mset(p.k)) {
+   case Setting::beta:      v1=mdouble(p,c); break;
+   case Setting::threshold: v2=mdouble(p,c); break;
+   default: AT_ERROR("softplus option: ",p.k," not recognized");
+  }
+ return o.beta(v1).threshold(v2);
+}
+
+static void softplus(bool a,K x,const torch::nn::SoftplusOptions& o) {
+ torch::nn::SoftplusOptions d;
+ if(a || d.beta()      != o.beta())      OPTION(x, beta,      kf(o.beta()));
+ if(a || d.threshold() != o.threshold()) OPTION(x, threshold, kf(o.threshold()));
+}
+
+// ----------------------------------------------------------------------------------------------
+// threshold - thresholds each element of input tensor, fns set/get threshold,value,inplace flag
+// ----------------------------------------------------------------------------------------------
+static torch::nn::ThresholdOptions threshold(K x,J i,Cast c) {
+ Pairs p; J n=xargc(x,i,p); bool b=false; double v1=nf,v2=nf;
+ if(n) {
+  TORCH_CHECK((n==1 && (xnum(x,i,v1) || xbool(x,i,b))) ||
+              (n==2 &&  xnum(x,i,v1) && (xnum(x,i+1,v2) || xbool(x,i+1,b))) ||
+              (n==3 &&  xnum(x,i,v1) &&  xnum(x,i+1,v2) && xbool(x,i+2,b)),
+              "threshold: unexpected positional arg(s), expects (threshold;value;inplace flag)");
+ }
+ while(xpair(p))
+  switch(mset(p.k)) {
+   case Setting::threshold: v1=mdouble(p,c); break;
+   case Setting::value:     v2=mdouble(p,c); break;
+   case Setting::inplace:   b=mbool(p,c); break;
+   default: AT_ERROR("threshold option: ",p.k," not recognized");
+  }
+ TORCH_CHECK(v1 == v1 && v2 == v2, "threshold: both threshold level & replacement value must be given");
+ return torch::nn::ThresholdOptions(v1,v2).inplace(b);
+}
+
+static void threshold(bool a,K x,const torch::nn::ThresholdOptions& o) {
+ OPTION(x, threshold, kf(o.threshold()));
+ OPTION(x, value,     kf(o.value()));
+ if(a || o.inplace()) OPTION(x, inplace, kb(o.inplace()));
+}
+
+// -----------------------------------------------------------------------------------------
 // functional form of activation fns:
 //   relu,relu6,selu (inplace flag), elu,celu(alpha & inplace), leakyrelu(slope & inplace),
-//   hardshrink,softshrink(lambda), glu(dim)
+//   hardshrink,softshrink(lambda), glu(dim), rrelu(lower,upper & inplace flag)
 // -----------------------------------------------------------------------------------------
 static K act(K x,Cast c,const char* s) {
  KTRY
-  bool a,b,p; Tensor r,t;
+  bool a,p; Tensor r,t;
   if(xten(x,t))        p=true, a=false;
   else if(xten(x,0,t)) p=true, a=true;
   else if(xmixed(x,3)) p=false,a=true, t=kput(x,0);
   else                 p=false,a=false,t=kput(x);
   switch(c) {
-   case Cast::relu:  b=a ? inplace(x,1,c) : false; r=torch::nn::functional::relu(t,b); break;
-   case Cast::relu6: b=a ? inplace(x,1,c) : false; r=torch::nn::functional::relu6(t,b); break;
-   case Cast::selu:  b=a ? inplace(x,1,c) : false; r=torch::nn::functional::selu(t,b); break;
-   case Cast::elu: {
-    auto o=a ? alpha<torch::nn::ELUOptions> (x,1,c) : torch::nn::ELUOptions();
-    b=o.inplace(); r=torch::nn::functional::elu(t,o);
-    break;
-   }
-   case Cast::celu: {
-    auto o=a ? alpha<torch::nn::CELUOptions> (x,1,c) : torch::nn::CELUOptions();
-    b=o.inplace(); r=torch::nn::functional::celu(t,o);
-    break;
-   }
-   case Cast::leakyrelu: {
-    auto o=a ? slope(x,1,c) : torch::nn::LeakyReLUOptions();
-    b=o.inplace(); r=torch::nn::functional::leaky_relu(t,o);
-    break;
-   }
-   case Cast::hardshrink: b=false; r=torch::hardshrink(t,a ? lambda(x,1,c) : lambda(c)); break;
-   case Cast::softshrink: b=false; r=torch::softshrink(t,a ? lambda(x,1,c) : lambda(c)); break;
-   case Cast::glu:        b=false; r=torch::nn::functional::glu(t,a ? dim(x,1,c) : dim(c)); break;
+   case Cast::relu:  r=torch::nn::functional::relu (t,a ? inplace(x,1,c) : false); break;
+   case Cast::relu6: r=torch::nn::functional::relu6(t,a ? inplace(x,1,c) : false); break;
+   case Cast::selu:  r=torch::nn::functional::selu (t,a ? inplace(x,1,c) : false); break;
+   case Cast::elu:   r=torch::nn::functional::elu  (t,a ? alpha<torch::nn::ELUOptions>(x,1,c) : torch::nn::ELUOptions()); break;
+   case Cast::celu:  r=torch::nn::functional::celu (t,a ? alpha<torch::nn::CELUOptions> (x,1,c) : torch::nn::CELUOptions()); break;
+   case Cast::leakyrelu: r=torch::nn::functional::leaky_relu(t,a ? slope(x,1,c) : torch::nn::LeakyReLUOptions()); break;
+   case Cast::hardshrink: r=torch::hardshrink(t,a ? lambda(x,1,c) : lambda(c)); break;
+   case Cast::softshrink: r=torch::softshrink(t,a ? lambda(x,1,c) : lambda(c)); break;
+   case Cast::glu:        r=torch::nn::functional::glu(t,a ? dim(x,1,c) : dim(c)); break;
    case Cast::softmin:
    case Cast::softmax:
    case Cast::logsoftmax: {
-    b=false; auto d=softdim(t.dim()); c10::optional<ScalarType> s; if(a) softargs(x,1,c,d,s);
+    auto d=softdim(t.dim()); c10::optional<ScalarType> s; if(a) softargs(x,1,c,d,s);
     switch(c) {
      case Cast::softmin:    r=torch::nn::functional::detail::softmin(t,d,s); break;
      case Cast::softmax:    r=torch::nn::functional::detail::softmax(t,d,s); break;
@@ -999,14 +1068,16 @@ static K act(K x,Cast c,const char* s) {
     break;
    }
    case Cast::rrelu: {
-    double lo,up; bool tr; rrelu(a ? x : nullptr,1,c,false,tr,b,lo,up);
-    r=torch::nn::functional::detail::rrelu(t,lo,up,tr,b);
+    double lo,up; bool in,tr; rrelu(a ? x : nullptr,1,c,false,tr,in,lo,up);
+    r=torch::nn::functional::detail::rrelu(t,lo,up,tr,in);
     break;
    }
-   default: 
-    AT_ERROR("Unrecognized activiation function");
+   case Cast::hardtanh:  r=torch::nn::functional::hardtanh (t, a ? hardtanh(x,1,c) : torch::nn::HardtanhOptions()); break;
+   case Cast::softplus:  r=torch::nn::functional::softplus (t, a ? softplus(x,1,c) : torch::nn::SoftplusOptions()); break;
+   case Cast::threshold: r=torch::nn::functional::threshold(t, threshold(a ? x : nullptr,1,c)); break;
+   default: AT_ERROR("Unrecognized activation function"); break;
   }
-  return (b && p) ? (K)0 : kresult(p,r);
+  return p && r.is_same(t) ? (K)0 : kresult(p,r);
  KCATCH(s);
 }
 
@@ -1023,88 +1094,9 @@ KAPI    softmin(K x) {return act(x, Cast::softmin,    "softmin");}
 KAPI    softmax(K x) {return act(x, Cast::softmax,    "softmax");}
 KAPI logsoftmax(K x) {return act(x, Cast::logsoftmax, "logsoftmax");}
 KAPI      Rrelu(K x) {return act(x, Cast::rrelu,      "rrelu");}
-
-// ------------------------------------------------------------------------------------
-//      activation functions with up to two scalars, e.g. min/max, lower/upper
-// ------------------------------------------------------------------------------------
-// default2 - set default scalar values given function enumeration
-// arg2 - process x for scalar(s), e.g. (t;-1;1) or (t;(`min,-1;`max,1))
-//        2 versions, one for extra training flag arg for functional form of rrelu()
-// setting2 - given scalars, compare with defaults and set entries in k dictionary
-// fn2      - call activation function directly (no module)
-// ------------------------------------------------------------------------------------
-static void default2(Cast c,Setting& k1,Setting& k2,Scalar& v1,Scalar& v2) { //given cast, set keys & default values
- switch(c) {
-  case Cast::hardtanh:
-   // min_val, max_val, inplace
-   k1=Setting::min;                   k2=Setting::max;
-   v1=HardtanhOptions().min();        v2=HardtanhOptions().max(); break;
-  case Cast::softplus:
-   // beta, threshold
-   k1=Setting::beta;                  k2=Setting::threshold;
-   v1=SoftplusOptions().beta();       v2=SoftplusOptions().threshold(); break;
-  case Cast::threshold:
-   // threshold, value, inplace
-   k1=Setting::threshold;             k2=Setting::value; 
-   v1=ThresholdOptions().threshold(); v2=ThresholdOptions().value(); break;
-  default: AT_ERROR("Unexpected module type: ",(I)c," unable to get default settings");
- }
-}
-
-static void arg2(bool r,Cast c,const char* s,K x,J i,bool &b,Scalar& v1,Scalar& v2) {
- Pairs p; Setting e,k1,k2; J n=xargc(x,i,p); b=false; default2(c,k1,k2,v1,v2);
- if(!(n || p.n)) return;
- if(r && xbool(x,n+i-1,b)) n--;
- if(!(n==0 || (xnum(x,i,v1) && (n==1 || (n==2 && xnum(x,i+1,v2))))))
-  AT_ERROR("Unrecognized argument(s) for ",s);
- while(xpair(p)) {
-  e=mset(p.k);
-  if(e==k1)
-   pnum(p,v1);
-  else if(e==k2)
-   pnum(p,v2);
-  else if(r && e==Setting::train)
-   b=pbool(p);
-  else
-   AT_ERROR("Unrecognized option: ",p.k,", ",s," expects options: ",mset(k1),",",mset(k2));
- }
-}
-
-// version for modules without special handling for function version of rrelu()
-static void arg2(Cast c,const char* s,K x,J i,Scalar& v1,Scalar& v2) {
- bool b; arg2(false,c,s,x,i,b,v1,v2);
-}
-
-static void setting2(bool a,Cast c,K x,const Scalar &w1,const Scalar& w2) {
- Setting k1,k2; Scalar v1,v2; default2(c,k1,k2,v1,v2);
- if(a || !match(v1,w1)) dictadd(x,mset(k1),kscalar(w1));
- if(a || !match(v2,w2)) dictadd(x,mset(k2),kscalar(w2));
-}
-
-using Ftss = Tensor (*)(const Tensor&, Scalar, Scalar);
-
-static K fn2(Cast c,const char* s,K x,Ftss f) {
- KTRY
-  Tensor t; bool b; Setting k1,k2; Scalar v1,v2;
-  if(xten(x,t)) {                                                     // tensor w'out any other args
-   default2(c,k1,k2,v1,v2);                                           // set defaults for scalars
-   return kten(f(t,v1,v2));                                           // return tensor ptr to result
-  } else if(xten(x,0,t) || xmixed(x,4)) {                             // arg(s) detected
-   bool p=t.defined(), r=c==Cast::rrelu;
-   arg2(r,c,s,x,1,b,v1,v2);                                           // check that args are valid
-   if(!p) t=kput(x,0);                                                // if no tensor ptr, tensor from array
-   Tensor a = r ? torch::rrelu(t,v1,v2,b) : f(t,v1,v2);               // special handling for rrelu w'train=true
-   return kresult(p,a);
-  } else {
-   default2(c,k1,k2,v1,v2);                                           // no tensor ptr, use defaults
-   return kget(f(kput(x),v1,v2));                                     // return k value from given k input
-  }
- KCATCH(s);
-}
-
-KAPI khardtanh(K x)  {return fn2(Cast::hardtanh,  "hardtanh",  x, torch::hardtanh);}
-KAPI ksoftplus(K x)  {return fn2(Cast::softplus,  "softplus",  x, torch::softplus);}
-KAPI kthreshold(K x) {return fn2(Cast::threshold, "threshold", x, torch::threshold);}
+KAPI   Hardtanh(K x) {return act(x, Cast::hardtanh,   "hardtanh");}
+KAPI   Softplus(K x) {return act(x, Cast::softplus,   "softplus");}
+KAPI  Threshold(K x) {return act(x, Cast::threshold,  "threshold");}
 
 // -------------------------------------------------------------------------------------------
 // prelu: parameterized relu
@@ -1352,11 +1344,9 @@ void mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) {
   case Cast::softshrink:   PUSH(q,n,torch::nn::Softshrink(lambda(x,i,c))); break;
   case Cast::prelu:        PUSH(q,n,torch::nn::PReLU(prelu(x,i,c))); break;
   case Cast::rrelu:        PUSH(q,n,torch::nn::RReLU(rrelu(x,i,c))); break;
-
-  case Cast::hardtanh:     arg2(c,s,x,i,v,w);  PUSH(q,n,Hardtanh(v,w)); break;
-  case Cast::softplus:     arg2(c,s,x,i,v,w);  PUSH(q,n,Softplus(v,w)); break;
-  case Cast::threshold:    arg2(c,s,x,i,v,w);  PUSH(q,n,Threshold(v,w)); break;
-
+  case Cast::hardtanh:     PUSH(q,n,torch::nn::Hardtanh(hardtanh(x,i,c))); break;
+  case Cast::softplus:     PUSH(q,n,torch::nn::Softplus(softplus(x,i,c))); break;
+  case Cast::threshold:    PUSH(q,n,torch::nn::Threshold(threshold(x,i,c))); break;
   default: AT_ERROR("Unrecognized module: ",s); break;
  }
  if(p || f) mparms(s,q,p,f);  // set parms/buffers if k dictionaries supplied
@@ -1466,9 +1456,9 @@ void mopt(Module &g,bool a,K &v,J i) { //g:generic module, a:true if all options
 
  } else if(auto* m=g.as<torch::nn::PReLU>())      { c=Cast::prelu;      prelu(a,x,m->options);
  } else if(auto* m=g.as<torch::nn::RReLU>())      { c=Cast::rrelu;      rrelu(a,x,m->options);
- } else if(auto* m=g.as<Hardtanh>())   { c=Cast::hardtanh;   setting2(a,c,x,m->options.min(),       m->options.max());
- } else if(auto* m=g.as<Softplus>())   { c=Cast::softplus;   setting2(a,c,x,m->options.beta(),      m->options.threshold());
- } else if(auto* m=g.as<Threshold>())  { c=Cast::threshold;  setting2(a,c,x,m->options.threshold(), m->options.value());
+ } else if(auto* m=g.as<torch::nn::Hardtanh>())   { c=Cast::hardtanh;   hardtanh(a,x,m->options);
+ } else if(auto* m=g.as<torch::nn::Softplus>())   { c=Cast::softplus;   softplus(a,x,m->options);
+ } else if(auto* m=g.as<torch::nn::Threshold>())  { c=Cast::threshold;  threshold(a,x,m->options);
 
  } else { AT_ERROR("Unrecognized module: ",g.name());
  }
@@ -1642,7 +1632,7 @@ void nnfn(K x) {
  fn(x, "flatten",    KFN(kflatten),    1);
  fn(x, "glu",        KFN(glu),         1);
  fn(x, "hardshrink", KFN(hardshrink),  1);
- fn(x, "hardtanh",   KFN(khardtanh),   1);
+ fn(x, "hardtanh",   KFN(Hardtanh),    1);
  fn(x, "leakyrelu",  KFN(leakyrelu),   1);
  fn(x, "linear",     KFN(klinear),     1);
  fn(x, "logsigmoid", KFN(logsigmoid),  1);
@@ -1660,11 +1650,11 @@ void nnfn(K x) {
  fn(x, "selu",       KFN(selu),        1);
  fn(x, "softmax",    KFN(softmax),     1);
  fn(x, "softmin",    KFN(softmin),     1);
- fn(x, "softplus",   KFN(ksoftplus),   1);
+ fn(x, "softplus",   KFN(Softplus),    1);
  fn(x, "softsign",   KFN(softsign),    1);
  fn(x, "softshrink", KFN(softshrink),  1);
  fn(x, "tanhshrink", KFN(tanhshrink),  1);
- fn(x, "threshold",  KFN(kthreshold),  1);
+ fn(x, "threshold",  KFN(Threshold),   1);
 }
 
 KAPI anytest(K x) {
@@ -1702,7 +1692,7 @@ KAPI anytest(K x) {
   torch::nn::GLU(2),
   torch::nn::GRU(4,5),
   torch::nn::Hardshrink(.5),
-  Hardtanh(-1,1),
+  torch::nn::Hardtanh(),
   torch::nn::LSTM(4,5),
   torch::nn::LeakyReLU(),
   torch::nn::Linear(3,4),
@@ -1733,11 +1723,11 @@ KAPI anytest(K x) {
   torch::nn::Softsign(),
   torch::nn::Softmax(-1),
   torch::nn::Softmin(1),
-  Softplus(1,20),
+  torch::nn::Softplus(),
   torch::nn::Softshrink(.5),
   torch::nn::Tanh(),
   torch::nn::Tanhshrink(),
-  Threshold(.1,20),
+  torch::nn::Threshold(.1,20),
   torch::nn::Flatten(),
   //torch::nn::Flatten(1),
   //torch::nn::Flatten(1,-1),

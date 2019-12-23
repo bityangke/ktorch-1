@@ -1035,8 +1035,9 @@ static void threshold(bool a,K x,const torch::nn::ThresholdOptions& o) {
 
 // -----------------------------------------------------------------------------------------
 // functional form of activation fns:
-//   relu,relu6,selu (inplace flag), elu,celu(alpha & inplace), leakyrelu(slope & inplace),
-//   hardshrink,softshrink(lambda), glu(dim), rrelu(lower,upper & inplace flag)
+//  relu,relu6,selu (inplace flag), elu,celu(alpha & inplace), leakyrelu(slope & inplace),
+//  hardshrink,softshrink(lambda), glu(dim), rrelu(lower,upper & inplace flag)
+//  hardtanh(min,max,inplace), softplus(beta,threshold), threshold(threshold,value,inplace)
 // -----------------------------------------------------------------------------------------
 static K act(K x,Cast c,const char* s) {
  KTRY
@@ -1049,9 +1050,9 @@ static K act(K x,Cast c,const char* s) {
    case Cast::relu:  r=torch::nn::functional::relu (t,a ? inplace(x,1,c) : false); break;
    case Cast::relu6: r=torch::nn::functional::relu6(t,a ? inplace(x,1,c) : false); break;
    case Cast::selu:  r=torch::nn::functional::selu (t,a ? inplace(x,1,c) : false); break;
-   case Cast::elu:   r=torch::nn::functional::elu  (t,a ? alpha<torch::nn::ELUOptions>(x,1,c) : torch::nn::ELUOptions()); break;
-   case Cast::celu:  r=torch::nn::functional::celu (t,a ? alpha<torch::nn::CELUOptions> (x,1,c) : torch::nn::CELUOptions()); break;
-   case Cast::leakyrelu: r=torch::nn::functional::leaky_relu(t,a ? slope(x,1,c) : torch::nn::LeakyReLUOptions()); break;
+   case Cast::elu:   r=torch::nn::functional::elu(t,alpha<torch::nn::ELUOptions>(a ? x : nullptr,1,c)); break;
+   case Cast::celu:  r=torch::nn::functional::celu(t,alpha<torch::nn::CELUOptions>(a ? x : nullptr,1,c)); break;
+   case Cast::leakyrelu: r=torch::nn::functional::leaky_relu(t,slope(a ? x : nullptr,1,c)); break;
    case Cast::hardshrink: r=torch::hardshrink(t,a ? lambda(x,1,c) : lambda(c)); break;
    case Cast::softshrink: r=torch::softshrink(t,a ? lambda(x,1,c) : lambda(c)); break;
    case Cast::glu:        r=torch::nn::functional::glu(t,a ? dim(x,1,c) : dim(c)); break;
@@ -1072,8 +1073,8 @@ static K act(K x,Cast c,const char* s) {
     r=torch::nn::functional::detail::rrelu(t,lo,up,tr,in);
     break;
    }
-   case Cast::hardtanh:  r=torch::nn::functional::hardtanh (t, a ? hardtanh(x,1,c) : torch::nn::HardtanhOptions()); break;
-   case Cast::softplus:  r=torch::nn::functional::softplus (t, a ? softplus(x,1,c) : torch::nn::SoftplusOptions()); break;
+   case Cast::hardtanh:  r=torch::nn::functional::hardtanh (t,  hardtanh(a ? x : nullptr,1,c)); break;
+   case Cast::softplus:  r=torch::nn::functional::softplus (t,  softplus(a ? x : nullptr,1,c)); break;
    case Cast::threshold: r=torch::nn::functional::threshold(t, threshold(a ? x : nullptr,1,c)); break;
    default: AT_ERROR("Unrecognized activation function"); break;
   }

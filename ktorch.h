@@ -107,32 +107,33 @@ enum class Class:char {
 
 enum class Cast:char {
  undefined=0, 
- tensor,      sequential,  model,           // basic structures
+ tensor,          sequential,      model,           // basic structures
 
- adaptavg1d,  adaptavg2d,  adaptavg3d,      // modules
- adaptmax1d,  adaptmax2d,  adaptmax3d, 
- adrop,       avgpool1d,   avgpool2d,  
- avgpool3d,   batchnorm,   celu,       
- conv1d,      conv2d,      conv3d,     
- drop,        drop2d,      drop3d,     
- elu,         embed,       expand,     
- fadrop,      fdrop,       flatten,    
- fmaxpool2d,  fmaxpool3d,  gelu,       
- glu,         gru,         hardshrink, 
- hardtanh,    leakyrelu,   linear,     
- logsigmoid,  logsoftmax,  lppool1d,   
- lppool2d,    lstm,        maxpool1d,  
- maxpool2d,   maxpool3d,   out,        
- pad,         pad1d,       pad2d,      
- pad3d,       prelu,       reflect1d,  
- reflect2d,   relu,        relu6,      
- replicate1d, replicate2d, replicate3d,
- reshape,     rnn,         rrelu,      
- selu,        sigmoid,     softmax,     softmax2d,
- softmin,     softplus,    softshrink, 
- softsign,    squeeze,     tanh,       
- tanhshrink,  threshold,   unsqueeze,  
- zeropad2d,            
+ adaptavg1d,      adaptavg2d,      adaptavg3d,      // modules
+ adaptmax1d,      adaptmax2d,      adaptmax3d, 
+ adrop,           avgpool1d,       avgpool2d,  
+ avgpool3d,       batchnorm,       celu,       
+ conv1d,          conv2d,          conv3d,     
+ convtranspose1d, convtranspose2d, convtranspose3d,     
+ drop,            drop2d,          drop3d,     
+ elu,             embed,           expand,     
+ fadrop,          fdrop,           flatten,    
+ fmaxpool2d,      fmaxpool3d,      gelu,       
+ glu,             gru,             hardshrink, 
+ hardtanh,        leakyrelu,       linear,     
+ logsigmoid,      logsoftmax,      lppool1d,   
+ lppool2d,        lstm,            maxpool1d,  
+ maxpool2d,       maxpool3d,       out,        
+ pad,             pad1d,           pad2d,      
+ pad3d,           prelu,           reflect1d,  
+ reflect2d,       relu,            relu6,      
+ replicate1d,     replicate2d,     replicate3d,
+ reshape,         rnn,             rrelu,      
+ selu,            sigmoid,         softmax,
+ softmax2d,       softmin,         softplus,
+ softshrink,      softsign,        squeeze,
+ tanh,            tanhshrink,      threshold,
+ unsqueeze,       zeropad2d,            
 
  bce,         bcelogits,   bcelogitw,      // loss fns
  ce,          cosineloss,  ctc,
@@ -159,17 +160,17 @@ enum class Prob:char {  // probablility distributions
 
 enum class Setting:char {
  undefined,
- affine,   alpha,     amsgrad,   batchfirst, beta,     beta1,     beta2,  
- bi,       bias,      blank,     ceiling,    centered, changetol, cols,   
- countpad, dampening, decay,     dilate,     dim,      divisor,   drop,   
- end,      eps,       eval,      fn,         full,     gradtol,   groups, 
- hidden,   history,   ignore,    in,         indices,  init,      inplace,
- iter,     lambda,    layers,    log,        lower,    lr,        lrdecay,
- margin,   max,       min,       mode,       momentum, nesterov,  out,
- outpad,   outsize,   p,         pad,        power,    ratio,     reduce, 
- rows,     size,      slope,     start,      stride,   swap,      threshold,
- track,    train,     transpose, type,       upper,    value,     weight,
- zeroinf
+ affine,    alpha,     amsgrad,   batchfirst, beta,     beta1,     beta2,  
+ bi,        bias,      blank,     ceiling,    centered, changetol, cols,   
+ countpad,  dampening, decay,     dilate,     dim,      divisor,   drop,   
+ end,       eps,       eval,      fn,         full,     gradtol,   groups, 
+ hidden,    history,   ignore,    in,         indices,  init,      inplace,
+ iter,      lambda,    layers,    log,        lower,    lr,        lrdecay,
+ margin,    max,       min,       mode,       momentum, nesterov,  out,
+ outpad,    outsize,   p,         pad,        padmode,  power,     ratio,
+ reduce,    rows,      size,      slope,      start,    stride,    swap, 
+ threshold, track,     train,     transpose,  type,     upper,     value,
+ weight,    zeroinf
 };
 
 enum class State:char {
@@ -569,7 +570,7 @@ typedef struct {
   std::make_tuple(cs("tanh"),torch::nn::RNNActivation::Tanh)
  }};
 
- std::array<std::tuple<S,Cast>,71> module = {{  // module sym -> enum
+ std::array<std::tuple<S,Cast>,74> module = {{  // module sym -> enum
   std::make_tuple(cs("adaptavg1d"),      Cast::adaptavg1d),
   std::make_tuple(cs("adaptavg2d"),      Cast::adaptavg2d),
   std::make_tuple(cs("adaptavg3d"),      Cast::adaptavg3d),
@@ -585,6 +586,9 @@ typedef struct {
   std::make_tuple(cs("conv1d"),          Cast::conv1d),
   std::make_tuple(cs("conv2d"),          Cast::conv2d),
   std::make_tuple(cs("conv3d"),          Cast::conv3d),
+  std::make_tuple(cs("convtranspose1d"), Cast::convtranspose1d),
+  std::make_tuple(cs("convtranspose2d"), Cast::convtranspose2d),
+  std::make_tuple(cs("convtranspose3d"), Cast::convtranspose3d),
   std::make_tuple(cs("drop"),            Cast::drop),
   std::make_tuple(cs("drop2d"),          Cast::drop2d),
   std::make_tuple(cs("drop3d"),          Cast::drop3d),
@@ -643,7 +647,7 @@ typedef struct {
   std::make_tuple(cs("zeropad2d"),       Cast::zeropad2d)
  }};
 
- std::array<std::tuple<S,Setting>,47> mset = {{      // module option sym -> enum
+ std::array<std::tuple<S,Setting>,48> mset = {{      // module option sym -> enum
   std::make_tuple(cs("affine"),     Setting::affine),
   std::make_tuple(cs("alpha"),      Setting::alpha),
   std::make_tuple(cs("batchfirst"), Setting::batchfirst),
@@ -677,6 +681,7 @@ typedef struct {
   std::make_tuple(cs("outpad"),     Setting::outpad),
   std::make_tuple(cs("outsize"),    Setting::outsize),
   std::make_tuple(cs("pad"),        Setting::pad),
+  std::make_tuple(cs("padmode"),    Setting::padmode),
   std::make_tuple(cs("power"),      Setting::power),
   std::make_tuple(cs("ratio"),      Setting::ratio),
   std::make_tuple(cs("rows"),       Setting::rows),

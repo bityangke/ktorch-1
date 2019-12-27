@@ -97,7 +97,8 @@ static K mvals(bool b,J n) {
 // ----------------------------------------------------------------------------------------------------
 // covers of input checking fns with error msg specific to module settings and module names:
 // ----------------------------------------------------------------------------------------------------
-// mbool - check positional args or name-value pairs for boolean, else error w'module & option
+// mbool - check positional args or name-value pairs for boolean, else error w'module & option name
+// mode  - check positional args of name-value pairs for symbol,  else error w'module & option name
 // int64 - check positional args or name-value pairs for long int, else error w'module & option
 // int64n - int64 but returns optional, i.e. nullopt if k value is null
 // mdouble - check for double(or long) from positional or name-value pair arg
@@ -113,6 +114,17 @@ static bool mbool(K x,J i,Cast c,Setting s) {
 static bool mbool(const Pairs& p,Cast c) {
  TORCH_CHECK(p.t==-KB, msym(c)," ",p.k,": expected boolean scalar, given ",kname(p.t));
  return p.b;
+}
+
+static S mode(K x,J i,Cast c,Setting s) {
+ S m;
+ TORCH_CHECK(xsym(x,i,m), msym(c)," ",mset(s),": expected symbol, given ",kname(kK(x)[i]->t));
+ return m;
+}
+
+static S mode(const Pairs& p,Cast c) {
+ TORCH_CHECK(p.t==-KS, msym(c)," ",p.k,": expected symbol, given ",kname(p.t));
+ return p.s;
 }
 
 static int64_t int64(K x,J i,Cast c,Setting s) {
@@ -208,37 +220,50 @@ static void bnorm(bool a,K x,const torch::nn::BatchNormImpl* m) {
 }
 
 // --------------------------------------------------------------------------------------
-// conv - create 1-3d convolution/transposed convolution, set dictionary given module
+// convpad - translate symbol to variant used for padding mode
+// conv - create 1-3d convolution, set dictionary given module
+//        with version 1.4, the c++ ConvImpl class was split into regular & transposed
+//        ConvOptions & ConvTransOptions have different members, 
+// convtran - similar to conv() except adds output_padding and changes position order
 // --------------------------------------------------------------------------------------
+typedef c10::variant<torch::enumtype::kZeros, torch::enumtype::kCircular> Convpad;
+static Convpad convpad(S s) {
+ Convpad p;
+ switch(emap(s)) {
+  case Enum::zeros:     p=torch::kZeros; break;
+  case Enum::circular:  p=torch::kCircular; break;
+  default: AT_ERROR("unrecognized padding mode: ",s); break;
+ }
+ return p;
+}
+
 template<size_t D> static torch::nn::ConvOptions<D> conv(K x,J i,Cast c) {
  torch::nn::ConvOptions<D> o(0,0,0);
  bool in=false,out=false,sz=false; Pairs p; J n=xargc(x,i,p);
  for(J j=0;j<n;++j)
    switch(j) {
-    case 0: o.in_channels    (int64(x,i+j,c,Setting::in));        in=true; break;
-    case 1: o.out_channels   (int64(x,i+j,c,Setting::in));       out=true; break;
-    case 2: o.kernel_size    (exarray<D>(x,i+j,c,Setting::size)); sz=true; break;
-    case 3: o.stride         (exarray<D>(x,i+j,c,Setting::stride));   break;
-    case 4: o.padding        (exarray<D>(x,i+j,c,Setting::pad));      break;
-    case 5: o.output_padding (exarray<D>(x,i+j,c,Setting::outpad));   break;
-    case 6: o.dilation       (exarray<D>(x,i+j,c,Setting::dilate));   break;
-    case 7: o.groups         (int64(x,i+j,c,Setting::groups));        break;
-    case 8: o.bias           (mbool    (x,i+j,c,Setting::bias));      break;
-    case 9: o.transposed     (mbool    (x,i+j,c,Setting::transpose)); break;
-    default: AT_ERROR(msym(c),": up to 10 positional arguments expected, ",n," given");
+    case 0: o.in_channels (int64(x,i+j,c,Setting::in));        in=true; break;
+    case 1: o.out_channels(int64(x,i+j,c,Setting::in));       out=true; break;
+    case 2: o.kernel_size (exarray<D>(x,i+j,c,Setting::size)); sz=true; break;
+    case 3: o.stride      (exarray<D>(x,i+j,c,Setting::stride));   break;
+    case 4: o.padding     (exarray<D>(x,i+j,c,Setting::pad));      break;
+    case 5: o.dilation    (exarray<D>(x,i+j,c,Setting::dilate));   break;
+    case 6: o.groups      (int64(x,i+j,c,Setting::groups));        break;
+    case 7: o.bias        (mbool    (x,i+j,c,Setting::bias));      break;
+    case 8: o.padding_mode(convpad(mode(x,i+j,c,Setting::padmode))); break;
+    default: AT_ERROR(msym(c),": up to 9 positional arguments expected, ",n," given");
   }
  while(xpair(p))
   switch(mset(p.k)) {
-   case Setting::in:        o.in_channels   (int64(p,c));     in=true; break;
-   case Setting::out:       o.out_channels  (int64(p,c));    out=true; break;
-   case Setting::size:      o.kernel_size   (exarray<D>(p,c)); sz=true; break;
-   case Setting::stride:    o.stride        (exarray<D>(p,c)); break;
-   case Setting::pad:       o.padding       (exarray<D>(p,c)); break;
-   case Setting::outpad:    o.output_padding(exarray<D>(p,c)); break;
-   case Setting::dilate:    o.dilation      (exarray<D>(p,c)); break;
-   case Setting::groups:    o.groups         (int64(p,c));     break;
-   case Setting::bias:      o.bias           (mbool(p,c));     break;
-   case Setting::transpose: o.transposed     (mbool(p,c));     break;
+   case Setting::in:        o.in_channels (int64(p,c));     in=true; break;
+   case Setting::out:       o.out_channels(int64(p,c));    out=true; break;
+   case Setting::size:      o.kernel_size (exarray<D>(p,c)); sz=true; break;
+   case Setting::stride:    o.stride      (exarray<D>(p,c)); break;
+   case Setting::pad:       o.padding     (exarray<D>(p,c)); break;
+   case Setting::dilate:    o.dilation    (exarray<D>(p,c)); break;
+   case Setting::groups:    o.groups      (int64(p,c));     break;
+   case Setting::bias:      o.bias        (mbool(p,c));     break;
+   case Setting::padmode:   o.padding_mode(convpad(mode(p,c)));   break;
    default: AT_ERROR("Unrecognized convolution option: ",p.k); break;
   }
  TORCH_CHECK(in,  msym(c),": number of input channels not defined");
@@ -247,19 +272,62 @@ template<size_t D> static torch::nn::ConvOptions<D> conv(K x,J i,Cast c) {
  return o;
 }
 
-template<size_t D,typename M>
-static void conv(bool a,K x,const M* m) {
- torch::nn::ConvOptions<D> o=m->options, d(o.in_channels(),o.out_channels(),o.kernel_size());
+template<size_t D> static torch::nn::ConvTransposeOptions<D> convtran(K x,J i,Cast c) {
+ torch::nn::ConvTransposeOptions<D> o(0,0,0);
+ bool in=false,out=false,sz=false; Pairs p; J n=xargc(x,i,p);
+ for(J j=0;j<n;++j)
+   switch(j) {
+    case 0: o.in_channels   (int64(x,i+j,c,Setting::in));        in=true; break;
+    case 1: o.out_channels  (int64(x,i+j,c,Setting::in));       out=true; break;
+    case 2: o.kernel_size   (exarray<D>(x,i+j,c,Setting::size)); sz=true; break;
+    case 3: o.stride        (exarray<D>(x,i+j,c,Setting::stride)); break;
+    case 4: o.padding       (exarray<D>(x,i+j,c,Setting::pad));    break;
+    case 5: o.output_padding(exarray<D>(x,i+j,c,Setting::outpad)); break;
+    case 6: o.groups        (int64(x,i+j,c,Setting::groups));      break;
+    case 7: o.bias          (mbool(x,i+j,c,Setting::bias));        break;
+    case 8: o.dilation      (exarray<D>(x,i+j,c,Setting::dilate)); break;
+    case 9: o.padding_mode  (convpad(mode(x,i+j,c,Setting::padmode))); break;
+    default: AT_ERROR(msym(c),": up to 9 positional arguments expected, ",n," given");
+  }
+ while(xpair(p))
+  switch(mset(p.k)) {
+   case Setting::in:        o.in_channels   (int64(p,c));      in=true; break;
+   case Setting::out:       o.out_channels  (int64(p,c));     out=true; break;
+   case Setting::size:      o.kernel_size   (exarray<D>(p,c)); sz=true; break;
+   case Setting::stride:    o.stride        (exarray<D>(p,c)); break;
+   case Setting::pad:       o.padding       (exarray<D>(p,c)); break;
+   case Setting::outpad:    o.output_padding(exarray<D>(p,c)); break;
+   case Setting::groups:    o.groups        (int64(p,c));      break;
+   case Setting::bias:      o.bias          (mbool(p,c));      break;
+   case Setting::dilate:    o.dilation      (exarray<D>(p,c)); break;
+   case Setting::padmode:   o.padding_mode(convpad(mode(p,c)));break;
+   default: AT_ERROR("Unrecognized convolution option: ",p.k); break;
+  }
+ TORCH_CHECK(in,  msym(c), ": number of input channels not defined");
+ TORCH_CHECK(out, msym(c), ": number of output channels not defined");
+ TORCH_CHECK(sz,  msym(c), ": no kernel size(s) given");
+ return o;
+}
+
+template<size_t D> static void conv(bool a,K x,const torch::nn::detail::ConvNdOptions<D>& o) {
+ torch::nn::detail::ConvNdOptions<D> d(o.in_channels(),o.out_channels(),o.kernel_size());
+ bool t=o.transposed();
  OPTION(x, in,   kj(o.in_channels()));
  OPTION(x, out,  kj(o.out_channels()));
  OPTION(x, size, KEX(o.kernel_size()));
- if(a || (*o.stride()         != *d.stride()))         OPTION(x, stride,    KEX(o.stride()));
- if(a || (*o.padding()        != *d.padding()))        OPTION(x, pad,       KEX(o.padding()));
- if(a || (*o.output_padding() != *d.output_padding())) OPTION(x, outpad,    KEX(o.output_padding()));
- if(a || (*o.dilation()       != *d.dilation()))       OPTION(x, dilate,    KEX(o.dilation()));
- if(a || ( o.groups()         !=  d.groups()))         OPTION(x, groups,    kj(o.groups()));
- if(a || ( o.bias()           !=  d.bias()))      OPTION(x, bias,      kb(o.bias()));
- if(a || ( o.transposed()     !=  d.transposed()))     OPTION(x, transpose, kb(o.transposed()));
+ if(a || (*o.stride()  != *d.stride()))  OPTION(x, stride,    KEX(o.stride()));
+ if(a || (*o.padding() != *d.padding())) OPTION(x, pad,       KEX(o.padding()));
+ if(t) {
+  if(a || (*o.output_padding() != *d.output_padding())) OPTION(x, outpad, KEX(o.output_padding()));
+ } else {
+  if(a || (*o.dilation() != *d.dilation())) OPTION(x, dilate, KEX(o.dilation()));
+ }
+ if(a || ( o.groups()    !=  d.groups())) OPTION(x, groups, kj(o.groups()));
+ if(a || ( o.bias()      !=  d.bias()))   OPTION(x, bias,   kb(o.bias()));
+ if(t) {
+  if(a || (*o.dilation() != *d.dilation())) OPTION(x, dilate, KEX(o.dilation()));
+ }
+ if(a || ESYM(o.padding_mode()) != ESYM(d.padding_mode())) OPTION(x, padmode, ks(ESYM(o.padding_mode())));
 }
 
 // --------------------------------------------------------------------------------------
@@ -1279,6 +1347,10 @@ void mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) {
   case Cast::conv2d:       PUSH(q,n,torch::nn::Conv2d(conv<2>(x,i,c))); break;
   case Cast::conv3d:       PUSH(q,n,torch::nn::Conv3d(conv<3>(x,i,c))); break;
 
+  case Cast::convtranspose1d:  PUSH(q,n,ConvTranspose1d(convtran<1>(x,i,c))); break;
+  case Cast::convtranspose2d:  PUSH(q,n,ConvTranspose2d(convtran<2>(x,i,c))); break;
+  case Cast::convtranspose3d:  PUSH(q,n,ConvTranspose3d(convtran<3>(x,i,c))); break;
+
   case Cast::maxpool1d:    PUSH(q,n,torch::nn::MaxPool1d(maxpool<1>(x,i,c))); break;
   case Cast::maxpool2d:    PUSH(q,n,torch::nn::MaxPool2d(maxpool<2>(x,i,c))); break;
   case Cast::maxpool3d:    PUSH(q,n,torch::nn::MaxPool3d(maxpool<3>(x,i,c))); break;
@@ -1386,9 +1458,12 @@ void mopt(Module &g,bool a,K &v,J i) { //g:generic module, a:true if all options
  } else if(auto* m=g.as<torch::nn::AlphaDropout>())        { c=Cast::adrop;  drop(a,x,m->options);
  } else if(auto* m=g.as<torch::nn::FeatureAlphaDropout>()) { c=Cast::fadrop; drop(a,x,m->options);
 
- } else if(auto* m=g.as<torch::nn::Conv1d>())         { c=Cast::conv1d; conv<1,torch::nn::Conv1dImpl>(a,x,m);
- } else if(auto* m=g.as<torch::nn::Conv2d>())         { c=Cast::conv2d; conv<2,torch::nn::Conv2dImpl>(a,x,m);
- } else if(auto* m=g.as<torch::nn::Conv3d>())         { c=Cast::conv3d; conv<3,torch::nn::Conv3dImpl>(a,x,m);
+ } else if(auto* m=g.as<torch::nn::Conv1d>())         { c=Cast::conv1d; conv<1>(a,x,m->options);
+ } else if(auto* m=g.as<torch::nn::Conv2d>())         { c=Cast::conv2d; conv<2>(a,x,m->options);
+ } else if(auto* m=g.as<torch::nn::Conv3d>())         { c=Cast::conv3d; conv<3>(a,x,m->options);
+ } else if(auto* m=g.as<torch::nn::ConvTranspose1d>()){ c=Cast::convtranspose1d; conv<1>(a,x,m->options);
+ } else if(auto* m=g.as<torch::nn::ConvTranspose2d>()){ c=Cast::convtranspose2d; conv<2>(a,x,m->options);
+ } else if(auto* m=g.as<torch::nn::ConvTranspose3d>()){ c=Cast::convtranspose3d; conv<3>(a,x,m->options);
 
  } else if(auto* m=g.as<torch::nn::MaxPool1d>())      { c=Cast::maxpool1d; maxpool<1,torch::nn::MaxPool1dImpl>(a,x,m);
  } else if(auto* m=g.as<torch::nn::MaxPool2d>())      { c=Cast::maxpool2d; maxpool<2,torch::nn::MaxPool2dImpl>(a,x,m);

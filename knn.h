@@ -65,6 +65,40 @@ class TORCH_API FractionalMaxPool3dImpl : public FractionalMaxPoolImpl<3, Fracti
 TORCH_MODULE(FractionalMaxPool2d);
 TORCH_MODULE(FractionalMaxPool3d);
 
+// -----------------------------------------------------------------------------------------
+//  transposed convolutions forward fn requires 2 args: input & optional output size
+//   as of version 1.4, a Sequential module can only handle forward fn w'single arg
+//  modules below use same forward call without defining output size (default behaviour)
+//  this allows transposed convolutions to be used in Sequential modules
+// -----------------------------------------------------------------------------------------
+class TORCH_API ConvTranspose1dImpl : public torch::nn::ConvTranspose1dImpl {
+ public:
+ ConvTranspose1dImpl(torch::nn::ConvTranspose1dOptions o) : torch::nn::ConvTranspose1dImpl(o) {}
+ torch::Tensor forward(const torch::Tensor& input) {
+  return torch::nn::ConvTranspose1dImpl::forward(input,c10::nullopt);
+ }
+};
+
+class TORCH_API ConvTranspose2dImpl : public torch::nn::ConvTranspose2dImpl {
+ public:
+ ConvTranspose2dImpl(torch::nn::ConvTranspose2dOptions o) : torch::nn::ConvTranspose2dImpl(o) {}
+ torch::Tensor forward(const torch::Tensor& input) {
+  return torch::nn::ConvTranspose2dImpl::forward(input,c10::nullopt);
+ }
+};
+
+class TORCH_API ConvTranspose3dImpl : public torch::nn::ConvTranspose3dImpl {
+ public:
+ ConvTranspose3dImpl(torch::nn::ConvTranspose3dOptions o) : torch::nn::ConvTranspose3dImpl(o) {}
+ torch::Tensor forward(const torch::Tensor& input) {
+  return torch::nn::ConvTranspose3dImpl::forward(input,c10::nullopt);
+ }
+};
+
+TORCH_MODULE(ConvTranspose1d);
+TORCH_MODULE(ConvTranspose2d);
+TORCH_MODULE(ConvTranspose3d);
+
 // --------------------------------------------------------------------------
 // general pad: create module to match functional call with size, mode, value
 // --------------------------------------------------------------------------

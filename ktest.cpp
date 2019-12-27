@@ -459,6 +459,7 @@ KAPI sparse1(K x) {
  return kten(torch::sparse_coo_tensor(i.t(),v,m.sizes()));
 }
 
+/*
 KAPI gan(K x) {
  const int64_t kNoiseSize = 100;
  const int64_t kBatchSize = 60;
@@ -573,3 +574,4 @@ KAPI gentest(K x) {
   //generator(torch::randn({64,100,1,1}),256);
   return (K)0;
 }
+*/

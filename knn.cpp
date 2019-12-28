@@ -191,27 +191,35 @@ template<size_t D> Exdouble<D> exdouble(const Pairs& p,Cast c) {
 }
 
 // --------------------------------------------------------------------------------------
-// bnorm - create batchnorm module given options/set dictionary of options given module
+// bnorm - get/set batchnorm options
 // --------------------------------------------------------------------------------------
-torch::nn::BatchNorm bnorm(K x,J k) {
- bool a=true,t=true; double e=1e-5,m=0.1; Pairs p; J i=-1,n=xargc(x,k,p);
- if(!((n==0 && p.n) || (n==1 && xlong(x,k,i))))
-  AT_ERROR("Unrecognized arguments for batch normalization");
+static torch::nn::BatchNormOptions bnorm(K x,J i,Cast c) {
+ torch::nn::BatchNormOptions o(0);
+ bool in=false; Pairs p; J n=xargc(x,i,p);
+ for(J j=0;j<n;++j)
+   switch(j) {
+    case 0: o.num_features(int64(x,i+j,c,Setting::in)); in=true; break;
+    case 1: o.eps(mdouble(x,i+j,c,Setting::eps));break;
+    case 2: o.momentum(mdouble(x,i+j,c,Setting::momentum)); break;
+    case 3: o.affine(mbool(x,i+j,c,Setting::affine)); break;
+    case 4: o.track_running_stats(mbool(x,i+j,c,Setting::affine)); break;
+    default: AT_ERROR(msym(c),": up to 5 positional arguments expected, ",n," given");
+  }
  while(xpair(p))
   switch(mset(p.k)) {
-   case Setting::in:        i=plong(p); break;
-   case Setting::affine:    a=pbool(p); break;
-   case Setting::track:     t=pbool(p); break;
-   case Setting::eps:       e=pdouble(p); break;
-   case Setting::momentum:  m=pdouble(p); break;
-   default: AT_ERROR("Unrecognized batch norm option: ",p.k); break;
+   case Setting::in:       o.num_features(int64(p,c)); break;
+   case Setting::eps:      o.eps(mdouble(p,c)); break;
+   case Setting::momentum: o.momentum(mdouble(p,c)); break;
+   case Setting::affine:   o.affine(mbool(p,c)); break;
+   case Setting::track:    o.track_running_stats(mbool(p,c)); break;
+   default: AT_ERROR("Unrecognized batchnorm option: ",p.k); break;
   }
- if(i<0) AT_ERROR("number of input features must be set, currently in = ",i);
- return torch::nn::BatchNorm(torch::nn::BatchNormOptions(i).affine(a).track_running_stats(t).eps(e).momentum(m));
+ TORCH_CHECK(in,  msym(c),": number of input features not defined");
+ return o;
 }
 
-static void bnorm(bool a,K x,const torch::nn::BatchNormImpl* m) {
- torch::nn::BatchNormOptions o=m->options, d(o.num_features());
+static void bnorm(bool a,K x,const torch::nn::BatchNormOptions& o) {
+ torch::nn::BatchNormOptions d(o.num_features());
  OPTION(x, in, kj(o.num_features()));
  if(a || (o.eps()      != d.eps()))      OPTION(x, eps,       kf(o.eps()));
  if(a || (o.momentum() != d.momentum())) OPTION(x, momentum,  kf(o.momentum().value()));
@@ -1332,7 +1340,11 @@ void mdefine(Sequential &q,S s,S n=nullptr,J i=-1,K x=nullptr,K p=nullptr,K f=nu
 void mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) { 
  Cast c=msym(s); Scalar v,w;
  switch(c) {
-  case Cast::batchnorm:    PUSH(q,n,bnorm(x,i)); break;
+  case Cast::batchnorm:    PUSH(q,n,torch::nn::BatchNorm  (bnorm(x,i,c))); break;
+  case Cast::batchnorm1d:  PUSH(q,n,torch::nn::BatchNorm1d(bnorm(x,i,c))); break;
+  case Cast::batchnorm2d:  PUSH(q,n,torch::nn::BatchNorm2d(bnorm(x,i,c))); break;
+  case Cast::batchnorm3d:  PUSH(q,n,torch::nn::BatchNorm3d(bnorm(x,i,c))); break;
+
   case Cast::embed:        PUSH(q,n,embed(x,i)); break;
   case Cast::linear:       PUSH(q,n,torch::nn::Linear(linear(x,i,c))); break;
 
@@ -1447,7 +1459,11 @@ void mdefine(Sequential &q,K x) { // define modules from k table of options or f
 void mopt(Module &g,bool a,K &v,J i) { //g:generic module, a:true if all options, v:k values, i:table row
  auto c=Cast::undefined;
  K x=xD(ktn(KS,0),ktn(0,0));
- if       (auto* m=g.as<torch::nn::BatchNorm>())      { c=Cast::batchnorm; bnorm(a,x,m);
+ if       (auto* m=g.as<torch::nn::BatchNorm>())      { c=Cast::batchnorm; bnorm(a,x,m->options);
+ } else if(auto* m=g.as<torch::nn::BatchNorm1d>())    { c=Cast::batchnorm; bnorm(a,x,m->options);
+ } else if(auto* m=g.as<torch::nn::BatchNorm2d>())    { c=Cast::batchnorm; bnorm(a,x,m->options);
+ } else if(auto* m=g.as<torch::nn::BatchNorm3d>())    { c=Cast::batchnorm; bnorm(a,x,m->options);
+
  } else if(auto* m=g.as<torch::nn::Embedding>())      { c=Cast::embed;     embed(x,m);
  } else if(auto* m=g.as<torch::nn::Linear>())         { c=Cast::linear;    linear(a,x,m);
 

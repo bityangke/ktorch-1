@@ -112,7 +112,8 @@ enum class Cast:char {
  adaptavg1d,      adaptavg2d,      adaptavg3d,      // modules
  adaptmax1d,      adaptmax2d,      adaptmax3d, 
  adrop,           avgpool1d,       avgpool2d,  
- avgpool3d,       batchnorm,       celu,       
+ avgpool3d,       batchnorm,       batchnorm1d,
+ batchnorm2d,     batchnorm3d,     celu,       
  conv1d,          conv2d,          conv3d,     
  convtranspose1d, convtranspose2d, convtranspose3d,     
  drop,            drop2d,          drop3d,     
@@ -570,7 +571,7 @@ typedef struct {
   std::make_tuple(cs("tanh"),torch::nn::RNNActivation::Tanh)
  }};
 
- std::array<std::tuple<S,Cast>,74> module = {{  // module sym -> enum
+ std::array<std::tuple<S,Cast>,77> module = {{  // module sym -> enum
   std::make_tuple(cs("adaptavg1d"),      Cast::adaptavg1d),
   std::make_tuple(cs("adaptavg2d"),      Cast::adaptavg2d),
   std::make_tuple(cs("adaptavg3d"),      Cast::adaptavg3d),
@@ -582,6 +583,9 @@ typedef struct {
   std::make_tuple(cs("avgpool2d"),       Cast::avgpool2d),
   std::make_tuple(cs("avgpool3d"),       Cast::avgpool3d),
   std::make_tuple(cs("batchnorm"),       Cast::batchnorm),
+  std::make_tuple(cs("batchnorm1d"),     Cast::batchnorm1d),
+  std::make_tuple(cs("batchnorm2d"),     Cast::batchnorm2d),
+  std::make_tuple(cs("batchnorm3d"),     Cast::batchnorm3d),
   std::make_tuple(cs("celu"),            Cast::celu),
   std::make_tuple(cs("conv1d"),          Cast::conv1d),
   std::make_tuple(cs("conv2d"),          Cast::conv2d),

@@ -191,10 +191,14 @@ template<size_t D> Exdouble<D> exdouble(const Pairs& p,Cast c) {
 }
 
 // --------------------------------------------------------------------------------------
-// bnorm - get/set batchnorm options
+// bnorm - get/set batch norm & instance norm options
+//         both module types and dimensions(1,2,3d) use the same options structure
+//         except batch norm's momentum is an optional double
 // --------------------------------------------------------------------------------------
-static torch::nn::BatchNormOptions bnorm(K x,J i,Cast c) {
- torch::nn::BatchNormOptions o(0);
+static double momentum(c10::optional<double> x) {return x.value();}
+
+template<typename O> static O bnorm(K x,J i,Cast c) {
+ O o(0);
  bool in=false; Pairs p; J n=xargc(x,i,p);
  for(J j=0;j<n;++j)
    switch(j) {
@@ -212,17 +216,17 @@ static torch::nn::BatchNormOptions bnorm(K x,J i,Cast c) {
    case Setting::momentum: o.momentum(mdouble(p,c)); break;
    case Setting::affine:   o.affine(mbool(p,c)); break;
    case Setting::track:    o.track_running_stats(mbool(p,c)); break;
-   default: AT_ERROR("Unrecognized batchnorm option: ",p.k); break;
+   default: AT_ERROR("Unrecognized ",msym(c)," option: ",p.k); break;
   }
- TORCH_CHECK(in,  msym(c),": number of input features not defined");
+ TORCH_CHECK(in,msym(c),": number of input features not defined");
  return o;
 }
 
-static void bnorm(bool a,K x,const torch::nn::BatchNormOptions& o) {
- torch::nn::BatchNormOptions d(o.num_features());
+template<typename O> static void bnorm(bool a,K x,const O& o) {
+ O d(o.num_features());
  OPTION(x, in, kj(o.num_features()));
  if(a || (o.eps()      != d.eps()))      OPTION(x, eps,       kf(o.eps()));
- if(a || (o.momentum() != d.momentum())) OPTION(x, momentum,  kf(o.momentum().value()));
+ if(a || (o.momentum() != d.momentum())) OPTION(x, momentum,  kf(momentum(o.momentum())));
  if(a || (o.affine()   != d.affine()))   OPTION(x, affine,    kb(o.affine()));
  if(a || (o.track_running_stats() != d.track_running_stats())) OPTION(x, track, kb(o.track_running_stats()));
 }
@@ -1340,10 +1344,14 @@ void mdefine(Sequential &q,S s,S n=nullptr,J i=-1,K x=nullptr,K p=nullptr,K f=nu
 void mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) { 
  Cast c=msym(s); Scalar v,w;
  switch(c) {
-  case Cast::batchnorm:    PUSH(q,n,torch::nn::BatchNorm  (bnorm(x,i,c))); break;
-  case Cast::batchnorm1d:  PUSH(q,n,torch::nn::BatchNorm1d(bnorm(x,i,c))); break;
-  case Cast::batchnorm2d:  PUSH(q,n,torch::nn::BatchNorm2d(bnorm(x,i,c))); break;
-  case Cast::batchnorm3d:  PUSH(q,n,torch::nn::BatchNorm3d(bnorm(x,i,c))); break;
+  case Cast::batchnorm:    PUSH(q,n,torch::nn::BatchNorm  (bnorm<torch::nn::BatchNormOptions>(x,i,c))); break;
+  case Cast::batchnorm1d:  PUSH(q,n,torch::nn::BatchNorm1d(bnorm<torch::nn::BatchNormOptions>(x,i,c))); break;
+  case Cast::batchnorm2d:  PUSH(q,n,torch::nn::BatchNorm2d(bnorm<torch::nn::BatchNormOptions>(x,i,c))); break;
+  case Cast::batchnorm3d:  PUSH(q,n,torch::nn::BatchNorm3d(bnorm<torch::nn::BatchNormOptions>(x,i,c))); break;
+
+  case Cast::instancenorm1d:  PUSH(q,n,torch::nn::InstanceNorm1d(bnorm<torch::nn::InstanceNormOptions>(x,i,c))); break;
+  case Cast::instancenorm2d:  PUSH(q,n,torch::nn::InstanceNorm2d(bnorm<torch::nn::InstanceNormOptions>(x,i,c))); break;
+  case Cast::instancenorm3d:  PUSH(q,n,torch::nn::InstanceNorm3d(bnorm<torch::nn::InstanceNormOptions>(x,i,c))); break;
 
   case Cast::embed:        PUSH(q,n,embed(x,i)); break;
   case Cast::linear:       PUSH(q,n,torch::nn::Linear(linear(x,i,c))); break;
@@ -1459,10 +1467,13 @@ void mdefine(Sequential &q,K x) { // define modules from k table of options or f
 void mopt(Module &g,bool a,K &v,J i) { //g:generic module, a:true if all options, v:k values, i:table row
  auto c=Cast::undefined;
  K x=xD(ktn(KS,0),ktn(0,0));
- if       (auto* m=g.as<torch::nn::BatchNorm>())      { c=Cast::batchnorm; bnorm(a,x,m->options);
- } else if(auto* m=g.as<torch::nn::BatchNorm1d>())    { c=Cast::batchnorm; bnorm(a,x,m->options);
- } else if(auto* m=g.as<torch::nn::BatchNorm2d>())    { c=Cast::batchnorm; bnorm(a,x,m->options);
- } else if(auto* m=g.as<torch::nn::BatchNorm3d>())    { c=Cast::batchnorm; bnorm(a,x,m->options);
+ if       (auto* m=g.as<torch::nn::BatchNorm>())      { c=Cast::batchnorm;   bnorm(a,x,m->options);
+ } else if(auto* m=g.as<torch::nn::BatchNorm1d>())    { c=Cast::batchnorm1d; bnorm(a,x,m->options);
+ } else if(auto* m=g.as<torch::nn::BatchNorm2d>())    { c=Cast::batchnorm2d; bnorm(a,x,m->options);
+ } else if(auto* m=g.as<torch::nn::BatchNorm3d>())    { c=Cast::batchnorm3d; bnorm(a,x,m->options);
+ } else if(auto* m=g.as<torch::nn::InstanceNorm1d>()) { c=Cast::instancenorm1d; bnorm(a,x,m->options);
+ } else if(auto* m=g.as<torch::nn::InstanceNorm2d>()) { c=Cast::instancenorm2d; bnorm(a,x,m->options);
+ } else if(auto* m=g.as<torch::nn::InstanceNorm3d>()) { c=Cast::instancenorm3d; bnorm(a,x,m->options);
 
  } else if(auto* m=g.as<torch::nn::Embedding>())      { c=Cast::embed;     embed(x,m);
  } else if(auto* m=g.as<torch::nn::Linear>())         { c=Cast::linear;    linear(a,x,m);

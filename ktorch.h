@@ -115,7 +115,7 @@ enum class Cast:char {
  avgpool3d,       batchnorm,       batchnorm1d,
  batchnorm2d,     batchnorm3d,     celu,       
  conv1d,          conv2d,          conv3d,     
- convtranspose1d, convtranspose2d, convtranspose3d,     
+ convtranspose1d, convtranspose2d, convtranspose3d, crossmap2d,
  drop,            drop2d,          drop3d,     
  elu,             embed,           expand,     
  fadrop,          fdrop,           flatten,    
@@ -123,9 +123,9 @@ enum class Cast:char {
  glu,             gru,             hardshrink, 
  hardtanh,        instancenorm1d,  instancenorm2d,
  instancenorm3d,  leakyrelu,       linear,     
- logsigmoid,      logsoftmax,      lppool1d,   
- lppool2d,        lstm,            maxpool1d,  
- maxpool2d,       maxpool3d,       out,        
+ localnorm,       logsigmoid,      logsoftmax,
+ lppool1d,        lppool2d,        lstm,
+ maxpool1d,       maxpool2d,       maxpool3d,       out,        
  pad,             pad1d,           pad2d,      
  pad3d,           prelu,           reflect1d,  
  reflect2d,       relu,            relu6,      
@@ -163,11 +163,11 @@ enum class Prob:char {  // probablility distributions
 enum class Setting:char {
  undefined,
  affine,    alpha,     amsgrad,   batchfirst, beta,     beta1,     beta2,  
- bi,        bias,      blank,     ceiling,    centered, changetol, cols,   
+ bi,        bias,      blank,     ceiling,    centered, changetol, channels, cols,   
  countpad,  dampening, decay,     dilate,     dim,      divisor,   drop,   
  end,       eps,       eval,      fn,         full,     gradtol,   groups, 
  hidden,    history,   ignore,    in,         indices,  init,      inplace,
- iter,      lambda,    layers,    log,        lower,    lr,        lrdecay,
+ iter,  k,  lambda,    layers,    log,        lower,    lr,        lrdecay,
  margin,    max,       min,       mode,       momentum, nesterov,  out,
  outpad,    outsize,   p,         pad,        padmode,  power,     ratio,
  reduce,    rows,      size,      slope,      start,    stride,    swap, 
@@ -572,7 +572,7 @@ typedef struct {
   std::make_tuple(cs("tanh"),torch::nn::RNNActivation::Tanh)
  }};
 
- std::array<std::tuple<S,Cast>,80> module = {{  // module sym -> enum
+ std::array<std::tuple<S,Cast>,82> module = {{  // module sym -> enum
   std::make_tuple(cs("adaptavg1d"),      Cast::adaptavg1d),
   std::make_tuple(cs("adaptavg2d"),      Cast::adaptavg2d),
   std::make_tuple(cs("adaptavg3d"),      Cast::adaptavg3d),
@@ -594,6 +594,7 @@ typedef struct {
   std::make_tuple(cs("convtranspose1d"), Cast::convtranspose1d),
   std::make_tuple(cs("convtranspose2d"), Cast::convtranspose2d),
   std::make_tuple(cs("convtranspose3d"), Cast::convtranspose3d),
+  std::make_tuple(cs("crossmap2d"),      Cast::crossmap2d),
   std::make_tuple(cs("drop"),            Cast::drop),
   std::make_tuple(cs("drop2d"),          Cast::drop2d),
   std::make_tuple(cs("drop3d"),          Cast::drop3d),
@@ -615,6 +616,7 @@ typedef struct {
   std::make_tuple(cs("instancenorm3d"),  Cast::instancenorm3d),
   std::make_tuple(cs("leakyrelu"),       Cast::leakyrelu),
   std::make_tuple(cs("linear"),          Cast::linear),
+  std::make_tuple(cs("localnorm"),       Cast::localnorm),
   std::make_tuple(cs("logsigmoid"),      Cast::logsigmoid),
   std::make_tuple(cs("logsoftmax"),      Cast::logsoftmax),
   std::make_tuple(cs("lppool1d"),        Cast::lppool1d),
@@ -655,7 +657,7 @@ typedef struct {
   std::make_tuple(cs("zeropad2d"),       Cast::zeropad2d)
  }};
 
- std::array<std::tuple<S,Setting>,48> mset = {{      // module option sym -> enum
+ std::array<std::tuple<S,Setting>,50> mset = {{      // module option sym -> enum
   std::make_tuple(cs("affine"),     Setting::affine),
   std::make_tuple(cs("alpha"),      Setting::alpha),
   std::make_tuple(cs("batchfirst"), Setting::batchfirst),
@@ -663,6 +665,7 @@ typedef struct {
   std::make_tuple(cs("bi"),         Setting::bi),
   std::make_tuple(cs("bias"),       Setting::bias),
   std::make_tuple(cs("ceiling"),    Setting::ceiling),
+  std::make_tuple(cs("channels"),   Setting::channels),
   std::make_tuple(cs("cols"),       Setting::cols),
   std::make_tuple(cs("countpad"),   Setting::countpad),
   std::make_tuple(cs("dilate"),     Setting::dilate),
@@ -678,6 +681,7 @@ typedef struct {
   std::make_tuple(cs("indices"),    Setting::indices),
   std::make_tuple(cs("init"),       Setting::init),
   std::make_tuple(cs("inplace"),    Setting::inplace),
+  std::make_tuple(cs("k"),          Setting::k),
   std::make_tuple(cs("lambda"),     Setting::lambda),
   std::make_tuple(cs("layers"),     Setting::layers),
   std::make_tuple(cs("lower"),      Setting::lower),

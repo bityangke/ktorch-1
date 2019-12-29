@@ -231,6 +231,41 @@ template<typename O> static void bnorm(bool a,K x,const O& o) {
  if(a || (o.track_running_stats() != d.track_running_stats())) OPTION(x, track, kb(o.track_running_stats()));
 }
 
+// ----------------------------------------------------------------------------------
+// lnorm - local response norm, cross map 2d norm, get/set options size,alpha,beta,k
+// ----------------------------------------------------------------------------------
+template<typename O> static O lnorm(K x,J i,Cast c) {
+ O o(0);
+ bool b=c==Cast::localnorm,sz=false; Pairs p; J n=xargc(x,i,p);
+ for(J j=0;j<n;++j)
+   switch(j) {
+    case 0: o.size(int64(x,i+j,c,Setting::size)); sz=true; break;
+    case 1: o.alpha(mdouble(x,i+j,c,Setting::alpha)); break;
+    case 2: o.beta(mdouble(x,i+j,c,Setting::beta)); break;
+    case 3: b ? o.k(mdouble(x,i+j,c,Setting::k)) : o.k(int64(x,i+j,c,Setting::k)); break;
+    default: AT_ERROR(msym(c),": up to 4 positional arguments expected, ",n," given");
+  }
+ while(xpair(p))
+  switch(mset(p.k)) {
+   case Setting::size:  o.size(int64(p,c)); sz=true; break;
+   case Setting::alpha: o.alpha(mdouble(p,c)); break;
+   case Setting::beta:  o.beta(mdouble(p,c)); break;
+   case Setting::k:     b ? o.k(mdouble(p,c)) : o.k(int64(p,c)); break;
+   default: AT_ERROR("Unrecognized ",msym(c)," option: ",p.k); break;
+  }
+ TORCH_CHECK(sz, msym(c),": specify no. of neighboring channels to use for normalization");
+ return o;
+}
+
+template<typename O> static void lnorm(bool a,K x,Cast c,const O& o) {
+ O d(o.size());
+ OPTION(x, size, kj(o.size()));
+ if(a || (o.alpha() != d.alpha())) OPTION(x, alpha, kf(o.alpha()));
+ if(a || (o.beta()  != d.beta()))  OPTION(x, beta,  kf(o.beta()));
+ if(a || (o.k()     != d.k()))     OPTION(x, k,     c==Cast::localnorm ? kf(o.k()) : kj(o.k()));
+}
+
+
 // --------------------------------------------------------------------------------------
 // convpad - translate symbol to variant used for padding mode
 // conv - create 1-3d convolution, set dictionary given module
@@ -1353,6 +1388,9 @@ void mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) {
   case Cast::instancenorm2d:  PUSH(q,n,torch::nn::InstanceNorm2d(bnorm<torch::nn::InstanceNormOptions>(x,i,c))); break;
   case Cast::instancenorm3d:  PUSH(q,n,torch::nn::InstanceNorm3d(bnorm<torch::nn::InstanceNormOptions>(x,i,c))); break;
 
+  case Cast::localnorm:  PUSH(q,n,torch::nn::LocalResponseNorm(lnorm<torch::nn::LocalResponseNormOptions>(x,i,c))); break;
+  case Cast::crossmap2d: PUSH(q,n,torch::nn::CrossMapLRN2d(lnorm<torch::nn::CrossMapLRN2dOptions>(x,i,c))); break;
+
   case Cast::embed:        PUSH(q,n,embed(x,i)); break;
   case Cast::linear:       PUSH(q,n,torch::nn::Linear(linear(x,i,c))); break;
 
@@ -1467,13 +1505,15 @@ void mdefine(Sequential &q,K x) { // define modules from k table of options or f
 void mopt(Module &g,bool a,K &v,J i) { //g:generic module, a:true if all options, v:k values, i:table row
  auto c=Cast::undefined;
  K x=xD(ktn(KS,0),ktn(0,0));
- if       (auto* m=g.as<torch::nn::BatchNorm>())      { c=Cast::batchnorm;   bnorm(a,x,m->options);
- } else if(auto* m=g.as<torch::nn::BatchNorm1d>())    { c=Cast::batchnorm1d; bnorm(a,x,m->options);
- } else if(auto* m=g.as<torch::nn::BatchNorm2d>())    { c=Cast::batchnorm2d; bnorm(a,x,m->options);
- } else if(auto* m=g.as<torch::nn::BatchNorm3d>())    { c=Cast::batchnorm3d; bnorm(a,x,m->options);
- } else if(auto* m=g.as<torch::nn::InstanceNorm1d>()) { c=Cast::instancenorm1d; bnorm(a,x,m->options);
- } else if(auto* m=g.as<torch::nn::InstanceNorm2d>()) { c=Cast::instancenorm2d; bnorm(a,x,m->options);
- } else if(auto* m=g.as<torch::nn::InstanceNorm3d>()) { c=Cast::instancenorm3d; bnorm(a,x,m->options);
+ if       (auto* m=g.as<torch::nn::BatchNorm>())         { c=Cast::batchnorm;      bnorm(a,x,m->options);
+ } else if(auto* m=g.as<torch::nn::BatchNorm1d>())       { c=Cast::batchnorm1d;    bnorm(a,x,m->options);
+ } else if(auto* m=g.as<torch::nn::BatchNorm2d>())       { c=Cast::batchnorm2d;    bnorm(a,x,m->options);
+ } else if(auto* m=g.as<torch::nn::BatchNorm3d>())       { c=Cast::batchnorm3d;    bnorm(a,x,m->options);
+ } else if(auto* m=g.as<torch::nn::InstanceNorm1d>())    { c=Cast::instancenorm1d; bnorm(a,x,m->options);
+ } else if(auto* m=g.as<torch::nn::InstanceNorm2d>())    { c=Cast::instancenorm2d; bnorm(a,x,m->options);
+ } else if(auto* m=g.as<torch::nn::InstanceNorm3d>())    { c=Cast::instancenorm3d; bnorm(a,x,m->options);
+ } else if(auto* m=g.as<torch::nn::LocalResponseNorm>()) { c=Cast::localnorm;      lnorm(a,x,c,m->options);
+ } else if(auto* m=g.as<torch::nn::CrossMapLRN2d>())     { c=Cast::crossmap2d;     lnorm(a,x,c,m->options);
 
  } else if(auto* m=g.as<torch::nn::Embedding>())      { c=Cast::embed;     embed(x,m);
  } else if(auto* m=g.as<torch::nn::Linear>())         { c=Cast::linear;    linear(a,x,m);

@@ -1,10 +1,6 @@
 #include "ktorch.h"
 #include "knn.h"
 
-// PDIM/XDIM fill expanding array from k pairs/dict or kth element of general list
-#define PDIM(p,d,a) psize(p,d,(*a).data())
-#define XDIM(x,k,d,a) xsize(x,k,d,(*a).data())
-
 // append a module option to a k dictionary given dict,name & value
 #define OPTION(x,k,v) dictadd(x, mset(Setting::k), v)
 
@@ -191,13 +187,13 @@ template<size_t D> Exdouble<D> exdouble(const Pairs& p,Cast c) {
 }
 
 // --------------------------------------------------------------------------------------
-// bnorm - get/set batch norm & instance norm options
-//         both module types and dimensions(1,2,3d) use the same options structure
-//         except batch norm's momentum is an optional double
+// batchnorm - get/set batch norm & instance norm options
+//             both module types and dimensions(1,2,3d) use the same options structure
+//             except batch norm's momentum is an optional double
 // --------------------------------------------------------------------------------------
 static double momentum(c10::optional<double> x) {return x.value();}
 
-template<typename O> static O bnorm(K x,J i,Cast c) {
+template<typename O> static O batchnorm(K x,J i,Cast c) {
  O o(0);
  bool in=false; Pairs p; J n=xargc(x,i,p);
  for(J j=0;j<n;++j)
@@ -222,7 +218,7 @@ template<typename O> static O bnorm(K x,J i,Cast c) {
  return o;
 }
 
-template<typename O> static void bnorm(bool a,K x,const O& o) {
+template<typename O> static void batchnorm(bool a,K x,const O& o) {
  O d(o.num_features());
  OPTION(x, in, kj(o.num_features()));
  if(a || (o.eps()      != d.eps()))      OPTION(x, eps,       kf(o.eps()));
@@ -231,10 +227,10 @@ template<typename O> static void bnorm(bool a,K x,const O& o) {
  if(a || (o.track_running_stats() != d.track_running_stats())) OPTION(x, track, kb(o.track_running_stats()));
 }
 
-// ----------------------------------------------------------------------------------
-// lnorm - local response norm, cross map 2d norm, get/set options size,alpha,beta,k
-// ----------------------------------------------------------------------------------
-template<typename O> static O lnorm(K x,J i,Cast c) {
+// -------------------------------------------------------------------------------------
+// localnorm - local response norm, cross map 2d norm, get/set options size,alpha,beta,k
+// -------------------------------------------------------------------------------------
+template<typename O> static O localnorm(K x,J i,Cast c) {
  O o(0);
  bool b=c==Cast::localnorm,sz=false; Pairs p; J n=xargc(x,i,p);
  for(J j=0;j<n;++j)
@@ -257,7 +253,7 @@ template<typename O> static O lnorm(K x,J i,Cast c) {
  return o;
 }
 
-template<typename O> static void lnorm(bool a,K x,Cast c,const O& o) {
+template<typename O> static void localnorm(bool a,K x,Cast c,const O& o) {
  O d(o.size());
  OPTION(x, size, kj(o.size()));
  if(a || (o.alpha() != d.alpha())) OPTION(x, alpha, kf(o.alpha()));
@@ -266,9 +262,9 @@ template<typename O> static void lnorm(bool a,K x,Cast c,const O& o) {
 }
 
 // --------------------------------------------------------------------------------------
-// gnorm - group norm, get/set number of groups,channels,eps,affine flag
+// groupnorm - group norm, get/set number of groups,channels,eps,affine flag
 // --------------------------------------------------------------------------------------
-static torch::nn::GroupNormOptions gnorm(K x,J i,Cast c) {
+static torch::nn::GroupNormOptions groupnorm(K x,J i,Cast c) {
  torch::nn::GroupNormOptions o(0,0);
  bool g=false,h=false; Pairs p; J n=xargc(x,i,p);
  for(J j=0;j<n;++j)
@@ -292,12 +288,42 @@ static torch::nn::GroupNormOptions gnorm(K x,J i,Cast c) {
  return o;
 }
 
-static void gnorm(bool a,K x,const torch::nn::GroupNormOptions& o) {
+static void groupnorm(bool a,K x,const torch::nn::GroupNormOptions& o) {
  torch::nn::GroupNormOptions d(o.num_groups(),o.num_channels());
  OPTION(x, groups,   kj(o.num_groups()));
  OPTION(x, channels, kj(o.num_channels()));
  if(a || (o.eps()    != d.eps()))    OPTION(x, eps,    kf(o.eps()));
  if(a || (o.affine() != d.affine())) OPTION(x, affine, kb(o.affine()));
+}
+
+// --------------------------------------------------------------------------------------
+// layernorm - get/set shape,eps,affine flag for layer normalization
+// --------------------------------------------------------------------------------------
+static torch::nn::LayerNormOptions layernorm(K x,J i,Cast c) {
+ torch::nn::LayerNormOptions o({}); IntArrayRef a; bool b=false; Pairs p; J n=xargc(x,i,p);
+ for(J j=0;j<n;++j)
+   switch(j) {
+    case 0: TORCH_CHECK(xsize(x,i+j,a), msym(c),": expecting 1st arg of normalized shape(s)"); break;
+    case 1: o.eps(mdouble(x,i+j,c,Setting::eps)); break;
+    case 2: o.elementwise_affine(mbool(x,i+j,c,Setting::affine)); break;
+    default: AT_ERROR(msym(c),": up to 3 positional arguments expected, ",n," given");
+  }
+ while(xpair(p))
+  switch(mset(p.k)) {
+   case Setting::shape:  psize(p,a); b=true; break;
+   case Setting::eps:    o.eps(mdouble(p,c)); break;
+   case Setting::affine: o.elementwise_affine(mbool(p,c)); break;
+   default: AT_ERROR("Unrecognized ",msym(c)," option: ",p.k); break;
+  }
+ TORCH_CHECK(a.size(), msym(c),": no normalized shape given");
+ return o.normalized_shape(a.vec());
+}
+
+static void layernorm(bool a,K x,const torch::nn::LayerNormOptions& o) {
+ torch::nn::LayerNormOptions d(o.normalized_shape());
+ OPTION(x, shape, klist(o.normalized_shape().size(),o.normalized_shape().data()));
+ if(a || (o.eps()    != d.eps())) OPTION(x, eps, kf(o.eps()));
+ if(a || (o.elementwise_affine() != d.elementwise_affine())) OPTION(x, affine, kb(o.elementwise_affine()));
 }
 
 // --------------------------------------------------------------------------------------
@@ -396,8 +422,8 @@ template<size_t D> static void conv(bool a,K x,const torch::nn::detail::ConvNdOp
  OPTION(x, in,   kj(o.in_channels()));
  OPTION(x, out,  kj(o.out_channels()));
  OPTION(x, size, KEX(o.kernel_size()));
- if(a || (*o.stride()  != *d.stride()))  OPTION(x, stride,    KEX(o.stride()));
- if(a || (*o.padding() != *d.padding())) OPTION(x, pad,       KEX(o.padding()));
+ if(a || (*o.stride()  != *d.stride()))  OPTION(x, stride, KEX(o.stride()));
+ if(a || (*o.padding() != *d.padding())) OPTION(x, pad,    KEX(o.padding()));
  if(t) {
   if(a || (*o.output_padding() != *d.output_padding())) OPTION(x, outpad, KEX(o.output_padding()));
  } else {
@@ -410,6 +436,88 @@ template<size_t D> static void conv(bool a,K x,const torch::nn::detail::ConvNdOp
  }
  if(a || ESYM(o.padding_mode()) != ESYM(d.padding_mode())) OPTION(x, padmode, ks(ESYM(o.padding_mode())));
 }
+
+// --------------------------------------------------------------------------------------
+// fold,unfold - set/get size,dilation,padding,stride
+// --------------------------------------------------------------------------------------
+static torch::nn::FoldOptions fold(K x,J i,Cast c) {
+ torch::nn::FoldOptions o(0,0);
+ bool out=false,sz=false; Pairs p; J n=xargc(x,i,p);
+ for(J j=0;j<n;++j)
+   switch(j) {
+    case 0: o.output_size(exarray<2>(x,i+j,c,Setting::out)); out=true; break;
+    case 1: o.kernel_size(exarray<2>(x,i+j,c,Setting::size)); sz=true; break;
+    case 2: o.dilation   (exarray<2>(x,i+j,c,Setting::dilate)); break;
+    case 3: o.padding    (exarray<2>(x,i+j,c,Setting::pad));    break;
+    case 4: o.stride     (exarray<2>(x,i+j,c,Setting::stride)); break;
+    default: AT_ERROR(msym(c),": up to 5 positional arguments expected, ",n," given");
+  }
+ while(xpair(p))
+  switch(mset(p.k)) {
+   case Setting::out:       o.output_size(exarray<2>(p,c));out=true; break;
+   case Setting::size:      o.kernel_size(exarray<2>(p,c)); sz=true; break;
+   case Setting::dilate:    o.dilation   (exarray<2>(p,c)); break;
+   case Setting::pad:       o.padding    (exarray<2>(p,c)); break;
+   case Setting::stride:    o.stride     (exarray<2>(p,c)); break;
+   default: AT_ERROR("Unrecognized fold option: ",p.k); break;
+  }
+ TORCH_CHECK(out, msym(c),": no output size given");
+ TORCH_CHECK(sz,  msym(c),": no kernel size given");
+ return o;
+}
+
+static void fold(bool a,K x,const torch::nn::FoldOptions& o) {
+ torch::nn::FoldOptions d(o.output_size(),o.kernel_size());
+ OPTION(x, out,  KEX(o.output_size()));
+ OPTION(x, size, KEX(o.kernel_size()));
+ if(a || (*o.dilation() != *d.dilation())) OPTION(x, dilate, KEX(o.dilation()));
+ if(a || (*o.padding()  != *d.padding()))  OPTION(x, pad,    KEX(o.padding()));
+ if(a || (*o.stride()   != *d.stride()))   OPTION(x, stride, KEX(o.stride()));
+}
+
+static torch::nn::UnfoldOptions unfold(K x,J i,Cast c) {
+ torch::nn::UnfoldOptions o(0);
+ bool sz=false; Pairs p; J n=xargc(x,i,p);
+ for(J j=0;j<n;++j)
+   switch(j) {
+    case 0: o.kernel_size(exarray<2>(x,i+j,c,Setting::size)); sz=true; break;
+    case 1: o.dilation   (exarray<2>(x,i+j,c,Setting::dilate)); break;
+    case 2: o.padding    (exarray<2>(x,i+j,c,Setting::pad));    break;
+    case 3: o.stride     (exarray<2>(x,i+j,c,Setting::stride)); break;
+    default: AT_ERROR(msym(c),": up to 4 positional arguments expected, ",n," given");
+  }
+ while(xpair(p))
+  switch(mset(p.k)) {
+   case Setting::size:      o.kernel_size(exarray<2>(p,c)); sz=true; break;
+   case Setting::dilate:    o.dilation   (exarray<2>(p,c)); break;
+   case Setting::pad:       o.padding    (exarray<2>(p,c)); break;
+   case Setting::stride:    o.stride     (exarray<2>(p,c)); break;
+   default: AT_ERROR("Unrecognized unfold option: ",p.k); break;
+  }
+ TORCH_CHECK(sz, msym(c),": no kernel size given");
+ return o;
+}
+
+static void unfold(bool a,K x,const torch::nn::UnfoldOptions& o) {
+ torch::nn::UnfoldOptions d(o.kernel_size());
+ OPTION(x, size, KEX(o.kernel_size()));
+ if(a || (*o.dilation() != *d.dilation())) OPTION(x, dilate, KEX(o.dilation()));
+ if(a || (*o.padding()  != *d.padding()))  OPTION(x, pad,    KEX(o.padding()));
+ if(a || (*o.stride()   != *d.stride()))   OPTION(x, stride, KEX(o.stride()));
+}
+
+static K kfold(K x,Cast c) {
+ KTRY
+  TORCH_CHECK(!x->t, msym(c)," not implemented for ",kname(x->t));
+  Tensor r, *t=xten(x,0);
+  return kresult(t, c==Cast::fold
+       ? torch::nn::functional::fold  (t ? *t : kput(x,0),   fold(x,1,c))
+       : torch::nn::functional::unfold(t ? *t : kput(x,0), unfold(x,1,c)));
+ KCATCH("fold");
+}
+
+KAPI   Fold(K x) {return kfold(x, Cast::fold);}
+KAPI Unfold(K x) {return kfold(x, Cast::unfold);}
 
 // --------------------------------------------------------------------------------------
 // drop - create dropout module given probability/set dictionary given module
@@ -1413,18 +1521,19 @@ void mdefine(Sequential &q,S s,S n=nullptr,J i=-1,K x=nullptr,K p=nullptr,K f=nu
 void mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) { 
  Cast c=msym(s); Scalar v,w;
  switch(c) {
-  case Cast::batchnorm:    PUSH(q,n,torch::nn::BatchNorm  (bnorm<torch::nn::BatchNormOptions>(x,i,c))); break;
-  case Cast::batchnorm1d:  PUSH(q,n,torch::nn::BatchNorm1d(bnorm<torch::nn::BatchNormOptions>(x,i,c))); break;
-  case Cast::batchnorm2d:  PUSH(q,n,torch::nn::BatchNorm2d(bnorm<torch::nn::BatchNormOptions>(x,i,c))); break;
-  case Cast::batchnorm3d:  PUSH(q,n,torch::nn::BatchNorm3d(bnorm<torch::nn::BatchNormOptions>(x,i,c))); break;
+  case Cast::batchnorm:    PUSH(q,n,torch::nn::BatchNorm  (batchnorm<torch::nn::BatchNormOptions>(x,i,c))); break;
+  case Cast::batchnorm1d:  PUSH(q,n,torch::nn::BatchNorm1d(batchnorm<torch::nn::BatchNormOptions>(x,i,c))); break;
+  case Cast::batchnorm2d:  PUSH(q,n,torch::nn::BatchNorm2d(batchnorm<torch::nn::BatchNormOptions>(x,i,c))); break;
+  case Cast::batchnorm3d:  PUSH(q,n,torch::nn::BatchNorm3d(batchnorm<torch::nn::BatchNormOptions>(x,i,c))); break;
 
-  case Cast::instancenorm1d:  PUSH(q,n,torch::nn::InstanceNorm1d(bnorm<torch::nn::InstanceNormOptions>(x,i,c))); break;
-  case Cast::instancenorm2d:  PUSH(q,n,torch::nn::InstanceNorm2d(bnorm<torch::nn::InstanceNormOptions>(x,i,c))); break;
-  case Cast::instancenorm3d:  PUSH(q,n,torch::nn::InstanceNorm3d(bnorm<torch::nn::InstanceNormOptions>(x,i,c))); break;
+  case Cast::instancenorm1d:  PUSH(q,n,torch::nn::InstanceNorm1d(batchnorm<torch::nn::InstanceNormOptions>(x,i,c))); break;
+  case Cast::instancenorm2d:  PUSH(q,n,torch::nn::InstanceNorm2d(batchnorm<torch::nn::InstanceNormOptions>(x,i,c))); break;
+  case Cast::instancenorm3d:  PUSH(q,n,torch::nn::InstanceNorm3d(batchnorm<torch::nn::InstanceNormOptions>(x,i,c))); break;
 
-  case Cast::groupnorm:  PUSH(q,n,torch::nn::GroupNorm(gnorm(x,i,c))); break;
-  case Cast::localnorm:  PUSH(q,n,torch::nn::LocalResponseNorm(lnorm<torch::nn::LocalResponseNormOptions>(x,i,c))); break;
-  case Cast::crossmap2d: PUSH(q,n,torch::nn::CrossMapLRN2d(lnorm<torch::nn::CrossMapLRN2dOptions>(x,i,c))); break;
+  case Cast::groupnorm:  PUSH(q,n,torch::nn::GroupNorm(groupnorm(x,i,c))); break;
+  case Cast::layernorm:  PUSH(q,n,torch::nn::LayerNorm(layernorm(x,i,c))); break;
+  case Cast::localnorm:  PUSH(q,n,torch::nn::LocalResponseNorm(localnorm<torch::nn::LocalResponseNormOptions>(x,i,c))); break;
+  case Cast::crossmap2d: PUSH(q,n,torch::nn::CrossMapLRN2d(localnorm<torch::nn::CrossMapLRN2dOptions>(x,i,c))); break;
 
   case Cast::embed:        PUSH(q,n,embed(x,i)); break;
   case Cast::linear:       PUSH(q,n,torch::nn::Linear(linear(x,i,c))); break;
@@ -1443,6 +1552,9 @@ void mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) {
   case Cast::convtranspose1d:  PUSH(q,n,ConvTranspose1d(convtran<1>(x,i,c))); break;
   case Cast::convtranspose2d:  PUSH(q,n,ConvTranspose2d(convtran<2>(x,i,c))); break;
   case Cast::convtranspose3d:  PUSH(q,n,ConvTranspose3d(convtran<3>(x,i,c))); break;
+
+  case Cast::fold:         PUSH(q,n,torch::nn::Fold(fold(x,i,c))); break;
+  case Cast::unfold:       PUSH(q,n,torch::nn::Unfold(unfold(x,i,c))); break;
 
   case Cast::maxpool1d:    PUSH(q,n,torch::nn::MaxPool1d(maxpool<1>(x,i,c))); break;
   case Cast::maxpool2d:    PUSH(q,n,torch::nn::MaxPool2d(maxpool<2>(x,i,c))); break;
@@ -1540,16 +1652,17 @@ void mdefine(Sequential &q,K x) { // define modules from k table of options or f
 void mopt(Module &g,bool a,K &v,J i) { //g:generic module, a:true if all options, v:k values, i:table row
  auto c=Cast::undefined;
  K x=xD(ktn(KS,0),ktn(0,0));
- if       (auto* m=g.as<torch::nn::BatchNorm>())         { c=Cast::batchnorm;      bnorm(a,x,m->options);
- } else if(auto* m=g.as<torch::nn::BatchNorm1d>())       { c=Cast::batchnorm1d;    bnorm(a,x,m->options);
- } else if(auto* m=g.as<torch::nn::BatchNorm2d>())       { c=Cast::batchnorm2d;    bnorm(a,x,m->options);
- } else if(auto* m=g.as<torch::nn::BatchNorm3d>())       { c=Cast::batchnorm3d;    bnorm(a,x,m->options);
- } else if(auto* m=g.as<torch::nn::InstanceNorm1d>())    { c=Cast::instancenorm1d; bnorm(a,x,m->options);
- } else if(auto* m=g.as<torch::nn::InstanceNorm2d>())    { c=Cast::instancenorm2d; bnorm(a,x,m->options);
- } else if(auto* m=g.as<torch::nn::InstanceNorm3d>())    { c=Cast::instancenorm3d; bnorm(a,x,m->options);
- } else if(auto* m=g.as<torch::nn::GroupNorm>())         { c=Cast::groupnorm;      gnorm(a,x,m->options);
- } else if(auto* m=g.as<torch::nn::LocalResponseNorm>()) { c=Cast::localnorm;      lnorm(a,x,c,m->options);
- } else if(auto* m=g.as<torch::nn::CrossMapLRN2d>())     { c=Cast::crossmap2d;     lnorm(a,x,c,m->options);
+ if       (auto* m=g.as<torch::nn::BatchNorm>())         { c=Cast::batchnorm;      batchnorm(a,x,m->options);
+ } else if(auto* m=g.as<torch::nn::BatchNorm1d>())       { c=Cast::batchnorm1d;    batchnorm(a,x,m->options);
+ } else if(auto* m=g.as<torch::nn::BatchNorm2d>())       { c=Cast::batchnorm2d;    batchnorm(a,x,m->options);
+ } else if(auto* m=g.as<torch::nn::BatchNorm3d>())       { c=Cast::batchnorm3d;    batchnorm(a,x,m->options);
+ } else if(auto* m=g.as<torch::nn::InstanceNorm1d>())    { c=Cast::instancenorm1d; batchnorm(a,x,m->options);
+ } else if(auto* m=g.as<torch::nn::InstanceNorm2d>())    { c=Cast::instancenorm2d; batchnorm(a,x,m->options);
+ } else if(auto* m=g.as<torch::nn::InstanceNorm3d>())    { c=Cast::instancenorm3d; batchnorm(a,x,m->options);
+ } else if(auto* m=g.as<torch::nn::GroupNorm>())         { c=Cast::groupnorm;      groupnorm(a,x,m->options);
+ } else if(auto* m=g.as<torch::nn::LayerNorm>())         { c=Cast::layernorm;      layernorm(a,x,m->options);
+ } else if(auto* m=g.as<torch::nn::LocalResponseNorm>()) { c=Cast::localnorm;      localnorm(a,x,c,m->options);
+ } else if(auto* m=g.as<torch::nn::CrossMapLRN2d>())     { c=Cast::crossmap2d;     localnorm(a,x,c,m->options);
 
  } else if(auto* m=g.as<torch::nn::Embedding>())      { c=Cast::embed;     embed(x,m);
  } else if(auto* m=g.as<torch::nn::Linear>())         { c=Cast::linear;    linear(a,x,m);
@@ -1567,6 +1680,9 @@ void mopt(Module &g,bool a,K &v,J i) { //g:generic module, a:true if all options
  } else if(auto* m=g.as<torch::nn::ConvTranspose1d>()){ c=Cast::convtranspose1d; conv<1>(a,x,m->options);
  } else if(auto* m=g.as<torch::nn::ConvTranspose2d>()){ c=Cast::convtranspose2d; conv<2>(a,x,m->options);
  } else if(auto* m=g.as<torch::nn::ConvTranspose3d>()){ c=Cast::convtranspose3d; conv<3>(a,x,m->options);
+
+ } else if(auto* m=g.as<torch::nn::Fold>())           { c=Cast::fold;     fold(a,x,m->options);
+ } else if(auto* m=g.as<torch::nn::Unfold>())         { c=Cast::unfold; unfold(a,x,m->options);
 
  } else if(auto* m=g.as<torch::nn::MaxPool1d>())      { c=Cast::maxpool1d; maxpool<1,torch::nn::MaxPool1dImpl>(a,x,m);
  } else if(auto* m=g.as<torch::nn::MaxPool2d>())      { c=Cast::maxpool2d; maxpool<2,torch::nn::MaxPool2dImpl>(a,x,m);
@@ -1809,6 +1925,7 @@ void nnfn(K x) {
  fn(x, "celu",       KFN(celu),        1);
  fn(x, "elu",        KFN(elu),         1);
  fn(x, "flatten",    KFN(kflatten),    1);
+ fn(x, "fold",       KFN(Fold),        1);
  fn(x, "glu",        KFN(glu),         1);
  fn(x, "hardshrink", KFN(hardshrink),  1);
  fn(x, "hardtanh",   KFN(Hardtanh),    1);
@@ -1834,6 +1951,7 @@ void nnfn(K x) {
  fn(x, "softshrink", KFN(softshrink),  1);
  fn(x, "tanhshrink", KFN(tanhshrink),  1);
  fn(x, "threshold",  KFN(Threshold),   1);
+ fn(x, "unfold",     KFN(Unfold),      1);
 }
 
 KAPI anytest(K x) {

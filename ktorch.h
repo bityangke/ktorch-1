@@ -119,7 +119,7 @@ enum class Cast:char {
  drop,            drop2d,          drop3d,     
  elu,             embed,           expand,     
  fadrop,          fdrop,           flatten,    
- fmaxpool2d,      fmaxpool3d,      gelu,       
+ fmaxpool2d,      fmaxpool3d,      fold,            gelu,       
  glu,             groupnorm,       gru,             hardshrink, 
  hardtanh,        instancenorm1d,  instancenorm2d,
  instancenorm3d,  layernorm,       leakyrelu,       linear,     
@@ -135,7 +135,7 @@ enum class Cast:char {
  softmax2d,       softmin,         softplus,
  softshrink,      softsign,        squeeze,
  tanh,            tanhshrink,      threshold,
- unsqueeze,       zeropad2d,            
+ unfold,          unsqueeze,       zeropad2d,            
 
  bce,         bcelogits,   bcelogitw,      // loss fns
  ce,          cosineloss,  ctc,
@@ -170,7 +170,7 @@ enum class Setting:char {
  iter,  k,  lambda,    layers,    log,        lower,    lr,        lrdecay,
  margin,    max,       min,       mode,       momentum, nesterov,  out,
  outpad,    outsize,   p,         pad,        padmode,  power,     ratio,
- reduce,    rows,      size,      slope,      start,    stride,    swap, 
+ reduce,    rows,      shape,     size,       slope,    start,     stride,    swap, 
  threshold, track,     train,     transpose,  type,     upper,     value,
  weight,    zeroinf
 };
@@ -572,7 +572,7 @@ typedef struct {
   std::make_tuple(cs("tanh"),torch::nn::RNNActivation::Tanh)
  }};
 
- std::array<std::tuple<S,Cast>,84> module = {{  // module sym -> enum
+ std::array<std::tuple<S,Cast>,86> module = {{  // module sym -> enum
   std::make_tuple(cs("adaptavg1d"),      Cast::adaptavg1d),
   std::make_tuple(cs("adaptavg2d"),      Cast::adaptavg2d),
   std::make_tuple(cs("adaptavg3d"),      Cast::adaptavg3d),
@@ -606,6 +606,7 @@ typedef struct {
   std::make_tuple(cs("flatten"),         Cast::flatten),
   std::make_tuple(cs("fmaxpool2d"),      Cast::fmaxpool2d),
   std::make_tuple(cs("fmaxpool3d"),      Cast::fmaxpool3d),
+  std::make_tuple(cs("fold"),            Cast::fold),
   std::make_tuple(cs("gelu"),            Cast::gelu),
   std::make_tuple(cs("glu"),             Cast::glu),
   std::make_tuple(cs("groupnorm"),       Cast::groupnorm),
@@ -655,11 +656,12 @@ typedef struct {
   std::make_tuple(cs("tanh"),            Cast::tanh),
   std::make_tuple(cs("tanhshrink"),      Cast::tanhshrink),
   std::make_tuple(cs("threshold"),       Cast::threshold),
+  std::make_tuple(cs("unfold"),          Cast::unfold),
   std::make_tuple(cs("unsqueeze"),       Cast::unsqueeze),
   std::make_tuple(cs("zeropad2d"),       Cast::zeropad2d)
  }};
 
- std::array<std::tuple<S,Setting>,50> mset = {{      // module option sym -> enum
+ std::array<std::tuple<S,Setting>,51> mset = {{      // module option sym -> enum
   std::make_tuple(cs("affine"),     Setting::affine),
   std::make_tuple(cs("alpha"),      Setting::alpha),
   std::make_tuple(cs("batchfirst"), Setting::batchfirst),
@@ -700,6 +702,7 @@ typedef struct {
   std::make_tuple(cs("ratio"),      Setting::ratio),
   std::make_tuple(cs("rows"),       Setting::rows),
   std::make_tuple(cs("size"),       Setting::size),
+  std::make_tuple(cs("shape"),      Setting::shape),
   std::make_tuple(cs("slope"),      Setting::slope),
   std::make_tuple(cs("start"),      Setting::start),
   std::make_tuple(cs("stride"),     Setting::stride),

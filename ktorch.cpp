@@ -94,7 +94,7 @@ S mapclass(Class a) {
 const char* kname(A k) {
  A t=abs(k); bool b=k<0;
  switch(t) {
-  case 0: return "list";
+  case 0: return "general list";
   case 1: return b ? "boolean scalar" : "boolean list";
   case 2: return b ? "guid scalar" : "guid list";
   case 4: return b ? "byte scalar" : "byte list";

@@ -265,6 +265,40 @@ template<typename O> static void lnorm(bool a,K x,Cast c,const O& o) {
  if(a || (o.k()     != d.k()))     OPTION(x, k,     c==Cast::localnorm ? kf(o.k()) : kj(o.k()));
 }
 
+// --------------------------------------------------------------------------------------
+// gnorm - group norm, get/set number of groups,channels,eps,affine flag
+// --------------------------------------------------------------------------------------
+static torch::nn::GroupNormOptions gnorm(K x,J i,Cast c) {
+ torch::nn::GroupNormOptions o(0,0);
+ bool g=false,h=false; Pairs p; J n=xargc(x,i,p);
+ for(J j=0;j<n;++j)
+   switch(j) {
+    case 0: o.num_groups(int64(x,i+j,c,Setting::groups)); g=true; break;
+    case 1: o.num_channels(int64(x,i+j,c,Setting::channels)); h=true; break;
+    case 2: o.eps(mdouble(x,i+j,c,Setting::eps)); break;
+    case 3: o.affine(mbool(x,i+j,c,Setting::affine)); break;
+    default: AT_ERROR(msym(c),": up to 4 positional arguments expected, ",n," given");
+  }
+ while(xpair(p))
+  switch(mset(p.k)) {
+   case Setting::groups:   o.num_groups(int64(p,c)); g=true; break;
+   case Setting::channels: o.num_channels(int64(p,c)); h=true; break;
+   case Setting::eps:      o.eps(mdouble(p,c)); break;
+   case Setting::affine:   o.affine(mbool(p,c)); break;
+   default: AT_ERROR("Unrecognized ",msym(c)," option: ",p.k); break;
+  }
+ TORCH_CHECK(g, msym(c),": specify no. of groups to separate the channels into");
+ TORCH_CHECK(h, msym(c),": specify no. of channels expected in input");
+ return o;
+}
+
+static void gnorm(bool a,K x,const torch::nn::GroupNormOptions& o) {
+ torch::nn::GroupNormOptions d(o.num_groups(),o.num_channels());
+ OPTION(x, groups,   kj(o.num_groups()));
+ OPTION(x, channels, kj(o.num_channels()));
+ if(a || (o.eps()    != d.eps()))    OPTION(x, eps,    kf(o.eps()));
+ if(a || (o.affine() != d.affine())) OPTION(x, affine, kb(o.affine()));
+}
 
 // --------------------------------------------------------------------------------------
 // convpad - translate symbol to variant used for padding mode
@@ -1388,6 +1422,7 @@ void mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) {
   case Cast::instancenorm2d:  PUSH(q,n,torch::nn::InstanceNorm2d(bnorm<torch::nn::InstanceNormOptions>(x,i,c))); break;
   case Cast::instancenorm3d:  PUSH(q,n,torch::nn::InstanceNorm3d(bnorm<torch::nn::InstanceNormOptions>(x,i,c))); break;
 
+  case Cast::groupnorm:  PUSH(q,n,torch::nn::GroupNorm(gnorm(x,i,c))); break;
   case Cast::localnorm:  PUSH(q,n,torch::nn::LocalResponseNorm(lnorm<torch::nn::LocalResponseNormOptions>(x,i,c))); break;
   case Cast::crossmap2d: PUSH(q,n,torch::nn::CrossMapLRN2d(lnorm<torch::nn::CrossMapLRN2dOptions>(x,i,c))); break;
 
@@ -1512,6 +1547,7 @@ void mopt(Module &g,bool a,K &v,J i) { //g:generic module, a:true if all options
  } else if(auto* m=g.as<torch::nn::InstanceNorm1d>())    { c=Cast::instancenorm1d; bnorm(a,x,m->options);
  } else if(auto* m=g.as<torch::nn::InstanceNorm2d>())    { c=Cast::instancenorm2d; bnorm(a,x,m->options);
  } else if(auto* m=g.as<torch::nn::InstanceNorm3d>())    { c=Cast::instancenorm3d; bnorm(a,x,m->options);
+ } else if(auto* m=g.as<torch::nn::GroupNorm>())         { c=Cast::groupnorm;      gnorm(a,x,m->options);
  } else if(auto* m=g.as<torch::nn::LocalResponseNorm>()) { c=Cast::localnorm;      lnorm(a,x,c,m->options);
  } else if(auto* m=g.as<torch::nn::CrossMapLRN2d>())     { c=Cast::crossmap2d;     lnorm(a,x,c,m->options);
 

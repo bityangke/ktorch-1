@@ -120,9 +120,9 @@ enum class Cast:char {
  elu,             embed,           expand,     
  fadrop,          fdrop,           flatten,    
  fmaxpool2d,      fmaxpool3d,      gelu,       
- glu,             gru,             hardshrink, 
+ glu,             groupnorm,       gru,             hardshrink, 
  hardtanh,        instancenorm1d,  instancenorm2d,
- instancenorm3d,  leakyrelu,       linear,     
+ instancenorm3d,  layernorm,       leakyrelu,       linear,     
  localnorm,       logsigmoid,      logsoftmax,
  lppool1d,        lppool2d,        lstm,
  maxpool1d,       maxpool2d,       maxpool3d,       out,        
@@ -572,7 +572,7 @@ typedef struct {
   std::make_tuple(cs("tanh"),torch::nn::RNNActivation::Tanh)
  }};
 
- std::array<std::tuple<S,Cast>,82> module = {{  // module sym -> enum
+ std::array<std::tuple<S,Cast>,84> module = {{  // module sym -> enum
   std::make_tuple(cs("adaptavg1d"),      Cast::adaptavg1d),
   std::make_tuple(cs("adaptavg2d"),      Cast::adaptavg2d),
   std::make_tuple(cs("adaptavg3d"),      Cast::adaptavg3d),
@@ -608,12 +608,14 @@ typedef struct {
   std::make_tuple(cs("fmaxpool3d"),      Cast::fmaxpool3d),
   std::make_tuple(cs("gelu"),            Cast::gelu),
   std::make_tuple(cs("glu"),             Cast::glu),
+  std::make_tuple(cs("groupnorm"),       Cast::groupnorm),
   std::make_tuple(cs("gru"),             Cast::gru),
   std::make_tuple(cs("hardshrink"),      Cast::hardshrink),
   std::make_tuple(cs("hardtanh"),        Cast::hardtanh),
   std::make_tuple(cs("instancenorm1d"),  Cast::instancenorm1d),
   std::make_tuple(cs("instancenorm2d"),  Cast::instancenorm2d),
   std::make_tuple(cs("instancenorm3d"),  Cast::instancenorm3d),
+  std::make_tuple(cs("layernorm"),       Cast::layernorm),
   std::make_tuple(cs("leakyrelu"),       Cast::leakyrelu),
   std::make_tuple(cs("linear"),          Cast::linear),
   std::make_tuple(cs("localnorm"),       Cast::localnorm),

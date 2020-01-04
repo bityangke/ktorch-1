@@ -2,6 +2,103 @@
 #include "knn.h"
 #include "kloss.h"
 
+#define OPTION(x,k,v) dictadd(x, lset(Setting::k), v)
+
+static Cast lmap(S s) {
+ for(auto&m:env().loss)
+  if(std::get<0>(m)==s) return std::get<1>(m);
+ AT_ERROR("Unrecognized loss function: ",s);
+}
+
+static S lmap(Cast c) {
+ for(auto&m:env().loss)
+  if(std::get<1>(m)==c) return std::get<0>(m);
+ AT_ERROR("Unrecognized loss function: ",(I)c);
+}
+
+static S lset(Setting s) {
+ for(auto&m:env().lset)
+  if(std::get<1>(m)==s) return std::get<0>(m);
+ AT_ERROR("Unrecognized loss setting: ",(I)s);
+}
+
+using LossPtr=std::shared_ptr<Module>;
+/*
+struct TORCH_API KLoss : public Ktag {
+ KLoss(Cast x,const LossPtr& y) : l(std::move(y)) {a=Class::loss; c=x;}
+ LossPtr l;
+};
+*/
+
+struct TORCH_API KLoss : public Ktag {
+ KLoss(Cast x,const AnyModule& y) : l(std::move(y)) {a=Class::loss; c=x;}
+ torch::nn::AnyModule l;
+};
+
+K kLoss(Cast x,const AnyModule& y) {return kptr(new KLoss(x,y));}
+
+KLoss* xLoss(K x) {auto* g=xtag(x); return (g && g->a==Class::loss) ? (KLoss*)g : nullptr;}
+KLoss* xLoss(K x,J i) {return xind(x,i) ? xLoss(kK(x)[i]) : nullptr;}
+
+KAPI loss1(K x) {
+ KTRY
+  Cast c=lmap(x->s); AnyModule a;
+  switch(c) {
+   case Cast::bce:         a=AnyModule(torch::nn::BCELoss()); break;
+   case Cast::mse:         a=AnyModule(torch::nn::MSELoss(torch::kNone)); break;
+   case Cast::l1:          a=AnyModule(torch::nn::L1Loss()); break;
+   case Cast::cosineloss:  a=AnyModule(torch::nn::CosineEmbeddingLoss(torch::nn::CosineEmbeddingLossOptions().reduction(torch::kSum).margin(0.001))); break;
+   default: AT_ERROR("Unrecognized loss function: ",x->s); break;
+ }
+ return kLoss(c,a);
+ KCATCH("loss1");
+}
+
+static K lossopts(bool a,Cast c,const AnyModule& g) { //g:generic module, a:true if all options, v:k values, i:table row
+ K x=xD(ktn(KS,0),ktn(0,0));
+ switch(c) {
+  case Cast::bce: OPTION(x, reduce, ks(ESYM(g.get<torch::nn::BCELoss>()->options.reduction()))); break;
+  case Cast::mse: OPTION(x, reduce, ks(ESYM(g.get<torch::nn::MSELoss>()->options.reduction()))); break;
+  case Cast::cosineloss: {
+   auto o=g.get<torch::nn::CosineEmbeddingLoss>()->options;
+   OPTION(x, margin, kf(o.margin()));
+   OPTION(x, reduce, ks(ESYM(o.reduction())));
+   break;
+  }
+  default: AT_ERROR("Unrecognized loss module");
+ }
+ return x;
+}
+
+KAPI loss2(K x) {
+ KTRY
+  auto* l=xLoss(x);
+  if(l) {
+   bool a=env().alloptions;
+   K k=ktn(KS,2),v=ktn(0,2);
+   kS(k)[0]=statekey(State::module);
+   kS(k)[1]=statekey(State::options);
+   kK(v)[0]=ks(lmap(l->c));
+   kK(v)[1]=lossopts(a,l->c,l->l);
+   return xD(k,v);
+  } else {
+   return KERR("not a loss pointer");
+  }
+ KCATCH("loss2");
+}
+
+KAPI loss3(K x,K y) {
+ KTRY
+  KLoss *l=xLoss(x); Tensor a,b,c,r;
+  TORCH_CHECK(l,"Supply a loss module");
+  if(xten(y,0,a) && xten(y,1,b) && xten(y,2,c)) {
+    r=l->l.forward(a,b,c);
+  } else if(xten(y,0,a) && xten(y,1,b)) {
+    r=l->l.forward(a,b);
+  }
+  return r.defined() ? kget(r) : (K)0;
+ KCATCH("loss3");
+}
 //#include <c10/cuda/CUDAMacros.h>
 //#include <c10/cuda/CUDACachingAllocator.h>
 

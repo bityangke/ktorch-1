@@ -98,6 +98,7 @@ static K mvals(bool b,J n) {
 // int64 - check positional args or name-value pairs for long int, else error w'module & option
 // int64n - int64 but returns optional, i.e. nullopt if k value is null
 // mdouble - check for double(or long) from positional or name-value pair arg
+// optdouble - call mdouble() but return null if k null supplied
 // exarray - check positional or name-value args for long(s), return expanding array,  else error
 // exdouble - similar to exarray, but for double array
 // ----------------------------------------------------------------------------------------------------
@@ -147,6 +148,9 @@ static double mdouble(const Pairs& p,Cast c) {
  TORCH_CHECK(p.t==-KJ || p.t==-KF, msym(c)," ",p.k,": expected double, given ",kname(p.t));
  return pdouble(p);
 }
+
+static c10::optional<double> optdouble(K x,J i,Cast c,Setting s) {double d=mdouble(x,i,c,s); if(d==d) return d; else return c10::nullopt;}
+static c10::optional<double> optdouble(const Pairs& p,Cast c)    {double d=mdouble(p,c);     if(d==d) return d; else return c10::nullopt;}
 
 template<size_t D> ExpandingArray<D> exarray(K a,J i,Cast c,Setting s) {
  K x=kK(a)[i];
@@ -333,15 +337,12 @@ static void layernorm(bool a,K x,const torch::nn::LayerNormOptions& o) {
 //        ConvOptions & ConvTransOptions have different members, 
 // convtran - similar to conv() except adds output_padding and changes position order
 // --------------------------------------------------------------------------------------
-typedef c10::variant<torch::enumtype::kZeros, torch::enumtype::kCircular> Convpad;
-static Convpad convpad(S s) {
- Convpad p;
+static torch::nn::detail::conv_padding_mode_t convpad(S s) {
  switch(emap(s)) {
-  case Enum::zeros:     p=torch::kZeros; break;
-  case Enum::circular:  p=torch::kCircular; break;
+  case Enum::zeros:    return torch::kZeros;
+  case Enum::circular: return torch::kCircular;
   default: AT_ERROR("unrecognized padding mode: ",s); break;
  }
- return p;
 }
 
 template<size_t D> static torch::nn::ConvOptions<D> conv(K x,J i,Cast c) {
@@ -548,26 +549,90 @@ static void drop(bool a,K x,const torch::nn::DropoutOptions& o) {
 // --------------------------------------------------------------------------------------
 // embed - create embedding module given options/set dictionary of options given module
 // --------------------------------------------------------------------------------------
-torch::nn::Embedding embed(K x,J k) {
- Pairs p; J i=-1,j=-1,n=xargc(x,k,p);
- if(!((n==0 && p.n) || (xlong(x,k,i) && (n==1 || (n==2 && xlong(x,k+1,j))))))
-  AT_ERROR("Unrecognized arguments for embedding module");
- while(xpair(p))
-  switch(mset(p.k)) {
-   case Setting::rows: i=plong(p); break;
-   case Setting::cols: j=plong(p); break;
-   default: AT_ERROR("Embedding option: ",p.k," unrecognized, expected one of rows,cols");
-  }
- if(i<0 || j<0) {
-  AT_ERROR("Embedding rows & cols of embedding size must be non-negative, rows=",i,", cols=",j);
+static torch::nn::EmbeddingBagMode embedmode(S s) {
+ switch(emap(s)) {
+  case Enum::sum:  return torch::kSum;
+  case Enum::mean: return torch::kMean;
+  case Enum::max:  return torch::kMax;
+  default: AT_ERROR("unrecognized mode for embedding bag: ",s);
  }
- return torch::nn::Embedding(i,j);
 }
 
-static void embed(K x,const torch::nn::EmbeddingImpl* m) {
- auto o=m->options;
- OPTION(x, rows, kj(o.num_embeddings()));
- OPTION(x, cols, kj(o.embedding_dim()));
+static void embedmode(torch::nn::EmbeddingOptions& o,S s) {AT_ERROR("cannot specify mode for embed module");}
+static void embedmode(torch::nn::EmbeddingBagOptions& o,S s) { o.mode(embedmode(s));}
+
+static torch::nn::Embedding embed(K x,J i,Cast c) {
+ bool a=false,b=false,z=false; Pairs p; Tensor w; J n=xargc(x,i,p); torch::nn::EmbeddingOptions o(0,0);
+ for(J j=0;j<n;++j) {
+   switch(j) {
+    case 0:
+     switch(kK(x)[i+j]->t) {
+      case 0:   if(!xten(x,i+j,w)) w=kput(x,i+j); break;
+      case -KJ: o.num_embeddings(int64(x,i+j,c,Setting::rows)); a=true; break;
+      default:  AT_ERROR("embed: 1st arg is number of rows or weight matrix");
+     }
+     break;
+    case 1: 
+     if(w.defined()) z=mbool(x,i+j,c,Setting::freeze);
+     else  o.embedding_dim(int64(x,i+j,c,Setting::cols)), b=true;
+     break;
+    case 2: o.padding_idx(int64n(x,i+j,c,Setting::padindex)); break;
+    case 3: o.max_norm(optdouble(x,i+j,c,Setting::maxnorm)); break;
+    case 4: o.norm_type(mdouble(x,i+j,c,Setting::p)); break;
+    case 5: o.scale_grad_by_freq(mbool(x,i+j,c,Setting::scale)); break;
+    case 6: o.sparse(mbool(x,i+j,c,Setting::sparse)); break;
+    default: AT_ERROR(msym(c),": up to 7 positional arguments expected, ",n," given");
+  }
+ }
+ while(xpair(p))
+  switch(mset(p.k)) {
+   case Setting::rows:     o.num_embeddings(int64(p,c)); a=true; break;
+   case Setting::cols:     o.embedding_dim (int64(p,c)); b=true; break;
+   case Setting::padindex: o.padding_idx(int64n(p,c)); break;
+   case Setting::maxnorm:  o.max_norm(optdouble(p,c)); break;
+   case Setting::p:        o.norm_type(mdouble(p,c)); break;
+   case Setting::scale:    o.scale_grad_by_freq(mbool(p,c)); break;
+   case Setting::mode:     embedmode(o,mode(p,c)); break;
+   case Setting::sparse:   o.sparse(mbool(p,c)); break;
+   case Setting::weight:   if(!pempty(p)) pten(p,w); break;
+   case Setting::freeze:   z=mbool(p,c); break;
+   default: AT_ERROR("Embedding option: ",p.k," unrecognized");
+  }
+ if(w.defined()) {
+  TORCH_CHECK(w.dim()==2, msym(c),": ",w.dim(),"-dim weights given, 2-dim matrix expected");
+  TORCH_CHECK(w.is_floating_point(), msym(c),": weight matrix is not floating point");
+  if(!a)
+   o.num_embeddings(w.size(0));
+  else
+   TORCH_CHECK(o.num_embeddings()==w.size(0), "rows = ",o.num_embeddings()," but weights are ",w.sizes());
+  if(!b)
+   o.embedding_dim(w.size(1));
+  else
+   TORCH_CHECK(o.embedding_dim() ==w.size(1), "cols = ",o.embedding_dim(), " but weights are ",w.sizes());
+  auto m=torch::nn::Embedding(o._weight(w));
+  m->weight.set_requires_grad(!z);
+  return m;
+ } else {
+  TORCH_CHECK(a,"embed: supply number of rows in the embedding matrix");
+  TORCH_CHECK(b,"embed: supply number of cols in the embedding matrix");
+  return torch::nn::Embedding(o);
+ }
+}
+
+static void embed(bool a,K x,const torch::nn::EmbeddingImpl* m) {
+ torch::nn::EmbeddingOptions o=m->options, d(o.num_embeddings(),o.embedding_dim());
+ if(o._weight().defined()) {
+  OPTION(x, weight, kget(o._weight()));
+  OPTION(x, freeze, kb(!m->weight.requires_grad()));
+ } else {
+  OPTION(x, rows, kj(o.num_embeddings()));
+  OPTION(x, cols, kj(o.embedding_dim()));
+ }
+ if(a || o.padding_idx().has_value()) OPTION(x, padindex, kj(o.padding_idx() ? o.padding_idx().value() : nj));
+ if(a || o.max_norm().has_value())    OPTION(x, maxnorm,  kf(o.max_norm()    ? o.max_norm().value()    : nf));
+ if(a || o.norm_type()          != d.norm_type())          OPTION(x, p,      kf(o.norm_type()));
+ if(a || o.scale_grad_by_freq() != d.scale_grad_by_freq()) OPTION(x, scale,  kb(o.scale_grad_by_freq()));
+ if(a || o.sparse()             != d.sparse())             OPTION(x, sparse, kb(o.sparse()));
 }
 
 // --------------------------------------------------------------------------------------
@@ -869,7 +934,7 @@ template<size_t D> static torch::nn::LPPoolOptions<D> lppool(K x,J i,Cast c) {
  bool pw=false,sz=false,st=false; Pairs p; J n=xargc(x,i,p);
  for(J j=0;j<n;++j) {
    switch(j) {
-    case 0: o.norm_type  (mdouble(x,i+j,  c,Setting::power));   pw=true; break;
+    case 0: o.norm_type  (mdouble(x,i+j,c,Setting::p));         pw=true; break;
     case 1: o.kernel_size(exarray<D>(x,i+j,c,Setting::size));   sz=true; break;
     case 2: o.stride     (exarray<D>(x,i+j,c,Setting::stride)); st=true; break;
     case 3: o.ceil_mode  (mbool    (x,i+j,c,Setting::ceiling)); break;
@@ -878,7 +943,7 @@ template<size_t D> static torch::nn::LPPoolOptions<D> lppool(K x,J i,Cast c) {
  }
  while(xpair(p))
   switch(mset(p.k)) {
-   case Setting::power:   o.norm_type  (mdouble   (p,c)); pw=true; break;
+   case Setting::p:       o.norm_type  (mdouble   (p,c)); pw=true; break;
    case Setting::size:    o.kernel_size(exarray<D>(p,c)); sz=true; break;
    case Setting::stride:  o.stride     (exarray<D>(p,c)); st=true; break;
    case Setting::ceiling: o.ceil_mode  (mbool(p,c)); break;
@@ -892,8 +957,8 @@ template<size_t D> static torch::nn::LPPoolOptions<D> lppool(K x,J i,Cast c) {
 
 template<size_t D,typename M> static void lppool(bool a,K x,const M* m) {
  torch::nn::LPPoolOptions<D> o=m->options, d(o.norm_type(),o.kernel_size());
- OPTION(x, power, kf(o.norm_type()));
- OPTION(x, size,  KEX(o.kernel_size()));
+ OPTION(x, p,    kf(o.norm_type()));
+ OPTION(x, size, KEX(o.kernel_size()));
  if(a || *o.stride()   != *d.stride())   OPTION(x, stride,  KEX(o.stride()));
  if(a || o.ceil_mode() != d.ceil_mode()) OPTION(x, ceiling, kb(o.ceil_mode()));
 }
@@ -1535,7 +1600,7 @@ void mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) {
   case Cast::localnorm:  PUSH(q,n,torch::nn::LocalResponseNorm(localnorm<torch::nn::LocalResponseNormOptions>(x,i,c))); break;
   case Cast::crossmap2d: PUSH(q,n,torch::nn::CrossMapLRN2d(localnorm<torch::nn::CrossMapLRN2dOptions>(x,i,c))); break;
 
-  case Cast::embed:        PUSH(q,n,embed(x,i)); break;
+  case Cast::embed:        PUSH(q,n,embed(x,i,c)); break;
   case Cast::linear:       PUSH(q,n,torch::nn::Linear(linear(x,i,c))); break;
 
   case Cast::drop:         PUSH(q,n,torch::nn::Dropout(drop(x,i,c))); break;
@@ -1664,7 +1729,7 @@ void mopt(Module &g,bool a,K &v,J i) { //g:generic module, a:true if all options
  } else if(auto* m=g.as<torch::nn::LocalResponseNorm>()) { c=Cast::localnorm;      localnorm(a,x,c,m->options);
  } else if(auto* m=g.as<torch::nn::CrossMapLRN2d>())     { c=Cast::crossmap2d;     localnorm(a,x,c,m->options);
 
- } else if(auto* m=g.as<torch::nn::Embedding>())      { c=Cast::embed;     embed(x,m);
+ } else if(auto* m=g.as<torch::nn::Embedding>())      { c=Cast::embed;     embed(a,x,m);
  } else if(auto* m=g.as<torch::nn::Linear>())         { c=Cast::linear;    linear(a,x,m);
 
  } else if(auto* m=g.as<torch::nn::Dropout>())             { c=Cast::drop;   drop(a,x,m->options);
@@ -1954,87 +2019,12 @@ void nnfn(K x) {
  fn(x, "unfold",     KFN(Unfold),      1);
 }
 
-KAPI anytest(K x) {
- Sequential q(
-  torch::nn::AdaptiveAvgPool1d(2),
-  torch::nn::AdaptiveAvgPool2d(2),
-  torch::nn::AdaptiveAvgPool3d(2),
-  torch::nn::AdaptiveMaxPool1d(2),
-  torch::nn::AdaptiveMaxPool2d(2),
-  torch::nn::AdaptiveMaxPool3d(2),
-  torch::nn::AvgPool1d(2),
-  torch::nn::AvgPool2d(2),
-  torch::nn::AvgPool3d(2),
-  torch::nn::BatchNorm(5),
-  torch::nn::CELU(torch::nn::CELUOptions().alpha(1.0)),
-  torch::nn::Conv1d(1,2,3),
-  torch::nn::Conv2d(1,2,3),
-  torch::nn::Conv3d(1,2,3),
-  torch::nn::Dropout(.5),
-  torch::nn::FeatureDropout(.5),
-  torch::nn::FeatureDropout(),
-  torch::nn::FeatureDropout(.2),
-  torch::nn::AlphaDropout(.5),
-  torch::nn::AlphaDropout(),
-  torch::nn::AlphaDropout(.2),
-  torch::nn::FeatureAlphaDropout(.5),
-  torch::nn::FeatureAlphaDropout(),
-  torch::nn::FeatureAlphaDropout(.25),
-  torch::nn::ELU(),
-  torch::nn::Embedding(4,10),
-  torch::nn::FeatureDropout(.5),
-  FractionalMaxPool2d(FractionalMaxPoolOptions<2>(3).ratio(.5)),
-  FractionalMaxPool3d(FractionalMaxPoolOptions<3>(3).ratio(.5)),
-  torch::nn::GLU(),
-  torch::nn::GLU(2),
-  torch::nn::GRU(4,5),
-  torch::nn::Hardshrink(.5),
-  torch::nn::Hardtanh(),
-  torch::nn::LSTM(4,5),
-  torch::nn::LeakyReLU(),
-  torch::nn::Linear(3,4),
-  torch::nn::LogSigmoid(),
-  torch::nn::LogSoftmax(1), //,torch::kDouble),
-  torch::nn::LPPool1d(2,3),
-  torch::nn::LPPool2d(2,3),
-  torch::nn::MaxPool1d(2),
-  torch::nn::MaxPool2d(2),
-  torch::nn::MaxPool3d(2),
-  torch::nn::PReLU(torch::nn::PReLUOptions().num_parameters(1)),
-  Pad(LongVector{1,1}),
-  torch::nn::RNN(4,5),
-  torch::nn::RReLU(),
-  torch::nn::GELU(),
-  torch::nn::ReLU(),
-  torch::nn::ReLU(true),
-  torch::nn::ReLU6(),
-  torch::nn::ReLU6(true),
-  torch::nn::ReflectionPad1d(2),
-  torch::nn::ReflectionPad2d(2),
-  torch::nn::ReplicationPad1d(2),
-  torch::nn::ReplicationPad2d(2),
-  torch::nn::ReplicationPad3d(2),
-  torch::nn::SELU(),
-  torch::nn::SELU(true),
-  torch::nn::Sigmoid(),
-  torch::nn::Softsign(),
-  torch::nn::Softmax(-1),
-  torch::nn::Softmin(1),
-  torch::nn::Softplus(),
-  torch::nn::Softshrink(.5),
-  torch::nn::Tanh(),
-  torch::nn::Tanhshrink(),
-  torch::nn::Threshold(.1,20),
-  torch::nn::Flatten(),
-  //torch::nn::Flatten(1),
-  //torch::nn::Flatten(1,-1),
-  Squeeze(),
-  Squeeze(SqueezeOptions().inplace(true)),
-  Squeeze(-1),
-  Squeeze(-1,true),
-  Unsqueeze(-1),
-  Unsqueeze(-1,true),
-  Unsqueeze(-1,false)
- );
- return kseq(q);
-}
+/*
+ -fractional pool
+ -pad 
+ -functional form of various normalization methods
+ -embedding, embeddingbag
+ -multi-head attention
+ -bilinear & identity layers
+ -pairwise & cosine similarity distance 
+*/

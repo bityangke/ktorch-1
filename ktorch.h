@@ -68,6 +68,7 @@ using TypeMeta=caffe2::TypeMeta;
 using TensorOptions=torch::TensorOptions;
 using TensorList=torch::TensorList;
 using Module=torch::nn::Module;
+using AnyModule=torch::nn::AnyModule;
 using Sequential=torch::nn::Sequential;
 using OptimizerBase=torch::optim::detail::OptimizerBase;
 using Optptr=std::shared_ptr<OptimizerBase>;
@@ -117,7 +118,7 @@ enum class Cast:char {
  conv1d,          conv2d,          conv3d,     
  convtranspose1d, convtranspose2d, convtranspose3d, crossmap2d,
  drop,            drop2d,          drop3d,     
- elu,             embed,           expand,     
+ elu,             embed,           embedbag,        expand,     
  fadrop,          fdrop,           flatten,    
  fmaxpool2d,      fmaxpool3d,      fold,            gelu,       
  glu,             groupnorm,       gru,             hardshrink, 
@@ -165,12 +166,12 @@ enum class Setting:char {
  affine,    alpha,     amsgrad,   batchfirst, beta,     beta1,     beta2,  
  bi,        bias,      blank,     ceiling,    centered, changetol, channels, cols,   
  countpad,  dampening, decay,     dilate,     dim,      divisor,   drop,   
- end,       eps,       eval,      fn,         full,     gradtol,   groups, 
+ end,       eps,       eval,      fn,         freeze,   full,     gradtol,   groups, 
  hidden,    history,   ignore,    in,         indices,  init,      inplace,
  iter,  k,  lambda,    layers,    log,        lower,    lr,        lrdecay,
- margin,    max,       min,       mode,       momentum, nesterov,  out,
- outpad,    outsize,   p,         pad,        padmode,  power,     ratio,
- reduce,    rows,      shape,     size,       slope,    start,     stride,    swap, 
+ margin,    max,       maxnorm,   min,       mode,       momentum, nesterov,  out,
+ outpad,    outsize,   p,         pad,        padindex, padmode,   ratio,
+ reduce,    rows,      scale,     shape,     size,       slope,    sparse,    start,     stride,    swap, 
  threshold, track,     train,     transpose,  type,     upper,     value,
  weight,    zeroinf
 };
@@ -572,7 +573,7 @@ typedef struct {
   std::make_tuple(cs("tanh"),torch::nn::RNNActivation::Tanh)
  }};
 
- std::array<std::tuple<S,Cast>,86> module = {{  // module sym -> enum
+ std::array<std::tuple<S,Cast>,87> module = {{  // module sym -> enum
   std::make_tuple(cs("adaptavg1d"),      Cast::adaptavg1d),
   std::make_tuple(cs("adaptavg2d"),      Cast::adaptavg2d),
   std::make_tuple(cs("adaptavg3d"),      Cast::adaptavg3d),
@@ -600,6 +601,7 @@ typedef struct {
   std::make_tuple(cs("drop3d"),          Cast::drop3d),
   std::make_tuple(cs("elu"),             Cast::elu),
   std::make_tuple(cs("embed"),           Cast::embed),
+  std::make_tuple(cs("embedbag"),        Cast::embedbag),
   std::make_tuple(cs("expand"),          Cast::expand),
   std::make_tuple(cs("fdrop"),           Cast::fdrop),
   std::make_tuple(cs("fadrop"),          Cast::fadrop),
@@ -661,7 +663,7 @@ typedef struct {
   std::make_tuple(cs("zeropad2d"),       Cast::zeropad2d)
  }};
 
- std::array<std::tuple<S,Setting>,51> mset = {{      // module option sym -> enum
+ std::array<std::tuple<S,Setting>,57> mset = {{      // module option sym -> enum
   std::make_tuple(cs("affine"),     Setting::affine),
   std::make_tuple(cs("alpha"),      Setting::alpha),
   std::make_tuple(cs("batchfirst"), Setting::batchfirst),
@@ -679,6 +681,7 @@ typedef struct {
   std::make_tuple(cs("end"),        Setting::end),
   std::make_tuple(cs("eps"),        Setting::eps),
   std::make_tuple(cs("fn"),         Setting::fn),
+  std::make_tuple(cs("freeze"),     Setting::freeze),
   std::make_tuple(cs("groups"),     Setting::groups),
   std::make_tuple(cs("hidden"),     Setting::hidden),
   std::make_tuple(cs("in"),         Setting::in),
@@ -690,20 +693,24 @@ typedef struct {
   std::make_tuple(cs("layers"),     Setting::layers),
   std::make_tuple(cs("lower"),      Setting::lower),
   std::make_tuple(cs("max"),        Setting::max),
+  std::make_tuple(cs("maxnorm"),    Setting::maxnorm),
   std::make_tuple(cs("min"),        Setting::min),
   std::make_tuple(cs("mode"),       Setting::mode),
   std::make_tuple(cs("momentum"),   Setting::momentum),
   std::make_tuple(cs("out"),        Setting::out),
   std::make_tuple(cs("outpad"),     Setting::outpad),
   std::make_tuple(cs("outsize"),    Setting::outsize),
+  std::make_tuple(cs("p"),          Setting::p),
   std::make_tuple(cs("pad"),        Setting::pad),
+  std::make_tuple(cs("padindex"),   Setting::padindex),
   std::make_tuple(cs("padmode"),    Setting::padmode),
-  std::make_tuple(cs("power"),      Setting::power),
   std::make_tuple(cs("ratio"),      Setting::ratio),
   std::make_tuple(cs("rows"),       Setting::rows),
+  std::make_tuple(cs("scale"),      Setting::scale),
   std::make_tuple(cs("size"),       Setting::size),
   std::make_tuple(cs("shape"),      Setting::shape),
   std::make_tuple(cs("slope"),      Setting::slope),
+  std::make_tuple(cs("sparse"),     Setting::sparse),
   std::make_tuple(cs("start"),      Setting::start),
   std::make_tuple(cs("stride"),     Setting::stride),
   std::make_tuple(cs("threshold"),  Setting::threshold),
@@ -712,7 +719,8 @@ typedef struct {
   std::make_tuple(cs("transpose"),  Setting::transpose),
   std::make_tuple(cs("type"),       Setting::type),
   std::make_tuple(cs("upper"),      Setting::upper),
-  std::make_tuple(cs("value"),      Setting::value)
+  std::make_tuple(cs("value"),      Setting::value),
+  std::make_tuple(cs("weight"),     Setting::weight)
  }};
 
  std::array<std::tuple<S,State>,6> state = {{         //state dictionary keys: map symbol -> enum

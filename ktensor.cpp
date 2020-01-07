@@ -31,7 +31,8 @@ K kgetscalar(const Tensor &t){
  }
 }
 
-static K kgets(I i,I j,A k,J b,const int64_t *s,S &p) { //i:depth, j:max depth, k:k type, b:bytes to copy, s:sizes, p:data ptr
+static K kgets(I i,I j,Ktype k,J b,const int64_t *s,S &p) {
+//i:depth, j:max depth, k:k type, b:bytes to copy, s:sizes, p:data ptr
  K x=ktn((i<j) ? 0 : k,s[i]);                     //create k list
  if(x->t) {                                       //if base type
   if(x->n) {                                      //   and non-zero length
@@ -565,7 +566,7 @@ K tensorsize(const Tensor &t,Attr a) {
  }
 }
 
-K tensorattr(const Tensor &t,A k,Attr a) {
+K tensorattr(const Tensor &t,Ktype k,Attr a) {
  switch(k) {
   case -KJ: return kj(tensorlong(t,a));
   case  KJ: return tensorsize(t,a);
@@ -575,7 +576,7 @@ K tensorattr(const Tensor &t,A k,Attr a) {
  }
 }
 
-K vectorattr(const TensorVector &v,A k,Attr a) {
+K vectorattr(const TensorVector &v,Ktype k,Attr a) {
  size_t i=0; K x=ktn(k<0 ? abs(k) : 0, v.size());
  try {
   for(auto&t:v) {

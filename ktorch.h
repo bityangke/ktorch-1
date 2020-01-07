@@ -53,7 +53,7 @@
 #define Ksize torch::SmallVector<int64_t,8>
 #define cs(x) ss((S)x)
 
-using A=signed char;
+using Ktype=signed char;
 using Storage=torch::Storage;
 using Tensor=torch::Tensor;
 using Scalar=torch::Scalar;
@@ -78,11 +78,11 @@ using TensorDict = torch::OrderedDict<std::string, torch::Tensor>;
 class TORCH_API Loss;
 using Lossptr=std::shared_ptr<Loss>;
 using at::detail::computeStorageSize;
-using at::Reduction::Reduction;
+using torch::Reduction::Reduction;
 
 typedef struct {
- A a = 0;  // type: 1-dict, 2-list of pairs, 3-general list, 4-sym list
- A t = 0;  // type of value in last pair processed
+ Ktype a = 0;  // type: 1-dict, 2-list of pairs, 3-general list, 4-sym list
+ Ktype t = 0;  // type of value in last pair processed
  H i = 0;  // next pair to process
  H n = 0;  // count of pairs
  S k = 0;  // name of an evaluated name,value pair
@@ -220,6 +220,11 @@ struct TORCH_API Kseq : public Ktag {
  Kseq(const Sequential& x) : q(std::move(x)) {a=Class::sequential; c=Cast::sequential;}
 };
 
+struct TORCH_API Kmodule : public Ktag {
+ Kmodule(Class x,Cast y,const AnyModule& l) : m(std::move(l)) {a=x; c=y;}
+ torch::nn::AnyModule m;
+};
+
 struct TORCH_API Kloss : public Ktag {
  Lossptr l;
  Kloss(Cast x,const Lossptr& y) : l(std::move(y)) {a=Class::loss; c=x;}
@@ -257,11 +262,11 @@ bool match(const Scalar&,const Scalar&);
 K kscalar(const Scalar&);
 J xlen(K);
 J xlen(K,J);
-const char* kname(A);
+const char* kname(Ktype);
 const char* kname(K);
-J ksizeof(A);
-A maptype(TypeMeta);
-TypeMeta maptype(A);
+J ksizeof(Ktype);
+Ktype maptype(TypeMeta);
+TypeMeta maptype(Ktype);
 S mapclass(Class);
 S mapattr(Attr);
 Enum emap(S);
@@ -395,7 +400,7 @@ S& optsym(const bool&);
 K optkey();
 K optval(const TensorOptions &o,K x,J i=-1);
 K optmap(const TensorOptions&);
-K kcast(A,K);
+K kcast(Ktype,K);
 K kbool(K);
 K kdict(const TensorDict&);
 J kfind(K,const std::string&);
@@ -428,8 +433,8 @@ K kten3(bool,Tensor&,Tensor&,Tensor&);
 J tensorlong(const Tensor&,Attr);
 S tensorsym(const Tensor&,Attr);
 K tensorsize(const Tensor&,Attr);
-K tensorattr(const Tensor&,A,Attr);
-K vectorattr(const TensorVector&,A,Attr);
+K tensorattr(const Tensor&,Ktype,Attr);
+K vectorattr(const TensorVector&,Ktype,Attr);
 K tensorinfo(const Tensor&,bool);
 K vectorinfo(const TensorVector&,bool);
 void tensorcopy(Tensor&,const Tensor&,bool async=false);
@@ -454,23 +459,24 @@ K kseq(const Sequential&);
 K seqto(Kseq*,const TensorOptions&,bool);
 K mtable(const Sequential& q,bool a,bool b=true);
 K seqforward(Sequential&,K);
-K seqattr(const Sequential&,A,Attr);
+K seqattr(const Sequential&,Ktype,Attr);
 void nnfn(K);
 K mstate(K);
 
 // loss functions:
 K kloss(Cast,const Lossptr&);
+K kloss(Cast,const AnyModule&);
 K lossdict(Ktag*,K);
 K lossdict(bool,bool,Cast,Loss*);
 K lossto(Kloss*,const TensorOptions&,bool);
-K lossattr(const Lossptr&,A,Attr);
+K lossattr(const Lossptr&,Ktype,Attr);
 void lossfn(K);
 
 // optimization functions:
 K kopt(Cast,const Optptr&);
 K optstate(Ktag*,K);
 K optstate(bool,bool,Cast,OptimizerBase*);
-K optattr(const Optptr&,A,Attr);
+K optattr(const Optptr&,Ktype,Attr);
 void optfn(K);
 
 // model functions:
@@ -487,7 +493,7 @@ typedef struct {
 
  std::vector<std::tuple<S,torch::Device>> device;
 
- std::array<std::tuple<A,TypeMeta>,8> ktype = {{               //k type -> torch type
+ std::array<std::tuple<Ktype,TypeMeta>,8> ktype = {{           //k type -> torch type
   std::make_tuple(KE, at::scalarTypeToTypeMeta(at::kFloat)),
   std::make_tuple(KF, at::scalarTypeToTypeMeta(at::kDouble)),
   std::make_tuple(KJ, at::scalarTypeToTypeMeta(at::kLong)),
@@ -498,7 +504,7 @@ typedef struct {
   std::make_tuple(KC, at::scalarTypeToTypeMeta(at::kChar))
  }};
 
- std::array<std::tuple<S,TypeMeta,A>,9> dtype = {{                            //sym -> torch type -> k type
+ std::array<std::tuple<S,TypeMeta,Ktype>,9> dtype = {{       //sym -> torch type -> k type
   std::make_tuple(cs("float"),  at::scalarTypeToTypeMeta(at::kFloat),  KE),
   std::make_tuple(cs("double"), at::scalarTypeToTypeMeta(at::kDouble), KF),
   std::make_tuple(cs("half"),   at::scalarTypeToTypeMeta(at::kHalf),   KE),

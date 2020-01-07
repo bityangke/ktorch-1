@@ -34,10 +34,9 @@ using Lwi = Tensor (*)(const Tensor&, const Tensor&, const Tensor&, int64_t, int
 // kloss - given loss type & shared pointer to newly created loss module, return kptr
 // lmap - map to/from sym to loss function name, e.g. `mse <-> Cast::mse
 // lset - map to/from sym to loss setting enum, e.g. `reduce <-> Setting::reduce
-// rmsg,rmap - message and mapping for loss reduction to/from sym and enumeration
-// xreduce - check if sym, if matches loss reduction, set int, e.g. `none -> 0, `mean -> 1, `sum -> 2
 // ------------------------------------------------------------------------------------------------------
 K kloss(Cast x,const Lossptr& y) {return kptr(new Kloss(x,y));}
+K kloss(Cast c,const AnyModule& m) {return kptr(new Kmodule(Class::loss,c,m));}
 
 static Cast lmap(S s) {
  for(auto&m:env().loss)
@@ -63,6 +62,36 @@ static Setting lset(S s) {
  AT_ERROR("Unrecognized loss setting: ",s);
 }
 
+// ----------------------------------------------------------------------------------------------------
+// input checking fns with error msg specific to loss module name and setting
+// check positional or name-value pairs for lbool->boolean, lsym->sym, lint64-integer, ldouble..
+// ----------------------------------------------------------------------------------------------------
+static bool lbool(K x,J i,Cast c,Setting s) {
+ bool b;
+ TORCH_CHECK(xbool(x,i,b), lmap(c)," ",lset(s),": expected boolean scalar, given ",kname(kK(x)[i]->t));
+ return b;
+}
+
+static bool lbool(const Pairs& p,Cast c) {
+ TORCH_CHECK(p.t==-KB, lmap(c)," ",p.k,": expected boolean scalar, given ",kname(p.t));
+ return p.b;
+}
+
+static S lsym(K x,J i,Cast c,Setting s) {
+ S sy;
+ TORCH_CHECK(xsym(x,i,sy), lmap(c)," ",lset(s),": expected symbol, given ",kname(kK(x)[i]->t));
+ return sy;
+}
+
+static S lsym(const Pairs& p,Cast c) {
+ TORCH_CHECK(p.t==-KS, lmap(c)," ",p.k,": expected symbol, given ",kname(p.t));
+ return p.s;
+}
+
+// ------------------------------------------------------------------------------------------------------
+// rmsg,rmap - message and mapping for loss reduction to/from sym and enumeration
+// xreduce - check if sym, if matches loss reduction, set int, e.g. `none -> 0, `mean -> 1, `sum -> 2
+// ------------------------------------------------------------------------------------------------------
 static std::string rmsg(bool b) {
  std::string s;
  for(auto&m:env().reduce)
@@ -95,11 +124,48 @@ static bool xreduce(K x,J i,int64_t &r) {
   return xind(x,i) && xreduce(kK(x)[i],r);
 }
 
+// -----------------------------------------------------------------------------------------------
+//  reduction arg uses variant, using functions below to translate sym -> variant value
+// -----------------------------------------------------------------------------------------------
+using Reduce1=c10::variant<torch::enumtype::kNone, torch::enumtype::kMean, torch::enumtype::kSum>;
+using Reduce2=c10::variant<torch::enumtype::kNone, torch::enumtype::kBatchMean, torch::enumtype::kSum, torch::enumtype::kMean>;
+
+static void reduce(Reduce1& r,Cast c,S s) {
+ switch(emap(s)) {
+  case Enum::none: r=torch::kNone; break;
+  case Enum::mean: r=torch::kMean; break;
+  case Enum::sum:  r=torch::kSum; break;
+  default: AT_ERROR(lmap(c)," reduce: not one of none,mean,sum");
+ }
+}
+
+static void reduce(Reduce2& r,Cast c,S s) {
+ switch(emap(s)) {
+  case Enum::none:      r=torch::kNone; break;
+  case Enum::batchmean: r=torch::kBatchMean; break;
+  case Enum::mean:      r=torch::kMean; break;
+  case Enum::sum:       r=torch::kSum; break;
+  default: AT_ERROR(lmap(c)," reduce: not one of none,batchmean,mean,sum");
+ }
+}
+
 // ------------------------------------------------------------------------------------------------------
 // reduce - return default reduction mode, or process given arg(s) & offset to return reduction mode
 // lossfunc - call loss function with x,y tensors/arrays and optional reduction mode
 // bce - binary cross entropy has option of batch weights, so function parses (x;y) or (x;y;wt)
 // ------------------------------------------------------------------------------------------------------
+template<typename O> static O reduce(K x,J i,Cast c) {
+ O o; Pairs p; J n=xargc(x,i,p); S s=nullptr;
+ TORCH_CHECK(n<2, lmap(c),": only 1 positional argument(reduce) expected, ",n," given");
+ if(n==1) s=lsym(x,i,c,Setting::reduce);
+ while(xpair(p)) {
+  TORCH_CHECK(lset(p.k)==Setting::reduce, "Unrecognized option: ",p.k,", ",lmap(c)," loss expects single option: reduce");
+  s=lsym(p,c);
+ }
+ if(s) reduce(o.reduction(),c,s);
+ return o;
+}
+
 int64_t reduce() {return Reduction::Mean;}
 
 int64_t reduce(const char* s,K x,J i) { // check argument(s) for sym or named pair/dict, e.g. (`reduce;`mean))
@@ -476,6 +542,38 @@ static K lossinit(S s,K x,J i) {
  return kloss(c,a);
 }
 
+#define LOSSOPT(m) torch::nn::m##Options
+#define ANYLOSS(m,f) AnyModule(torch::nn::m(f<LOSSOPT(m)>(x,i,c)))
+
+static AnyModule lossinit2(S s,Cast c,K x,J i) {
+ switch(c) {
+  //case Cast::bce:         a=std::make_shared<BCELoss>(reduce(s,x,i)); break;
+  case Cast::kl:          return ANYLOSS(KLDivLoss, reduce);
+  case Cast::l1:          return ANYLOSS(L1Loss, reduce);
+  case Cast::mse:         return ANYLOSS(MSELoss, reduce);
+  case Cast::multilabel:  return ANYLOSS(MultiLabelMarginLoss, reduce);
+  case Cast::smoothl1:    return ANYLOSS(SmoothL1Loss, reduce);
+  case Cast::softmargin:  return ANYLOSS(SoftMarginLoss, reduce);
+
+/*
+  case Cast::bcelogits:   wtargs(c,s,x,i,w,j,r); a=std::make_shared<BCEWithLogitsLoss>(w,r); break;
+  case Cast::multisoft:   wtargs(c,s,x,i,w,j,r); a=std::make_shared<MultiLabelSoftMarginLoss>(w,r); break;
+  case Cast::ce:          wtargs(c,s,x,i,w,j,r); a=std::make_shared<CrossEntropyLoss>(w,j,r); break;
+  case Cast::nll:         wtargs(c,s,x,i,w,j,r); a=std::make_shared<NLLLoss>(w,j,r); break;
+
+  case Cast::hinge:       marginargs(c,s,x,i,m,r); a=std::make_shared<HingeEmbeddingLoss>(m,r); break;
+  case Cast::cosineloss:  marginargs(c,s,x,i,m,r); a=std::make_shared<CosineEmbeddingLoss>(m,r); break;
+  case Cast::margin:      marginargs(c,s,x,i,m,r); a=std::make_shared<MarginRankingLoss>(m,r); break;
+
+  case Cast::multimargin: {Scalar p,m;        multiargs(x,i,p,m,w,r);   a=std::make_shared<MultiMarginLoss>(p,m,w,r); break;}
+  case Cast::triplet:     {bool s;double e,p; triargs(x,i,m,p,e,s,r);   a=std::make_shared<TripletMarginLoss>(m,p,e,s,r); break;}
+  case Cast::poissonloss: {bool l,f;double e; poissonargs(x,i,l,f,e,r); a=std::make_shared<PoissonNLLLoss>(l,f,e,r); break;}
+  case Cast::ctc:         {bool z;int64_t b;  ctc1(x,i,b,z,r);          a=std::make_shared<CTCLoss>(b,z,r); break;}
+*/
+  default: AT_ERROR("Unrecognized loss function: ",s);
+ }
+}
+
 static K lossopt(bool a,Cast c,Loss *l) {
  K x=xD(ktn(KS,0),ktn(0,0));
  if (auto* p=dynamic_cast<BasicLoss*>(l)) {
@@ -607,7 +705,27 @@ KAPI loss(K x) {
  KCATCH("Loss module");
 }
 
-K lossattr(const Lossptr& l,A k,Attr a) {
+KAPI loss2(K x) {
+ KTRY
+  S s; bool a=env().alloptions; Kloss *l;
+  if(xsyms(x,s) || xsym(x,0,s)) {
+   Cast c=lmap(s);
+   return kloss(c, lossinit2(s,c,x,1));
+/*
+  } else if(xdict(x)) {    //define loss from state dictionary
+   return lossinit(statesym(State::module,x),statedict(State::options,x),-1);
+  } else if(((l=xloss(x))) || (xbool(x,1,a) && x->n==2 && ((l=xloss(x,0))))) {
+   return lossdict(a,false,l->c,l->get()); //given allocated loss ptr or ptr w'boolean, return options
+  } else if((l=xloss(x,0)) && x->n>1) {
+   return lossfwd(l->c,l->get(),x); //else, run forward calculation w'loss and input,target,..
+*/
+  } else {
+   AT_ERROR("Unrecognized arg(s)");
+  }
+ KCATCH("Loss module");
+}
+
+K lossattr(const Lossptr& l,Ktype k,Attr a) {
  switch(a) {
   case Attr::ref:     return kj(l.use_count());
   default: AT_ERROR(mapattr(a),": not implemented for loss modules");

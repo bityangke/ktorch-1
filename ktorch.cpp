@@ -91,8 +91,8 @@ S mapclass(Class a) {
  AT_ERROR("Unrecognized class: ", (I)a);
 }
 
-const char* kname(A k) {
- A t=abs(k); bool b=k<0;
+const char* kname(Ktype k) {
+ Ktype t=abs(k); bool b=k<0;
  switch(t) {
   case 0: return "general list";
   case 1: return b ? "boolean scalar" : "boolean list";
@@ -141,7 +141,7 @@ const char* kname(A k) {
 
 const char* kname(K x) {return xptr(x) ? mapclass(xtag(x)->a) : kname(x->t);}
  
-J ksizeof(A k) {
+J ksizeof(Ktype k) {
  switch(k) {
   case KE: return sizeof(E);
   case KF: return sizeof(double);
@@ -155,15 +155,15 @@ J ksizeof(A k) {
  }
 }
 
-A maptype(TypeMeta s) {
+Ktype maptype(TypeMeta s) {
  for(auto &m:env().dtype)
   if(s==std::get<1>(m)) return std::get<2>(m);
  AT_ERROR("No k data type found for torch type: ",s);
  return 0;
 }
 
-TypeMeta maptype(A k) {
- A t=(k<0) ? -k : k;
+TypeMeta maptype(Ktype k) {
+ Ktype t=(k<0) ? -k : k;
  for(auto &m:env().ktype)
   if(t==std::get<0>(m)) return std::get<1>(m);
  AT_ERROR("No torch type found for k: ",kname(k));
@@ -267,10 +267,10 @@ bool xnull(K x,J i) {return xind(x,i) && xnull(kK(x)[i]);}
 bool xempty(K x) {return xnull(x) ? true : (x->t ? false : x->n==0);}
 bool xempty(K x,J i) {return xind(x,i) && xempty(kK(x)[i]);}
 
-static A atype(K x) {return (x->t || !x->n) ? x->t : atype(kK(x)[0]);}
+static Ktype atype(K x) {return (x->t || !x->n) ? x->t : atype(kK(x)[0]);}
 
 bool xmixed(K x,J m) {      // check up to m elements of k value for mixed types/lengths
- A t; J i,n;
+ Ktype t; J i,n;
  if(!x->t)                                              // if general list
   if(x->n > 1) {                                        // with more than 1 element
    t=atype(kK(x)[0]);                                   // 1st base type encountered
@@ -855,7 +855,7 @@ void pten(const Pairs& p,Tensor &t) {
 // kex - true if given list is one unique value
 // kexpand - given element count & data ptr from expanding array return scalar or list
 // -----------------------------------------------------------------------------------------
-K kcast(A t,K x) {return k(0,(S)"$",kh(t),r1(x),0);}
+K kcast(Ktype t,K x) {return k(0,(S)"$",kh(t),r1(x),0);}
 K kbool(K x) {return kcast(1,x);}
 
 K kdict(const TensorDict &d) {
@@ -1313,7 +1313,7 @@ KAPI kseed(K x) {
 // -----------------------------------------------------------------------------------------
 // query object attributes, e.g. tensor/vector and other object attributes
 // -----------------------------------------------------------------------------------------
-static K attr(K x,A k,Attr a) {
+static K attr(K x,Ktype k,Attr a) {
  KTRY
   auto* g=xtag(x);
   TORCH_CHECK(g, mapattr(a),": unrecognized arg(s) - ",kname(x->t));

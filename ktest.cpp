@@ -4,6 +4,18 @@
 
 #define OPTION(x,k,v) dictadd(x, lset(Setting::k), v)
 
+KAPI red(K x) {
+ std::cerr << torch::Reduction::Sum << "\n";
+ return(K)0;
+}
+
+KAPI memtest(K x) {
+ std::vector<torch::Tensor> v;
+ v.reserve(10000000);
+ for(size_t i=0; i<10000000; ++i) v.emplace_back(torch::arange(10));
+ return kj(v.size());
+}
+
 static Cast lmap(S s) {
  for(auto&m:env().loss)
   if(std::get<0>(m)==s) return std::get<1>(m);
@@ -22,25 +34,10 @@ static S lset(Setting s) {
  AT_ERROR("Unrecognized loss setting: ",(I)s);
 }
 
-using LossPtr=std::shared_ptr<Module>;
-/*
-struct TORCH_API KLoss : public Ktag {
- KLoss(Cast x,const LossPtr& y) : l(std::move(y)) {a=Class::loss; c=x;}
- LossPtr l;
-};
-*/
+Kmodule* xLoss(K x) {auto* g=xtag(x); return (g && g->a==Class::loss) ? (Kmodule*)g : nullptr;}
+Kmodule* xLoss(K x,J i) {return xind(x,i) ? xLoss(kK(x)[i]) : nullptr;}
 
-struct TORCH_API KLoss : public Ktag {
- KLoss(Cast x,const AnyModule& y) : l(std::move(y)) {a=Class::loss; c=x;}
- torch::nn::AnyModule l;
-};
-
-K kLoss(Cast x,const AnyModule& y) {return kptr(new KLoss(x,y));}
-
-KLoss* xLoss(K x) {auto* g=xtag(x); return (g && g->a==Class::loss) ? (KLoss*)g : nullptr;}
-KLoss* xLoss(K x,J i) {return xind(x,i) ? xLoss(kK(x)[i]) : nullptr;}
-
-KAPI loss1(K x) {
+KAPI testloss1(K x) {
  KTRY
   Cast c=lmap(x->s); AnyModule a;
   switch(c) {
@@ -50,7 +47,7 @@ KAPI loss1(K x) {
    case Cast::cosineloss:  a=AnyModule(torch::nn::CosineEmbeddingLoss(torch::nn::CosineEmbeddingLossOptions().reduction(torch::kSum).margin(0.001))); break;
    default: AT_ERROR("Unrecognized loss function: ",x->s); break;
  }
- return kLoss(c,a);
+ return kloss(c,a);
  KCATCH("loss1");
 }
 
@@ -70,7 +67,7 @@ static K lossopts(bool a,Cast c,const AnyModule& g) { //g:generic module, a:true
  return x;
 }
 
-KAPI loss2(K x) {
+KAPI testloss2(K x) {
  KTRY
   auto* l=xLoss(x);
   if(l) {
@@ -79,7 +76,7 @@ KAPI loss2(K x) {
    kS(k)[0]=statekey(State::module);
    kS(k)[1]=statekey(State::options);
    kK(v)[0]=ks(lmap(l->c));
-   kK(v)[1]=lossopts(a,l->c,l->l);
+   kK(v)[1]=lossopts(a,l->c,l->m);
    return xD(k,v);
   } else {
    return KERR("not a loss pointer");
@@ -87,14 +84,14 @@ KAPI loss2(K x) {
  KCATCH("loss2");
 }
 
-KAPI loss3(K x,K y) {
+KAPI testloss3(K x,K y) {
  KTRY
-  KLoss *l=xLoss(x); Tensor a,b,c,r;
+  Kmodule *l=xLoss(x); Tensor a,b,c,r;
   TORCH_CHECK(l,"Supply a loss module");
   if(xten(y,0,a) && xten(y,1,b) && xten(y,2,c)) {
-    r=l->l.forward(a,b,c);
+    r=l->m.forward(a,b,c);
   } else if(xten(y,0,a) && xten(y,1,b)) {
-    r=l->l.forward(a,b);
+    r=l->m.forward(a,b);
   }
   return r.defined() ? kget(r) : (K)0;
  KCATCH("loss3");
@@ -139,21 +136,38 @@ KAPI cudamem(K x) {
  KCATCH("cuda memory");
 }
 
-typedef c10::variant<torch::enumtype::kNone, torch::enumtype::kMean, torch::enumtype::kSum> reduce1;
-typedef c10::variant<torch::enumtype::kNone, torch::enumtype::kBatchMean, torch::enumtype::kSum, torch::enumtype::kMean> reduce2;
+using Reduce1=c10::variant<torch::enumtype::kNone, torch::enumtype::kMean, torch::enumtype::kSum>;
+using Reduce2=c10::variant<torch::enumtype::kNone, torch::enumtype::kBatchMean, torch::enumtype::kSum, torch::enumtype::kMean>;
 
-static reduce1 getreduce(K x) {
- reduce1 r;
- r=torch::kSum;
- return r;
+static void reduce(Reduce1& r,Cast c,S s) {
+ switch(emap(s)) {
+  case Enum::none: r=torch::kNone; break;
+  case Enum::mean: r=torch::kMean; break;
+  case Enum::sum:  r=torch::kSum; break;
+  default: AT_ERROR("not one of none,mean,sum");
+ }
+}
+
+static void reduce(Reduce2& r,Cast c,S s) {
+ switch(emap(s)) {
+  case Enum::none:      r=torch::kNone; break;
+  case Enum::batchmean: r=torch::kBatchMean; break;
+  case Enum::mean:      r=torch::kMean; break;
+  case Enum::sum:       r=torch::kSum; break;
+  default: AT_ERROR("not one of none,batchmean,mean,sum");
+ }
 }
 
 KAPI losstest(K x) {
- auto l=torch::nn::L1Loss(torch::nn::L1LossOptions().reduction(getreduce(x)));
- std::cerr << l << "\n";
- std::cerr << torch::enumtype::get_enum_name(l->options.reduction()) << "\n";
- std::cerr << ESYM(l->options.reduction()) << "\n";
+ KTRY
+ torch::nn::L1LossOptions o1;
+ torch::nn::KLDivLossOptions o2;
+ reduce(o1.reduction(),Cast::l1,x->s);
+ std::cerr << torch::enumtype::get_enum_name(o1.reduction()) << "\n";
+ reduce(o2.reduction(),Cast::kl,x->s);
+ std::cerr << torch::enumtype::get_enum_name(o2.reduction()) << "\n";
  return (K)0;
+ KCATCH("loss reduction");
 }
 
 #define ENUMTEST(name) \

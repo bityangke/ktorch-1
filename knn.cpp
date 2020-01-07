@@ -1965,7 +1965,7 @@ K seqforward(Sequential& q,K x) {
 // ---------------------------------------------------------------------------------------
 // seqattr - return requested attribute of given sequential module
 // ---------------------------------------------------------------------------------------
-K seqattr(const Sequential& q,A k,Attr a) {
+K seqattr(const Sequential& q,Ktype k,Attr a) {
  switch(a) {
   case Attr::ptr:     return kj((intptr_t)q.get());
   case Attr::ref:     return kj(q.ptr().use_count());

@@ -517,7 +517,7 @@ KAPI lr(K x) {
 // ---------------------------------------------------------------------------------------
 // optattr - return attribute of given optimizer
 // ---------------------------------------------------------------------------------------
-K optattr(const Optptr& o,A k,Attr a) {
+K optattr(const Optptr& o,Ktype k,Attr a) {
  switch(a) {
   case Attr::ptr:     return kj((intptr_t)o.get());
   case Attr::ref:     return kj(o.use_count());

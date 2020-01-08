@@ -20,6 +20,7 @@ void dictadd(K x,       char* s, K v){K *k=kK(x); js(&k[0],cs(s)); jk(&k[1],v);}
 void dictadd(K x, const char* s, K v){K *k=kK(x); js(&k[0],cs(s)); jk(&k[1],v);}
 
 bool xind(K x,J i) {return !x->t && -1<i && i<x->n;}
+bool xind(K x,J i,Ktype k) {return x->t==k && -1<i && i<x->n;}
 K kptr(void *v){J j=(intptr_t)v; pointer().insert(j); return knk(1,kj(j));}
 
 bool xptr(K x) {
@@ -102,7 +103,7 @@ const char* kname(Ktype k) {
   case 6: return b ? "int scalar" : "int list";
   case 7: return b ? "long scalar" : "long list";
   case 8: return b ? "real scalar" : "real list";
-  case 9: return b ? "float scalar" : "float list";
+  case 9: return b ? "double scalar" : "double list";
   case 10: return b ? "char scalar" : "char list";
   case 11: return b ? "symbol scalar" : "symbol list";
   case 12: return b ? "timestamp scalar" : "timestamp list";
@@ -140,6 +141,7 @@ const char* kname(Ktype k) {
 }
 
 const char* kname(K x) {return xptr(x) ? mapclass(xtag(x)->a) : kname(x->t);}
+const char* kname(K x,J i) {return xind(x,i) ? kname(kK(x)[i]) : kname(x);}
  
 J ksizeof(Ktype k) {
  switch(k) {
@@ -285,9 +287,16 @@ bool xmixed(K x,J m) {      // check up to m elements of k value for mixed types
 }
 
 bool xsym(K x) {return x->t==-KS;}
-bool xsym(K x,J i) {return xind(x,i) && xsym(kK(x)[i]);}
+bool xsym(K x,J i) {return xind(x,i,KS) || (xind(x,i) && xsym(kK(x)[i]));}
 bool xsym(K x,S &s) {return (x->t==-KS) ? s=x->s,true : false;}
-bool xsym(K x,J i,S &s) {return xind(x,i) && xsym(kK(x)[i],s);}
+
+bool xsym(K x,J i,S &s) {
+ if(xind(x,i,KS))
+  return s=kS(x)[i], true;
+ else
+  return xind(x,i) && xsym(kK(x)[i],s);
+}
+
 bool xsyms(K x,S &s) {
  if(xsym(x,s)) return true;
  else if(x->t == KS && x->n) return s=kS(x)[0],true;
@@ -310,7 +319,7 @@ bool xint64(K x,J i,int64_t &j) {return xind(x,i) && xint64(kK(x)[i],j);}  //mac
 bool xlong(K x,J &j) {return (x->t == -KJ) ? j=x->j,true : false;}       //check k scalar
 bool xlong(K x,J i,J &j) {return xind(x,i) && xlong(kK(x)[i],j);}        //check k list element
 
-bool xlong(K x,J &n,J *&v){                                           //check for k list of longs
+bool xlong(K x,J &n,J *&v){                                        //check for k list of longs
  if(x->t == KJ){          n=x->n; v=kJ(x); return true;            //list of long ints
  } else if(x->t == -KJ){  n=1;    v=&x->j; return true;            //scalar long ok too
  } else if(x->t == 0 && x->n == 0) { n=0;  return true;            //empty,no type also ok
@@ -447,6 +456,8 @@ Sequential* xseq(K x,J i) {return xind(x,i) ? xseq(kK(x)[i]) : nullptr;}
 
 Kloss* xloss(K x) {auto* g=xtag(x); return (g && g->a==Class::loss) ? (Kloss*)g : nullptr;}
 Kloss* xloss(K x,J i) {return xind(x,i) ? xloss(kK(x)[i]) : nullptr;}
+Kmodule* xLoss(K x) {auto* g=xtag(x); return (g && g->a==Class::loss) ? (Kmodule*)g : nullptr;}
+Kmodule* xLoss(K x,J i) {return xind(x,i) ? xLoss(kK(x)[i]) : nullptr;}
 
 Kopt* xoptim(K x) {auto* g=xtag(x); return (g && g->a==Class::optimizer) ? (Kopt*)g : nullptr;}
 Kopt* xoptim(K x,J i) {return xind(x,i) ? xoptim(kK(x)[i]) : nullptr;}
@@ -470,7 +481,14 @@ bool xnum(K x,double &f) {
   default: return false;
  }
 }
-bool xnum(K x,J i,double &f) {return xind(x,i) && xnum(kK(x)[i],f);}
+bool xnum(K x,J i,double &f) {
+ if(xind(x,i,KF))
+  return f=kF(x)[i],true;
+ else if(xind(x,i,KJ))
+  return f=kJ(x)[i],true;
+ else
+  return xind(x,i) && xnum(kK(x)[i],f);
+}
 
 bool xnum(K x,Scalar& s) {
  switch(x->t) {

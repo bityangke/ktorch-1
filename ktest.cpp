@@ -34,9 +34,6 @@ static S lset(Setting s) {
  AT_ERROR("Unrecognized loss setting: ",(I)s);
 }
 
-Kmodule* xLoss(K x) {auto* g=xtag(x); return (g && g->a==Class::loss) ? (Kmodule*)g : nullptr;}
-Kmodule* xLoss(K x,J i) {return xind(x,i) ? xLoss(kK(x)[i]) : nullptr;}
-
 KAPI testloss1(K x) {
  KTRY
   Cast c=lmap(x->s); AnyModule a;

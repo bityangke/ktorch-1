@@ -17,7 +17,7 @@ static void modelpart(K x,J i,Kseq*& q,Kloss*& l,Kopt*& o) {
    case Class::loss:       l=(Kloss*)g; break;
    case Class::optimizer:  o=(Kopt*)g;  break;
    default: AT_ERROR("model arg[",i,"] unrecognized: ",
-                    (g ? mapclass(g->a) : kname(kK(x)[i]->t))); break;
+                    (g ? mapclass(g->a) : kname(x,i))); break;
   }
  }
 }

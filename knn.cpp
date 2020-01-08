@@ -104,7 +104,7 @@ static K mvals(bool b,J n) {
 // ----------------------------------------------------------------------------------------------------
 static bool mbool(K x,J i,Cast c,Setting s) {
  bool b;
- TORCH_CHECK(xbool(x,i,b), msym(c)," ",mset(s),": expected boolean scalar, given ",kname(kK(x)[i]->t));
+ TORCH_CHECK(xbool(x,i,b), msym(c)," ",mset(s),": expected boolean scalar, given ",kname(x,i));
  return b;
 }
 
@@ -115,7 +115,7 @@ static bool mbool(const Pairs& p,Cast c) {
 
 static S mode(K x,J i,Cast c,Setting s) {
  S m;
- TORCH_CHECK(xsym(x,i,m), msym(c)," ",mset(s),": expected symbol, given ",kname(kK(x)[i]->t));
+ TORCH_CHECK(xsym(x,i,m), msym(c)," ",mset(s),": expected symbol, given ",kname(x,i));
  return m;
 }
 
@@ -126,7 +126,7 @@ static S mode(const Pairs& p,Cast c) {
 
 static int64_t int64(K x,J i,Cast c,Setting s) {
  int64_t n;
- TORCH_CHECK(xint64(x,i,n), msym(c)," ",mset(s),": expected long scalar, given ",kname(kK(x)[i]->t));
+ TORCH_CHECK(xint64(x,i,n), msym(c)," ",mset(s),": expected long scalar, given ",kname(x,i));
  return n;
 }
 
@@ -140,7 +140,7 @@ static c10::optional<int64_t> int64n(const Pairs& p,Cast c)    {auto n=int64(p,c
 
 static double mdouble(K x,J i,Cast c,Setting s) {
  double f;
- TORCH_CHECK(xnum(x,i,f), msym(c)," ",mset(s),": expected double, given ",kname(kK(x)[i]->t));
+ TORCH_CHECK(xnum(x,i,f), msym(c)," ",mset(s),": expected double, given ",kname(x,i));
  return f;
 }
 
@@ -435,7 +435,7 @@ template<size_t D> static void conv(bool a,K x,const torch::nn::detail::ConvNdOp
  if(t) {
   if(a || (*o.dilation() != *d.dilation())) OPTION(x, dilate, KEX(o.dilation()));
  }
- if(a || ESYM(o.padding_mode()) != ESYM(d.padding_mode())) OPTION(x, padmode, ks(ESYM(o.padding_mode())));
+ if(a || o.padding_mode().index() != d.padding_mode().index()) OPTION(x, padmode, ks(ESYM(o.padding_mode())));
 }
 
 // --------------------------------------------------------------------------------------
@@ -1021,8 +1021,8 @@ static torch::nn::functional::PadFuncOptions pad(K x,J i,Cast c) {
 static void pad(bool a,K x,const PadImpl* m) {
  const torch::nn::functional::PadFuncOptions d({}), &o=m->options;
  OPTION(x, pad, klist(o.pad().size(),o.pad().data()));
- if(a || ESYM(o.mode()) != ESYM(d.mode())) OPTION(x, mode,  ks(ESYM(o.mode())));
- if(a || o.value()      != d.value())      OPTION(x, value, kf(o.value()));
+ if(a || o.mode().index() != d.mode().index()) OPTION(x, mode,  ks(ESYM(o.mode())));
+ if(a || o.value()        != d.value())        OPTION(x, value, kf(o.value()));
 }
 
 // ----------------------------------------------------------------------------------

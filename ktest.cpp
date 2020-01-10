@@ -4,6 +4,21 @@
 
 #define OPTION(x,k,v) dictadd(x, lset(Setting::k), v)
 
+KAPI wt(K x,K y,K w) {
+ KTRY
+  torch::nn::BCELoss m;
+  Tensor X,Y,W;
+  if(xten(x,X) && xten(y,Y) && xten(w,W)) {
+   m->options.weight(W);
+   Tensor r=m->forward(X,Y);
+   m->options.weight({});
+   return kget(r);
+  } else {
+   return(K)0;
+  }
+ KCATCH("bce wt");
+}
+
 KAPI red(K x) {
  std::cerr << torch::Reduction::Sum << "\n";
  return(K)0;

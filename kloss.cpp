@@ -1,24 +1,9 @@
 #include "ktorch.h"
 #include "kloss.h"
-/*
-  return F::detail::binary_cross_entropy(input, target, options.weight(), options.reduction());
-  return F::detail::hinge_embedding_loss(input, target, options.margin(), options.reduction());
-  return F::detail::multi_margin_loss(input, target, options.p(), options.margin(), options.weight(), options.reduction());
-  return F::detail::cosine_embedding_loss(input1, input2, target, options.margin(), options.reduction());
-  return F::detail::multilabel_soft_margin_loss(input, target, options.weight(), options.reduction());
-  return F::detail::triplet_margin_loss( anchor, positive, negative, options.margin(), options.p(), options.eps(), options.swap(), options.reduction());
-  return F::detail::ctc_loss( log_probs, targets, input_lengths, target_lengths, options.blank(), options.reduction(), options.zero_infinity()); }
-  return F::detail::poisson_nll_loss( log_input, target, options.log_input(), options.full(), options.eps(), options.reduction());
-  return F::detail::margin_ranking_loss(input1, input2, target, options.margin(), options.reduction());
-  return F::detail::nll_loss( input, target, weight, options.ignore_index(), options.reduction());
-  return F::detail::cross_entropy( input, target, weight, options.ignore_index(), options.reduction()); }
-  return F::detail::binary_cross_entropy_with_logits(input, target, options.weight(), options.reduction(), options.pos_weight());
-*/
 
 // append a loss option to a k dictionary given dict,name & value
 #define OPTION(x,k,v) dictadd(x, lset(Setting::k), v)
 
-using Lf  = Tensor (*)(const Tensor&, const Tensor&, int64_t);                          // loss w'reduction only
 using Lw  = Tensor (*)(const Tensor&, const Tensor&, const Tensor&, int64_t);           // loss w'wts
 using Lwi = Tensor (*)(const Tensor&, const Tensor&, const Tensor&, int64_t, int64_t);  // loss w'wts & ignore ind
 
@@ -169,8 +154,8 @@ template<typename O> static O reduce(K x,J i,Cast c) {
  return o;
 }
 
-template<typename O> static void reduce2(bool a,K x,O o,O d=O());
-template<typename O> static void reduce2(bool a,K x,O o,O d) {
+template<typename O> static void reduce2(bool a,K x,const O& o,const O d=O());
+template<typename O> static void reduce2(bool a,K x,const O& o,const O d) {
  if(a || d.reduction().index() != o.reduction().index())
   OPTION(x, reduce, ks(ESYM(o.reduction())));
 }
@@ -191,7 +176,7 @@ int64_t reduce(const char* s,K x,J i) { // check argument(s) for sym or named pa
 
 static K lossfunc(K a,Cast c) {
  KTRY
-  namespace n=torch::nn; namespace f=n::functional; bool b,p; Tensor r,x,y;
+  namespace nn=torch::nn; namespace f=nn::functional; bool b,p; Tensor r,x,y;
   TORCH_CHECK(a->t>=0, lmap(c),": not implemented for ",kname(a));
   b=a->n==2;
   if(a->t) {
@@ -201,18 +186,18 @@ static K lossfunc(K a,Cast c) {
    p=xtenarg(a,x,y);
   }
   switch(c) {
-   case Cast::kl: r=b ? f::kl_div(x,y) : f::kl_div(x,y,reduce<n::KLDivLossOptions>(a,2,c)); break;
-   case Cast::l1: r=b ? f::l1_loss(x,y) : f::l1_loss(x,y,reduce<n::L1LossOptions>(a,2,c)); break;
-   case Cast::mse: r=b ? f::mse_loss(x,y) : f::mse_loss(x,y,reduce<n::MSELossOptions>(a,2,c)); break;
+   case Cast::kl: r=b ? f::kl_div(x,y) : f::kl_div(x,y,reduce<nn::KLDivLossOptions>(a,2,c)); break;
+   case Cast::l1: r=b ? f::l1_loss(x,y) : f::l1_loss(x,y,reduce<nn::L1LossOptions>(a,2,c)); break;
+   case Cast::mse: r=b ? f::mse_loss(x,y) : f::mse_loss(x,y,reduce<nn::MSELossOptions>(a,2,c)); break;
    case Cast::multilabel:
     r=b ? f::multilabel_margin_loss(x,y)
-        : f::multilabel_margin_loss(x,y,reduce<n::MultiLabelMarginLossOptions>(a,2,c));
+        : f::multilabel_margin_loss(x,y,reduce<nn::MultiLabelMarginLossOptions>(a,2,c));
     break;
    case Cast::smoothl1:
-    r=b ? f::smooth_l1_loss(x,y) : f::smooth_l1_loss(x,y,reduce<n::SmoothL1LossOptions>(a,2,c));
+    r=b ? f::smooth_l1_loss(x,y) : f::smooth_l1_loss(x,y,reduce<nn::SmoothL1LossOptions>(a,2,c));
     break;
    case Cast::softmargin:
-    r=b ? f::soft_margin_loss(x,y) : f::soft_margin_loss(x,y,reduce<n::SoftMarginLossOptions>(a,2,c));
+    r=b ? f::soft_margin_loss(x,y) : f::soft_margin_loss(x,y,reduce<nn::SoftMarginLossOptions>(a,2,c));
     break;
    default: AT_ERROR("Unrecognized loss function"); break;
   }
@@ -266,6 +251,18 @@ static void wtargs(Cast c,const char* s,K x,J i,Tensor& w,J& j,int64_t &r) {
    default: AT_ERROR("Unrecognized option: ",p.k," for ",s," loss"); break;
   }
  }
+}
+
+template<typename O>static void classwt1(bool a,K x,const O& o) {
+ if(a || o.weight().defined()) OPTION(x, weight, kget(o.weight()));
+ reduce2(a,x,o,O());
+}
+
+template<typename O> static void classwt2(bool a,K x,const O& o) {
+ const O d;
+ if(a || o.weight().defined()) OPTION(x, weight, kget(o.weight()));
+ if(a || d.ignore_index() != o.ignore_index()) OPTION(x, ignore, kj(o.ignore_index()));
+ reduce2(a,x,o,d);
 }
 
 Tensor multilabel_soft_margin_loss(const Tensor& x,const Tensor& y,const Tensor& w,int64_t r) {
@@ -365,15 +362,15 @@ template<typename O> static O margin(K x,J i,Cast c) {
  return o;
 }
 
-template<typename O> static void margin(bool a,K x,O o,O d=O());
-template<typename O> static void margin(bool a,K x,O o,O d) {
+template<typename O> static void margin(bool a,K x,const O& o) {
+ const O d;
  if(a || d.margin() != o.margin()) OPTION(x, margin, kf(o.margin()));
  reduce2(a,x,o,d);
 }
 
 static K marginloss(K a,Cast c) {
  KTRY
-  namespace n=torch::nn; namespace f=n::functional;
+  namespace nn=torch::nn; namespace f=nn::functional;
   bool b,p=false,h=c==Cast::hinge; Tensor r,x1,x2,y;
   TORCH_CHECK(a->t>=0, lmap(c),": not implemented for ",kname(a));
   TORCH_CHECK(a->n>=3-h, lmap(c), " loss expects (input", (h ? "" : "1;input2"),";target;optional arg(s)..)");
@@ -387,13 +384,13 @@ static K marginloss(K a,Cast c) {
   }
   switch(c) {
    case Cast::hinge: 
-    r=b ? f::hinge_embedding_loss(x1,y) : f::hinge_embedding_loss(x1,y,margin<n::HingeEmbeddingLossOptions>(a,2,c));
+    r=b ? f::hinge_embedding_loss(x1,y) : f::hinge_embedding_loss(x1,y,margin<nn::HingeEmbeddingLossOptions>(a,2,c));
     break;
    case Cast::cosineloss:
-    r=b ? f::cosine_embedding_loss(x1,x2,y) : f::cosine_embedding_loss(x1,x2,y,margin<n::CosineEmbeddingLossOptions>(a,3,c));
+    r=b ? f::cosine_embedding_loss(x1,x2,y) : f::cosine_embedding_loss(x1,x2,y,margin<nn::CosineEmbeddingLossOptions>(a,3,c));
     break;
    case Cast::margin:
-    r=b ? f::margin_ranking_loss(x1,x2,y) : f::margin_ranking_loss(x1,x2,y,margin<n::MarginRankingLossOptions>(a,3,c));
+    r=b ? f::margin_ranking_loss(x1,x2,y) : f::margin_ranking_loss(x1,x2,y,margin<nn::MarginRankingLossOptions>(a,3,c));
     break;
    default: AT_ERROR("Unrecognized loss function"); break;
   }
@@ -429,11 +426,19 @@ static void multiargs(K x,J i,Scalar &pw,Scalar& m,Tensor& w,int64_t &r) {
  }
 }
 
+static void multi(bool a,K x,const torch::nn::MultiMarginLossOptions& o) {
+ const torch::nn::MultiMarginLossOptions d;
+ if(a || d.p()      != o.p())      OPTION(x, p,      kj(o.p()));
+ if(a || d.margin() != o.margin()) OPTION(x, margin, kf(o.margin()));
+ if(a || o.weight().defined())     OPTION(x, weight, kget(o.weight()));
+ reduce2(a,x,o,d);
+}
+
 KAPI multimargin(K a) {
  KTRY
   bool b; Tensor x,y,w; Scalar p,m; int64_t r; 
   if(a->t || a->n<2 || a->n>6)
-   AT_ERROR("multi-margin loss expects 2-6 args: at minimum (input;target) up to (input;target;p;margin;weight;reduction)");
+   AT_ERROR("multi-margin loss expects 2-6 args: (input;target;p;margin;weight;reduction)");
   multiargs(a,2,p,m,w,r); b=xtenarg(a,x,y);
   return kresult(b, torch::multi_margin_loss(x,y,p,m,w,r));
  KCATCH("multi-margin");
@@ -465,7 +470,16 @@ static void triargs(K x,J i,double& m,double& pw,double& e,bool& s,int64_t& r) {
  }
 }
 
-KAPI triplet(K a) {
+static void triplet(bool a,K x,const torch::nn::TripletMarginLossOptions& o) {
+ const torch::nn::TripletMarginLossOptions d;
+ if(a || d.margin() != o.margin()) OPTION(x, margin, kf(o.margin()));
+ if(a || d.p()      != o.p())      OPTION(x, p,      kf(o.p()));
+ if(a || d.eps()    != o.eps())    OPTION(x, eps,    kf(o.eps()));
+ if(a || d.swap()   != o.swap())   OPTION(x, swap,   kb(o.swap()));
+ reduce2(a,x,o,d);
+}
+
+KAPI Triplet(K a) {
  KTRY
   bool b,s; double e,m,p; Tensor x,y,z; int64_t r; 
   if(a->t) {
@@ -501,6 +515,14 @@ static void poissonargs(K x,J i,bool& l,bool& f,double& e,int64_t& r) {
    default: AT_ERROR("Unrecognized option: ",p.k," for poisson nll loss"); break;
   }
  }
+}
+
+static void poisson(bool a,K x,const torch::nn::PoissonNLLLossOptions& o) {
+ const torch::nn::PoissonNLLLossOptions d;
+ if(a || d.log_input() != o.log_input()) OPTION(x, log,  kb(o.log_input()));
+ if(a || d.full()      != o.full())      OPTION(x, full, kb(o.full()));
+ if(a || d.eps()       != o.eps())       OPTION(x, eps,  kf(o.eps()));
+ reduce2(a,x,o,d);
 }
 
 KAPI poissonloss(K a) {
@@ -549,7 +571,14 @@ static bool ctc2(K a,J i,Tensor& x,Tensor& y,Tensor& nx,Tensor& ny,IntArrayRef& 
   return p;
 }
 
-KAPI ctc(K a) {
+static void ctc(bool a,K x,const torch::nn::CTCLossOptions& o) {
+ const torch::nn::CTCLossOptions d;
+ if(a || d.blank()         != o.blank())         OPTION(x, blank,   kj(o.blank()));
+ if(a || d.zero_infinity() != o.zero_infinity()) OPTION(x, zeroinf, kb(o.zero_infinity()));
+ reduce2(a,x,o,d);
+}
+
+KAPI Ctc(K a) {
  KTRY
   bool p,z; IntArrayRef jx,jy; Tensor x,y,nx,ny; int64_t b,r; 
   if(a->t) {
@@ -601,18 +630,16 @@ static K lossinit(S s,K x,J i) {
  return kloss(c,a);
 }
 
-#define LOSSOPT(m) torch::nn::m##Options
-#define ANYLOSS(m,f) AnyModule(torch::nn::m(f<LOSSOPT(m)>(x,i,c)))
-
 static AnyModule lossinit2(S s,Cast c,K x,J i) {
+ namespace nn=torch::nn;
  switch(c) {
-  //case Cast::bce:         a=std::make_shared<BCELoss>(reduce(s,x,i)); break;
-  case Cast::kl:          return ANYLOSS(KLDivLoss, reduce);
-  case Cast::l1:          return ANYLOSS(L1Loss, reduce);
-  case Cast::mse:         return ANYLOSS(MSELoss, reduce);
-  case Cast::multilabel:  return ANYLOSS(MultiLabelMarginLoss, reduce);
-  case Cast::smoothl1:    return ANYLOSS(SmoothL1Loss, reduce);
-  case Cast::softmargin:  return ANYLOSS(SoftMarginLoss, reduce);
+  case Cast::bce:         return AnyModule(nn::BCELoss(             reduce<nn::BCELossOptions>(x,i,c)));
+  case Cast::kl:          return AnyModule(nn::KLDivLoss(           reduce<nn::KLDivLossOptions>(x,i,c)));
+  case Cast::l1:          return AnyModule(nn::L1Loss(              reduce<nn::L1LossOptions>(x,i,c)));
+  case Cast::mse:         return AnyModule(nn::MSELoss(             reduce<nn::MSELossOptions>(x,i,c)));
+  case Cast::multilabel:  return AnyModule(nn::MultiLabelMarginLoss(reduce<nn::MultiLabelMarginLossOptions>(x,i,c)));
+  case Cast::smoothl1:    return AnyModule(nn::SmoothL1Loss(        reduce<nn::SmoothL1LossOptions>(x,i,c)));
+  case Cast::softmargin:  return AnyModule(nn::SoftMarginLoss(      reduce<nn::SoftMarginLossOptions>(x,i,c)));
 
 /*
   case Cast::bcelogits:   wtargs(c,s,x,i,w,j,r); a=std::make_shared<BCEWithLogitsLoss>(w,r); break;
@@ -621,9 +648,9 @@ static AnyModule lossinit2(S s,Cast c,K x,J i) {
   case Cast::nll:         wtargs(c,s,x,i,w,j,r); a=std::make_shared<NLLLoss>(w,j,r); break;
 */
 
-  case Cast::hinge:       return ANYLOSS(HingeEmbeddingLoss, margin);
-  case Cast::cosineloss:  return ANYLOSS(CosineEmbeddingLoss, margin);
-  case Cast::margin:      return ANYLOSS(MarginRankingLoss, margin);
+  case Cast::hinge:       return AnyModule(nn::HingeEmbeddingLoss( margin<nn::HingeEmbeddingLossOptions>(x,i,c)));
+  case Cast::cosineloss:  return AnyModule(nn::CosineEmbeddingLoss(margin<nn::CosineEmbeddingLossOptions>(x,i,c)));
+  case Cast::margin:      return AnyModule(nn::MarginRankingLoss(  margin<nn::MarginRankingLossOptions>(x,i,c)));
 
 /*
   case Cast::multimargin: {Scalar p,m;        multiargs(x,i,p,m,w,r);   a=std::make_shared<MultiMarginLoss>(p,m,w,r); break;}
@@ -684,19 +711,30 @@ static K lossopt(bool a,Cast c,Loss *l) {
 }
  
 static K lossopt2(bool a,Cast c,AnyModule& m) {
+ namespace nn=torch::nn;
  K x=xD(ktn(KS,0),ktn(0,0));
  switch(c) {
-  case Cast::kl:         reduce2(a, x, m.get<torch::nn::KLDivLoss>()->options); break;
-  case Cast::l1:         reduce2(a, x, m.get<torch::nn::L1Loss>()->options); break;
-  case Cast::mse:        reduce2(a, x, m.get<torch::nn::MSELoss>()->options); break;
-  case Cast::multilabel: reduce2(a, x, m.get<torch::nn::MultiLabelMarginLoss>()->options); break;
-  case Cast::smoothl1:   reduce2(a, x, m.get<torch::nn::SmoothL1Loss>()->options); break;
-  case Cast::softmargin: reduce2(a, x, m.get<torch::nn::SoftMarginLoss>()->options); break;
+  case Cast::bce:        reduce2(a, x, m.get<nn::BCELoss>()->options); break;
+  case Cast::kl:         reduce2(a, x, m.get<nn::KLDivLoss>()->options); break;
+  case Cast::l1:         reduce2(a, x, m.get<nn::L1Loss>()->options); break;
+  case Cast::mse:        reduce2(a, x, m.get<nn::MSELoss>()->options); break;
+  case Cast::multilabel: reduce2(a, x, m.get<nn::MultiLabelMarginLoss>()->options); break;
+  case Cast::smoothl1:   reduce2(a, x, m.get<nn::SmoothL1Loss>()->options); break;
+  case Cast::softmargin: reduce2(a, x, m.get<nn::SoftMarginLoss>()->options); break;
 
-  case Cast::hinge:       margin(a, x, m.get<torch::nn::HingeEmbeddingLoss>()->options); break;
-  case Cast::cosineloss:  margin(a, x, m.get<torch::nn::CosineEmbeddingLoss>()->options); break;
-  case Cast::margin:      margin(a, x, m.get<torch::nn::MarginRankingLoss>()->options); break;
+  case Cast::bcelogits:  classwt1(a, x, m.get<nn::BCEWithLogitsLoss>()->options); break;
+  case Cast::multisoft:  classwt1(a, x, m.get<nn::MultiLabelSoftMarginLoss>()->options); break;
+  case Cast::ce:         classwt2(a, x, m.get<nn::CrossEntropyLoss>()->options); break;
+  case Cast::nll:        classwt2(a, x, m.get<nn::NLLLoss>()->options); break;
 
+  case Cast::hinge:       margin(a, x, m.get<nn::HingeEmbeddingLoss>()->options); break;
+  case Cast::cosineloss:  margin(a, x, m.get<nn::CosineEmbeddingLoss>()->options); break;
+  case Cast::margin:      margin(a, x, m.get<nn::MarginRankingLoss>()->options); break;
+
+  case Cast::multimargin: multi(a, x, m.get<nn::MultiMarginLoss>()->options); break;
+  case Cast::triplet:     triplet(a, x, m.get<nn::TripletMarginLoss>()->options); break;
+  case Cast::poissonloss: poisson(a, x, m.get<nn::PoissonNLLLoss>()->options); break;
+  case Cast::ctc:         ctc(a, x, m.get<nn::CTCLoss>()->options); break;
   default: AT_ERROR("Unrecognized loss module"); break;
  }
  return x;
@@ -843,7 +881,7 @@ void lossfn(K x) {
  fn(x, "bcelogitw",   KFN(bcelogitw),1);
  fn(x, "ce",          KFN(ce),1);
  fn(x, "cosineloss",  KFN(cosineloss),1);
- fn(x, "ctc",         KFN(ctc),1);
+ fn(x, "ctc",         KFN(Ctc),1);
  fn(x, "hinge",       KFN(hinge),1);
  fn(x, "kl",          KFN(kl),1);
  fn(x, "l1",          KFN(l1),1);
@@ -856,5 +894,5 @@ void lossfn(K x) {
  fn(x, "poissonloss", KFN(poissonloss),1);
  fn(x, "smoothl1",    KFN(smoothl1),1);
  fn(x, "softmargin",  KFN(softmargin),1);
- fn(x, "triplet",     KFN(triplet),1);
+ fn(x, "triplet",     KFN(Triplet),1);
 }

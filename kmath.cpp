@@ -619,21 +619,18 @@ KAPI Equal(K x) {
 // ----------------------------------------------------------------------------------------------
 // comparison functions that check for special values (nan, +/- inf) on floating point tensors
 // ----------------------------------------------------------------------------------------------
-static K special(K x, I m, const char* e) {
+static K special(K x,Ft f) {
  KTRY
-  Tensor r,t; bool b=xten(x,t); if(!b) t=kput(x);
-  switch(m) {
-   case 1:  r = t.is_floating_point() ? ((t==t) == (t.abs()!=wf)) : torch::ones_like(t,torch::dtype(torch::kBool)); break;
-   case 2:  r = t.is_floating_point() ? t.abs()==wf               : torch::ones_like(t,torch::dtype(torch::kBool)); break;
-   case 3:  r = t != t; break;
-  }
-  return kresult(b,r);
- KCATCH(e);
+  Tensor *t=xten(x);
+  return kresult(t, f(t ? *t : kput(x)));
+ KCATCH("special");
 }
 
-KAPI Isfinite(K x) {return special(x, 1, "Check for absence of NaN or infinity");}
-KAPI Isinf(K x)    {return special(x, 2, "Check for +/- infinity");}
-KAPI Isnan(K x)    {return special(x, 3, "Check for NaN");}
+Tensor isinf(const Tensor& t) {return t.is_floating_point() ? t.abs()==wf : torch::ones_like(t,torch::dtype(torch::kBool));}
+
+KAPI Isfinite(K x) {return special(x, torch::isfinite);}
+KAPI Isinf(K x)    {return special(x, isinf);}
+KAPI Isnan(K x)    {return special(x, torch::isnan);}
 
 // ------------------------------------------------------------------------------------------------
 // minmaxerr - error message for min/max, argmin/max, min/max_values if unrecognized args

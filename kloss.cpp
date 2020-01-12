@@ -41,7 +41,7 @@ static Setting lset(S s) {
 
 // ----------------------------------------------------------------------------------------------------
 // input checking fns with error msg specific to loss module name and setting
-// check positional or name-value pairs for lbool->boolean, lsym->sym, lint64-integer, ldouble..
+// check positional or name-value pairs for lbool->boolean, lsym->sym, int64-integer, ldouble..
 // ----------------------------------------------------------------------------------------------------
 static bool lbool(K x,J i,Cast c,Setting s) {
  bool b;
@@ -63,6 +63,17 @@ static S lsym(K x,J i,Cast c,Setting s) {
 static S lsym(const Pairs& p,Cast c) {
  TORCH_CHECK(p.t==-KS, lmap(c)," ",p.k,": expected symbol, given ",kname(p.t));
  return p.s;
+}
+
+static int64_t int64(K x,J i,Cast c,Setting s) {
+ int64_t n;
+ TORCH_CHECK(xint64(x,i,n), lmap(c)," ",lset(s),": expected long scalar, given ",kname(x,i));
+ return n;
+}
+
+static int64_t int64(const Pairs& p,Cast c) {
+ TORCH_CHECK(p.t==-KJ, lmap(c)," ",p.k,": expected long scalar, given ",kname(p.t));
+ return p.j;
 }
 
 static double ldouble(K x,J i,Cast c,Setting s) {
@@ -233,9 +244,37 @@ KAPI bce(K a) {
 }
 
 // ------------------------------------------------------------------------------------------------------
-// wtargs - process args from k for weight tensor, index to ignore & reduction method (or some subset)
-// wtloss - functional form for nll,cross entropy, multi-label soft margin (no c++ version yet)
+// classwt - set optional class weights & reduction mode, also index to ignore for some losses
+//           classes with optional index use the same elements, so a templated fn is used,
+//           but otheres use "weight" vs "pos_weight", requiring class-specific overloads
 // ------------------------------------------------------------------------------------------------------
+static void classwt(K x,J i,Cast c,S& s,Tensor& w) {
+ Pairs p; J n=xargc(x,i,p); s=nullptr;
+ if(n && xsym(x,i+n-1,s)) n--;
+ if(n) {n--; if(!xempty(x,i+n) && !xten(x,i+n,w)) w=kput(x,i+n);}
+ TORCH_CHECK(!n, lmap(c),": unrecognized positional arg(s), expected weights, reduce mode or (weights;reduce mode)");
+ while(xpair(p))
+  switch(lset(p.k)) {
+   case Setting::weight: if(!pempty(p)) pten(p,w); break;
+   case Setting::reduce: s=lsym(p,c); break;
+   default: AT_ERROR("Unrecognized ",lmap(c)," option: ",p.k); break;
+  }
+}
+
+static auto& classwt(K x,J i,Cast c,torch::nn::BCEWithLogitsLossOptions&& o) {
+ S s; Tensor w; classwt(x,i,c,s,w);
+ if(s) reduce(o.reduction(),c,s);
+ if(w.defined()) o.pos_weight(w);
+ return o;
+}
+
+static auto& classwt(K x,J i,Cast c,torch::nn::MultiLabelSoftMarginLossOptions&& o) {
+ S s; Tensor w; classwt(x,i,c,s,w);
+ if(s) reduce(o.reduction(),c,s);
+ if(w.defined()) o.weight(w);
+ return o;
+}
+
 static void wtargs(Cast c,const char* s,K x,J i,Tensor& w,J& j,int64_t &r) {
  bool b=c==Cast::ce || c==Cast::nll; Pairs p; J n=xargc(x,i,p); j=-100; r=reduce();
  if(n && xreduce(x,i+n-1,r)) n--;
@@ -253,18 +292,47 @@ static void wtargs(Cast c,const char* s,K x,J i,Tensor& w,J& j,int64_t &r) {
  }
 }
 
-template<typename O>static void classwt1(bool a,K x,const O& o) {
- if(a || o.weight().defined()) OPTION(x, weight, kget(o.weight()));
- reduce2(a,x,o,O());
+template<typename O> O classwt(K x,J i,Cast c) {
+ O o; Pairs p; J n=xargc(x,i,p); int64_t j; S s=nullptr; Tensor w;
+ if(n && xsym(x,i+n-1,s)) n--;
+ if(n && xint64(x,i+n-1,j)) n--, o.ignore_index(j);
+ if(n) {n--; if(!xempty(x,i+n) && !xten(x,i+n,w)) w=kput(x,i+n);}
+ TORCH_CHECK(!n, lmap(c),": unrecognized positional arg(s), expected (weights;ignore index;reduce mode)");
+ while(xpair(p))
+  switch(lset(p.k)) {
+   case Setting::weight: if(!pempty(p)) pten(p,w); break;
+   case Setting::ignore: o.ignore_index(int64(p,c)); break;
+   case Setting::reduce: s=lsym(p,c); break;
+   default: AT_ERROR("Unrecognized option: ",p.k," for ",lmap(c)," loss"); break;
+  }
+ if(s) reduce(o.reduction(),c,s);
+ if(w.defined()) o.weight(w);
+ return o;
 }
 
-template<typename O> static void classwt2(bool a,K x,const O& o) {
+// ------------------------------------------------------------------------------------------------------
+// classwt - get optional class weights & reduction mode, also index to ignore for some losses
+// ------------------------------------------------------------------------------------------------------
+static void classwt(bool a,K x,const torch::nn::BCEWithLogitsLossOptions& o) {
+ if(a || o.pos_weight().defined()) OPTION(x,weight,kget(o.pos_weight()));
+ reduce2(a,x,o);
+}
+
+static void classwt(bool a,K x,const torch::nn::MultiLabelSoftMarginLossOptions& o) {
+ if(a || o.weight().defined()) OPTION(x,weight,kget(o.weight()));
+ reduce2(a,x,o);
+}
+
+template<typename O> static void classwt(bool a,K x,const O& o) {
  const O d;
  if(a || o.weight().defined()) OPTION(x, weight, kget(o.weight()));
  if(a || d.ignore_index() != o.ignore_index()) OPTION(x, ignore, kj(o.ignore_index()));
  reduce2(a,x,o,d);
 }
 
+// ------------------------------------------------------------------------------------------------------
+// wtloss - functional form for nll,cross entropy, multi-label soft margin (no c++ version yet)
+// ------------------------------------------------------------------------------------------------------
 Tensor multilabel_soft_margin_loss(const Tensor& x,const Tensor& y,const Tensor& w,int64_t r) {
  auto l = -(y * torch::log_sigmoid(x) + (1 - y) * torch::log_sigmoid(-x));
  if(w.defined()) l *= w;
@@ -641,12 +709,10 @@ static AnyModule lossinit2(S s,Cast c,K x,J i) {
   case Cast::smoothl1:    return AnyModule(nn::SmoothL1Loss(        reduce<nn::SmoothL1LossOptions>(x,i,c)));
   case Cast::softmargin:  return AnyModule(nn::SoftMarginLoss(      reduce<nn::SoftMarginLossOptions>(x,i,c)));
 
-/*
-  case Cast::bcelogits:   wtargs(c,s,x,i,w,j,r); a=std::make_shared<BCEWithLogitsLoss>(w,r); break;
-  case Cast::multisoft:   wtargs(c,s,x,i,w,j,r); a=std::make_shared<MultiLabelSoftMarginLoss>(w,r); break;
-  case Cast::ce:          wtargs(c,s,x,i,w,j,r); a=std::make_shared<CrossEntropyLoss>(w,j,r); break;
-  case Cast::nll:         wtargs(c,s,x,i,w,j,r); a=std::make_shared<NLLLoss>(w,j,r); break;
-*/
+  case Cast::bcelogits:   return AnyModule(nn::BCEWithLogitsLoss(classwt(x,i,c,nn::BCEWithLogitsLossOptions())));
+  case Cast::multisoft:   return AnyModule(nn::MultiLabelSoftMarginLoss(classwt(x,i,c,nn::MultiLabelSoftMarginLossOptions())));
+  case Cast::ce:          return AnyModule(nn::CrossEntropyLoss(classwt<nn::CrossEntropyLossOptions>(x,i,c)));
+  case Cast::nll:         return AnyModule(nn::NLLLoss(classwt<nn::NLLLossOptions>(x,i,c)));
 
   case Cast::hinge:       return AnyModule(nn::HingeEmbeddingLoss( margin<nn::HingeEmbeddingLossOptions>(x,i,c)));
   case Cast::cosineloss:  return AnyModule(nn::CosineEmbeddingLoss(margin<nn::CosineEmbeddingLossOptions>(x,i,c)));
@@ -722,10 +788,10 @@ static K lossopt2(bool a,Cast c,AnyModule& m) {
   case Cast::smoothl1:   reduce2(a, x, m.get<nn::SmoothL1Loss>()->options); break;
   case Cast::softmargin: reduce2(a, x, m.get<nn::SoftMarginLoss>()->options); break;
 
-  case Cast::bcelogits:  classwt1(a, x, m.get<nn::BCEWithLogitsLoss>()->options); break;
-  case Cast::multisoft:  classwt1(a, x, m.get<nn::MultiLabelSoftMarginLoss>()->options); break;
-  case Cast::ce:         classwt2(a, x, m.get<nn::CrossEntropyLoss>()->options); break;
-  case Cast::nll:        classwt2(a, x, m.get<nn::NLLLoss>()->options); break;
+  case Cast::bcelogits:  classwt(a, x, m.get<nn::BCEWithLogitsLoss>()->options); break;
+  case Cast::multisoft:  classwt(a, x, m.get<nn::MultiLabelSoftMarginLoss>()->options); break;
+  case Cast::ce:         classwt(a, x, m.get<nn::CrossEntropyLoss>()->options); break;
+  case Cast::nll:        classwt(a, x, m.get<nn::NLLLoss>()->options); break;
 
   case Cast::hinge:       margin(a, x, m.get<nn::HingeEmbeddingLoss>()->options); break;
   case Cast::cosineloss:  margin(a, x, m.get<nn::CosineEmbeddingLoss>()->options); break;

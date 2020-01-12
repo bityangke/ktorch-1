@@ -4,6 +4,25 @@
 
 #define OPTION(x,k,v) dictadd(x, lset(Setting::k), v)
 
+template<typename O> void test1(O& o) {
+ Tensor w=torch::randn({3});
+ if(std::is_same<O,torch::nn::BCEWithLogitsLossOptions>::value)
+  std::cerr <<"yes, bce w'logits\n";
+ else
+  std::cerr <<"no, not bce w'logits\n";
+ //std::enable_if_t<std::is_same<O,torch::nn::BCEWithLogitsLossOptions>::value> o.pos_weights(w);
+}
+
+KAPI enable(K x) {
+ KTRY
+  torch::nn::BCEWithLogitsLossOptions o1;
+  torch::nn::MultiLabelSoftMarginLossOptions o2;
+  test1(o1);
+  test1(o2);
+  return (K)0;
+ KCATCH("enable if");
+}
+
 KAPI wt(K x,K y,K w) {
  KTRY
   torch::nn::BCELoss m;

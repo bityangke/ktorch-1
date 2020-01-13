@@ -304,7 +304,7 @@ static void groupnorm(bool a,K x,const torch::nn::GroupNormOptions& o) {
 // layernorm - get/set shape,eps,affine flag for layer normalization
 // --------------------------------------------------------------------------------------
 static torch::nn::LayerNormOptions layernorm(K x,J i,Cast c) {
- torch::nn::LayerNormOptions o({}); IntArrayRef a; bool b=false; Pairs p; J n=xargc(x,i,p);
+ torch::nn::LayerNormOptions o({}); IntArrayRef a; Pairs p; J n=xargc(x,i,p);
  for(J j=0;j<n;++j)
    switch(j) {
     case 0: TORCH_CHECK(xsize(x,i+j,a), msym(c),": expecting 1st arg of normalized shape(s)"); break;
@@ -314,7 +314,7 @@ static torch::nn::LayerNormOptions layernorm(K x,J i,Cast c) {
   }
  while(xpair(p))
   switch(mset(p.k)) {
-   case Setting::shape:  psize(p,a); b=true; break;
+   case Setting::shape:  psize(p,a); break;
    case Setting::eps:    o.eps(mdouble(p,c)); break;
    case Setting::affine: o.elementwise_affine(mbool(p,c)); break;
    default: AT_ERROR("Unrecognized ",msym(c)," option: ",p.k); break;

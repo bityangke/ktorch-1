@@ -237,7 +237,7 @@ KAPI bce(K a) {
    x=kput(a);
    l=a->n==2 ? torch::binary_cross_entropy(x[0],x[1]) : torch::binary_cross_entropy(x[0],x[1],x[2]);
   } else {
-   AT_ERROR("binary cross entropy loss expects (input;target), (input;target;reduction), (input;target;weights) or (input;target;weights;reduction)");
+   AT_ERROR("binary cross entropy loss expects (input;target), (input;target;reduction), (input;target;weights) or (input;target;weights;reduce)");
   }
   return p ? kten(l) : kget(l);
  KCATCH("binary cross entropy")
@@ -246,7 +246,7 @@ KAPI bce(K a) {
 // ------------------------------------------------------------------------------------------------------
 // classwt - set optional class weights & reduction mode, also index to ignore for some losses
 //           classes with optional index use the same elements, so a templated fn is used,
-//           but otheres use "weight" vs "pos_weight", requiring class-specific overloads
+//           but others use "weight" vs "pos_weight", requiring class-specific overloads
 // ------------------------------------------------------------------------------------------------------
 static void classwt(K x,J i,Cast c,S& s,Tensor& w) {
  Pairs p; J n=xargc(x,i,p); s=nullptr;
@@ -275,6 +275,27 @@ static auto& classwt(K x,J i,Cast c,torch::nn::MultiLabelSoftMarginLossOptions&&
  return o;
 }
 
+template<typename O> O classwt(K x,J i,Cast c) {
+ O o; Pairs p; J n=xargc(x,i,p); S s=nullptr; Tensor w;
+ if(n && xsym(x,i+n-1,s)) n--; // allow last arg of symbol regardless
+ for(J j=0;j<n;++j)
+  switch(j) {
+   case 0: if(!xempty(x,i+j) && !xten(x,i+j,w)) w=kput(x,i+j); break;
+   case 1: o.ignore_index(int64(x,i+j,c,Setting::ignore)); break;
+   default: AT_ERROR(lmap(c),": up to 3 positional args expected(class weight;index to ignore;reduce mode), ",n," given");
+  }
+ while(xpair(p))
+  switch(lset(p.k)) {
+   case Setting::weight: if(!pempty(p)) pten(p,w); break;
+   case Setting::ignore: o.ignore_index(int64(p,c)); break;
+   case Setting::reduce: s=lsym(p,c); break;
+   default: AT_ERROR("Unrecognized option: ",p.k," for ",lmap(c)," loss"); break;
+  }
+ if(s) reduce(o.reduction(),c,s);
+ if(w.defined()) o.weight(w);
+ return o;
+}
+
 static void wtargs(Cast c,const char* s,K x,J i,Tensor& w,J& j,int64_t &r) {
  bool b=c==Cast::ce || c==Cast::nll; Pairs p; J n=xargc(x,i,p); j=-100; r=reduce();
  if(n && xreduce(x,i+n-1,r)) n--;
@@ -290,24 +311,6 @@ static void wtargs(Cast c,const char* s,K x,J i,Tensor& w,J& j,int64_t &r) {
    default: AT_ERROR("Unrecognized option: ",p.k," for ",s," loss"); break;
   }
  }
-}
-
-template<typename O> O classwt(K x,J i,Cast c) {
- O o; Pairs p; J n=xargc(x,i,p); int64_t j; S s=nullptr; Tensor w;
- if(n && xsym(x,i+n-1,s)) n--;
- if(n && xint64(x,i+n-1,j)) n--, o.ignore_index(j);
- if(n) {n--; if(!xempty(x,i+n) && !xten(x,i+n,w)) w=kput(x,i+n);}
- TORCH_CHECK(!n, lmap(c),": unrecognized positional arg(s), expected (weights;ignore index;reduce mode)");
- while(xpair(p))
-  switch(lset(p.k)) {
-   case Setting::weight: if(!pempty(p)) pten(p,w); break;
-   case Setting::ignore: o.ignore_index(int64(p,c)); break;
-   case Setting::reduce: s=lsym(p,c); break;
-   default: AT_ERROR("Unrecognized option: ",p.k," for ",lmap(c)," loss"); break;
-  }
- if(s) reduce(o.reduction(),c,s);
- if(w.defined()) o.weight(w);
- return o;
 }
 
 // ------------------------------------------------------------------------------------------------------
@@ -346,29 +349,27 @@ Tensor multilabel_soft_margin_loss(const Tensor& x,const Tensor& y,const Tensor&
  // unable to use torch::apply_loss_reduction(l,r), in anonymous namespace in ATen/native/Loss.cpp
 }
 
-static K wtloss(K a,Cast c,const char* s) {
+static K classwt(K a,Cast c) {
  KTRY
-  bool p=false; J j; int64_t r; Tensor l,x,y,w;
-  if(a->t) {
-   AT_ERROR(s," loss not implemented for ",kname(a->t));
-  } else if(a->n < 2) {
-   AT_ERROR(s," loss expects at least 2 args, (input;target)");
-  }
-  wtargs(c,s,a,2,w,j,r);
-  p=xtenarg(a,x,y);
+  namespace nn=torch::nn; namespace f=nn::functional;
+  bool p=false; Tensor r,x,y;
+  TORCH_CHECK(a->t>=0, lmap(c),": not implemented for ",kname(a));
+  TORCH_CHECK(a->n>1, lmap(c), " loss expects (input;target;optional arg(s)..)");
+  if(a->t) r=kput(a), x=r[0], y=r[1];
+  else     p=xtenarg(a,x,y);
   switch(c) {
-   case Cast::ce:        l=torch::nll_loss(torch::log_softmax(x,1),y,w,r,j); break;
-   case Cast::nll:       l=torch::nll_loss(x,y,w,r,j); break;
-   case Cast::multisoft: l=multilabel_soft_margin_loss(x,y,w,r); break;
-   default: AT_ERROR("Unrecognized loss function: ",(I)c); break;
+   case Cast::ce:        r=f::cross_entropy(x,y,classwt<nn::CrossEntropyLossOptions>(a,2,c)); break;
+   case Cast::nll:       r=f::nll_loss(x,y,classwt<nn::NLLLossOptions>(a,2,c)); break;
+   case Cast::multisoft: r=f::multilabel_soft_margin_loss(x,y,classwt(a,2,c,nn::MultiLabelSoftMarginLossOptions())); break;
+   default: AT_ERROR("Unrecognized loss function");
   }
-  return p ? kten(l) : kget(l);
- KCATCH(s)
+  return kresult(p,r);
+ KCATCH("loss");
 }
 
-KAPI ce(K x)        {return wtloss(x, Cast::ce,        "cross entropy");}
-KAPI nll(K x)       {return wtloss(x, Cast::nll,       "negative log-likelihood");}
-KAPI multisoft(K x) {return wtloss(x, Cast::multisoft, "multi-label soft margin");}
+KAPI ce(K x)        {return classwt(x, Cast::ce);}
+KAPI nll(K x)       {return classwt(x, Cast::nll);}
+KAPI multisoft(K x) {return classwt(x, Cast::multisoft);}
 
 // ---------------------------------------------------------------------------------------
 // bceloss - handle binary cross-entropy with logits, separate call if batch weights
@@ -470,10 +471,10 @@ KAPI hinge(K x)      {return marginloss(x, Cast::hinge);}
 KAPI cosineloss(K x) {return marginloss(x, Cast::cosineloss);}
 KAPI Margin(K x)     {return marginloss(x, Cast::margin);}
 
-// ------------------------------------------------------------------------------------------------------
-// multiargs - process optional power,margin,weight & reduction arguments in given k array
+// ----------------------------------------------------------------------------------------
+// multi - get/set optional power,margin,weight & reduction arguments for multi margin loss
 // multimargin - funcional form of multi margin loss function
-// ------------------------------------------------------------------------------------------------------
+// ----------------------------------------------------------------------------------------
 static void multiargs(K x,J i,Scalar &pw,Scalar& m,Tensor& w,int64_t &r) {
  Pairs p; J n=xargc(x,i,p); MultiMarginLossOptions o;
  r=o.reduce(); pw=o.p(); m=o.margin();
@@ -494,6 +495,29 @@ static void multiargs(K x,J i,Scalar &pw,Scalar& m,Tensor& w,int64_t &r) {
  }
 }
 
+static torch::nn::MultiMarginLossOptions multi(K x,J i,Cast c) {
+ Pairs p; J n=xargc(x,i,p); S s=nullptr; Tensor w; torch::nn::MultiMarginLossOptions o;
+ if(n && xsym(x,i+n-1,s)) n--;
+ for(J j=0;j<n;++j)
+  switch(j) {
+   case 0: o.p(int64(x,i+j,c,Setting::p)); break;
+   case 1: o.margin(ldouble(x,i+j,c,Setting::margin)); break;
+   case 2: if(!xempty(x,i+j) && !xten(x,i+j,w)) w=kput(x,i+j); break;
+   default: AT_ERROR(lmap(c),": unrecognized positional arg(s), expecting up to 4 args, p,margin,weight,reduce");
+  }
+ while(xpair(p))
+  switch(lset(p.k)) {
+   case Setting::p:      o.p(int64(p,c)); break;
+   case Setting::margin: o.margin(ldouble(p,c)); break;
+   case Setting::weight: if(!pempty(p)) pten(p,w); break;
+   case Setting::reduce: s=lsym(p,c); break;
+   default: AT_ERROR("Unrecognized option: ",p.k," for multi-margin loss"); break;
+  }
+ if(w.defined()) o.weight(w);
+ if(s) reduce(o.reduction(),c,s);
+ return o;
+}
+
 static void multi(bool a,K x,const torch::nn::MultiMarginLossOptions& o) {
  const torch::nn::MultiMarginLossOptions d;
  if(a || d.p()      != o.p())      OPTION(x, p,      kj(o.p()));
@@ -504,12 +528,14 @@ static void multi(bool a,K x,const torch::nn::MultiMarginLossOptions& o) {
 
 KAPI multimargin(K a) {
  KTRY
-  bool b; Tensor x,y,w; Scalar p,m; int64_t r; 
-  if(a->t || a->n<2 || a->n>6)
-   AT_ERROR("multi-margin loss expects 2-6 args: (input;target;p;margin;weight;reduction)");
-  multiargs(a,2,p,m,w,r); b=xtenarg(a,x,y);
-  return kresult(b, torch::multi_margin_loss(x,y,p,m,w,r));
- KCATCH("multi-margin");
+  bool p; Tensor x,y; Cast c=Cast::multimargin;
+  TORCH_CHECK(a->t>=0, lmap(c)," loss not implemented for ",kname(a));
+  TORCH_CHECK(a->n>=2, lmap(c)," loss expects (input;target;optional arg(s)..)");
+  if(a->t) p=false, x=kput(a), y=x[1], x=x[0]; 
+  else     p=xtenarg(a,x,y);
+  return kresult(p, a->n==2 ? torch::nn::functional::multi_margin_loss(x,y)
+                            : torch::nn::functional::multi_margin_loss(x,y,multi(a,2,c)));
+ KCATCH("multi-margin loss");
 }
 
 // ------------------------------------------------------------------------------------------------------
@@ -538,6 +564,30 @@ static void triargs(K x,J i,double& m,double& pw,double& e,bool& s,int64_t& r) {
  }
 }
 
+static torch::nn::TripletMarginLossOptions triplet(K x,J i,Cast c) {
+ Pairs p; J n=xargc(x,i,p); S s=nullptr; torch::nn::TripletMarginLossOptions o;
+ if(n && xsym(x,i+n-1,s)) n--;
+ for(J j=0;j<n;++j)
+  switch(j) {
+   case 0: o.margin(ldouble(x,i+j,c,Setting::margin)); break;
+   case 1: o.p(ldouble(x,i+j,c,Setting::p)); break;
+   case 2: o.eps(ldouble(x,i+j,c,Setting::eps)); break;
+   case 3: o.swap(lbool(x,i+j,c,Setting::swap)); break;
+   default: AT_ERROR(lmap(c),": unrecognized positional arg(s), expecting up to 5 args, margin,p,eps,swap flag,reduce");
+  }
+ while(xpair(p))
+  switch(lset(p.k)) {
+   case Setting::margin: o.margin(ldouble(p,c)); break;
+   case Setting::p:      o.p(ldouble(p,c)); break;
+   case Setting::eps:    o.eps(ldouble(p,c)); break;
+   case Setting::swap:   o.swap(lbool(p,c)); break;
+   case Setting::reduce: s=lsym(p,c); break;
+   default: AT_ERROR("Unrecognized option: ",p.k," for multi-margin loss"); break;
+  }
+ if(s) reduce(o.reduction(),c,s);
+ return o;
+}
+
 static void triplet(bool a,K x,const torch::nn::TripletMarginLossOptions& o) {
  const torch::nn::TripletMarginLossOptions d;
  if(a || d.margin() != o.margin()) OPTION(x, margin, kf(o.margin()));
@@ -549,21 +599,19 @@ static void triplet(bool a,K x,const torch::nn::TripletMarginLossOptions& o) {
 
 KAPI Triplet(K a) {
  KTRY
-  bool b,s; double e,m,p; Tensor x,y,z; int64_t r; 
-  if(a->t) {
-   AT_ERROR("triplet margin loss not implemented for ",kname(a->t));
-  } else if(a->n < 3) {
-   AT_ERROR("triplet margin loss expects at least 3 args, (anchor;positive;negative)");
-  }
-  triargs(a,3,m,p,e,s,r);
-  b=xtenarg(a,x,y,z);
-  return kresult(b, torch::triplet_margin_loss(x,y,z,m,p,e,s,r));
- KCATCH("triplet margin");
+  bool p; Tensor x,y,z; Cast c=Cast::triplet;
+  TORCH_CHECK(a->t>=0, lmap(c)," loss not implemented for ",kname(a));
+  TORCH_CHECK(a->n>=2, lmap(c)," loss expects (anchor;positive;negative;optional arg(s)..)");
+  if(a->t) p=false, x=kput(a), z=x[2], y=x[1], x=x[0];
+  else     p=xtenarg(a,x,y,z);
+  return kresult(p, a->n==3 ? torch::nn::functional::triplet_margin_loss(x,y,z)
+                            : torch::nn::functional::triplet_margin_loss(x,y,z,triplet(a,3,c)));
+ KCATCH("triplet margin loss");
 }
 
 // ------------------------------------------------------------------------------------------------------
-// poissonargs - process optional margin,p,eps,swap flag & reduction args in k array for triplet loss
-// poissonloss  - funcional form of poisson nll loss function
+// poissonargs - process optional margin,p,eps,swap flag & reduction args for poisson nll loss
+// poissonloss  - functional form of poisson nll loss function
 // ------------------------------------------------------------------------------------------------------
 static void poissonargs(K x,J i,bool& l,bool& f,double& e,int64_t& r) {
  Pairs p; J n=xargc(x,i,p); PoissonLossOptions o; 
@@ -585,6 +633,28 @@ static void poissonargs(K x,J i,bool& l,bool& f,double& e,int64_t& r) {
  }
 }
 
+static torch::nn::PoissonNLLLossOptions poisson(K x,J i,Cast c) {
+ Pairs p; J n=xargc(x,i,p); S s=nullptr; torch::nn::PoissonNLLLossOptions o;
+ if(n && xsym(x,i+n-1,s)) n--;
+ for(J j=0;j<n;++j)
+  switch(j) {
+   case 0: o.log_input(lbool(x,i+j,c,Setting::log)); break;
+   case 1: o.full(lbool(x,i+j,c,Setting::full)); break;
+   case 2: o.eps(ldouble(x,i+j,c,Setting::eps)); break;
+   default: AT_ERROR(lmap(c),": unrecognized positional arg(s), expecting up to 4 args, log,full,eps,reduce");
+  }
+ while(xpair(p))
+  switch(lset(p.k)) {
+   case Setting::log:    o.log_input(lbool(p,c)); break;
+   case Setting::full:   o.full(lbool(p,c)); break;
+   case Setting::eps:    o.eps(ldouble(p,c)); break;
+   case Setting::reduce: s=lsym(p,c); break;
+   default: AT_ERROR("Unrecognized option: ",p.k," for poisson-nll loss"); break;
+  }
+ if(s) reduce(o.reduction(),c,s);
+ return o;
+}
+
 static void poisson(bool a,K x,const torch::nn::PoissonNLLLossOptions& o) {
  const torch::nn::PoissonNLLLossOptions d;
  if(a || d.log_input() != o.log_input()) OPTION(x, log,  kb(o.log_input()));
@@ -595,14 +665,13 @@ static void poisson(bool a,K x,const torch::nn::PoissonNLLLossOptions& o) {
 
 KAPI poissonloss(K a) {
  KTRY
-  bool p,ln,f; double e; Tensor x,y; int64_t r; 
-  if(a->t) {
-   AT_ERROR("poisson nll loss not implemented for ",kname(a->t));
-  } else if(a->n < 2) {
-   AT_ERROR("poisson nll loss expects at least 2 args, (input;target)");
-  }
-  poissonargs(a,2,ln,f,e,r); p=xtenarg(a,x,y);
-  return kresult(p, torch::poisson_nll_loss(x,y,ln,f,e,r));
+  bool p; Tensor x,y; Cast c=Cast::poissonloss;
+  TORCH_CHECK(a->t>=0, lmap(c)," loss not implemented for ",kname(a));
+  TORCH_CHECK(a->n>=2, lmap(c)," loss expects (input;target;optional arg(s)..)");
+  if(a->t) p=false, x=kput(a), y=x[1], x=x[0];
+  else     p=xtenarg(a,x,y);
+  return kresult(p, a->n==2 ? torch::nn::functional::poisson_nll_loss(x,y)
+                            : torch::nn::functional::poisson_nll_loss(x,y,poisson(a,2,c)));
  KCATCH("poisson nll loss");
 }
 
@@ -632,7 +701,7 @@ static void ctc1(K x,J i,int64_t& b,bool& z,int64_t& r) {
 
 static bool ctc2(K a,J i,Tensor& x,Tensor& y,Tensor& nx,Tensor& ny,IntArrayRef& jx,IntArrayRef& jy) {
   bool p=xtenarg(a,i,x,y);
-  if(!(xsize(a,i+2,jx) && xsize(a,i+3,jy))) { // unless both lenghts given as k arrays
+  if(!(xsize(a,i+2,jx) && xsize(a,i+3,jy))) { // unless both lengths given as k arrays
     if(!xten(a,i+2,nx)) nx=kput(a,2);  // define input lengths as tensor
     if(!xten(a,i+3,ny)) ny=kput(a,3);  // define target lengths as tensor
   }
@@ -718,12 +787,10 @@ static AnyModule lossinit2(S s,Cast c,K x,J i) {
   case Cast::cosineloss:  return AnyModule(nn::CosineEmbeddingLoss(margin<nn::CosineEmbeddingLossOptions>(x,i,c)));
   case Cast::margin:      return AnyModule(nn::MarginRankingLoss(  margin<nn::MarginRankingLossOptions>(x,i,c)));
 
-/*
-  case Cast::multimargin: {Scalar p,m;        multiargs(x,i,p,m,w,r);   a=std::make_shared<MultiMarginLoss>(p,m,w,r); break;}
-  case Cast::triplet:     {bool s;double e,p; triargs(x,i,m,p,e,s,r);   a=std::make_shared<TripletMarginLoss>(m,p,e,s,r); break;}
-  case Cast::poissonloss: {bool l,f;double e; poissonargs(x,i,l,f,e,r); a=std::make_shared<PoissonNLLLoss>(l,f,e,r); break;}
-  case Cast::ctc:         {bool z;int64_t b;  ctc1(x,i,b,z,r);          a=std::make_shared<CTCLoss>(b,z,r); break;}
-*/
+  case Cast::multimargin: return AnyModule(nn::MultiMarginLoss(multi(x,i,c))); break;
+  case Cast::triplet:     return AnyModule(nn::TripletMarginLoss(triplet(x,i,c))); break;
+  case Cast::poissonloss: return AnyModule(nn::PoissonNLLLoss(poisson(x,i,c))); break;
+//case Cast::ctc:         {bool z;int64_t b;  ctc1(x,i,b,z,r);          a=std::make_shared<CTCLoss>(b,z,r); break;}
   default: AT_ERROR("Unrecognized loss function: ",s);
  }
 }

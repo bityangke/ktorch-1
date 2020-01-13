@@ -626,10 +626,8 @@ static K special(K x,Ft f) {
  KCATCH("special");
 }
 
-Tensor isinf(const Tensor& t) {return t.is_floating_point() ? t.abs()==wf : torch::ones_like(t,torch::dtype(torch::kBool));}
-
 KAPI Isfinite(K x) {return special(x, torch::isfinite);}
-KAPI Isinf(K x)    {return special(x, isinf);}
+KAPI Isinf(K x)    {return special(x, torch::isinf);}
 KAPI Isnan(K x)    {return special(x, torch::isnan);}
 
 // ------------------------------------------------------------------------------------------------

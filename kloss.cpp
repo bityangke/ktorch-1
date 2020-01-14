@@ -4,15 +4,11 @@
 // append a loss option to a k dictionary given dict,name & value
 #define OPTION(x,k,v) dictadd(x, lset(Setting::k), v)
 
-using Lw  = Tensor (*)(const Tensor&, const Tensor&, const Tensor&, int64_t);           // loss w'wts
-using Lwi = Tensor (*)(const Tensor&, const Tensor&, const Tensor&, int64_t, int64_t);  // loss w'wts & ignore ind
-
 // ------------------------------------------------------------------------------------------------------
 // kloss - given loss type & shared pointer to newly created loss module, return kptr
 // lmap - map to/from sym to loss function name, e.g. `mse <-> Cast::mse
 // lset - map to/from sym to loss setting enum, e.g. `reduce <-> Setting::reduce
 // ------------------------------------------------------------------------------------------------------
-K kloss(Cast x,const Lossptr& y) {return kptr(new Kloss(x,y));}
 K kloss(Cast c,const AnyModule& m) {return kptr(new Kmodule(Class::loss,c,m));}
 
 static Cast lmap(S s) {
@@ -336,6 +332,7 @@ template<typename O> static void classwt(bool a,K x,const O& o) {
 // ------------------------------------------------------------------------------------------------------
 // wtloss - functional form for nll,cross entropy, multi-label soft margin (no c++ version yet)
 // ------------------------------------------------------------------------------------------------------
+/*
 Tensor multilabel_soft_margin_loss(const Tensor& x,const Tensor& y,const Tensor& w,int64_t r) {
  auto l = -(y * torch::log_sigmoid(x) + (1 - y) * torch::log_sigmoid(-x));
  if(w.defined()) l *= w;
@@ -348,6 +345,7 @@ Tensor multilabel_soft_margin_loss(const Tensor& x,const Tensor& y,const Tensor&
  }
  // unable to use torch::apply_loss_reduction(l,r), in anonymous namespace in ATen/native/Loss.cpp
 }
+*/
 
 static K classwt(K a,Cast c) {
  KTRY
@@ -396,26 +394,9 @@ KAPI bcelogits(K x) {return bceloss(x, false, "binary cross-entropy with logits"
 KAPI bcelogitw(K x) {return bceloss(x, true,  "binary cross-entropy with logits & batch weights");}
 
 // ------------------------------------------------------------------------------------------------------
-// marginval  - default margin value given loss type
 // margin - get/set optional margin & reduction arguments
 // marginloss - functional form of loss functions w'margin & reduction args
 // ------------------------------------------------------------------------------------------------------
-static double marginval(Cast c) {return c==Cast::hinge ? 1.0 : 0.0;}
-static void marginargs(Cast c,const char* s,K x,J i,double &m,int64_t &r) {
- Pairs p; J n=xargc(x,i,p); r=reduce(); m=marginval(c);
- if(n && xreduce(x,i+n-1,r)) n--;
- if(n && xnum(x,i+n-1,m)) n--;
- if(n)
-  AT_ERROR("Unrecognized arg(s) for ",s," loss");
- while(xpair(p)) {
-  switch(lset(p.k)) {
-   case Setting::margin: m=pdouble(p); break;
-   case Setting::reduce: r=rmap(psym(p)); break;
-   default: AT_ERROR("Unrecognized option: ",p.k," for ",s," loss"); break;
-  }
- }
-}
-
 template<typename O> static O margin(K x,J i,Cast c) {
  O o; Pairs p; J n=xargc(x,i,p); S s=nullptr;
  if(n && xsym(x,i+n-1,s)) n--;
@@ -475,26 +456,6 @@ KAPI Margin(K x)     {return marginloss(x, Cast::margin);}
 // multi - get/set optional power,margin,weight & reduction arguments for multi margin loss
 // multimargin - funcional form of multi margin loss function
 // ----------------------------------------------------------------------------------------
-static void multiargs(K x,J i,Scalar &pw,Scalar& m,Tensor& w,int64_t &r) {
- Pairs p; J n=xargc(x,i,p); MultiMarginLossOptions o;
- r=o.reduce(); pw=o.p(); m=o.margin();
- if(n && xnum(x,i,pw)) i++,n--;
- if(n && xnum(x,i,m))  i++,n--;
- if(n && xreduce(x,i+n-1,r)) n--;
- if(n==1) {n--; if(!xten(x,i+n,w) && xlen(kK(x)[i+n])) w=kput(x,i+n);}
- if(n)
-  AT_ERROR("Unrecognized arg(s) for multi-margin loss");
- while(xpair(p)) {
-  switch(lset(p.k)) {
-   case Setting::p:      pnum(p,pw); break;
-   case Setting::margin: pnum(p,m); break;
-   case Setting::weight: pten(p,w); break;
-   case Setting::reduce: r=rmap(psym(p)); break;
-   default: AT_ERROR("Unrecognized option: ",p.k," for multi-margin loss"); break;
-  }
- }
-}
-
 static torch::nn::MultiMarginLossOptions multi(K x,J i,Cast c) {
  Pairs p; J n=xargc(x,i,p); S s=nullptr; Tensor w; torch::nn::MultiMarginLossOptions o;
  if(n && xsym(x,i+n-1,s)) n--;
@@ -539,31 +500,8 @@ KAPI multimargin(K a) {
 }
 
 // ------------------------------------------------------------------------------------------------------
-// triargs - process optional margin,p,eps,swap flag & reduction args in k array for triplet loss
-// triplet  - funcional form of triplet margin loss function
+// triplet - get/set optional margin,p,eps,swap flag & reduction args in k array for triplet loss
 // ------------------------------------------------------------------------------------------------------
-static void triargs(K x,J i,double& m,double& pw,double& e,bool& s,int64_t& r) {
- Pairs p; J n=xargc(x,i,p); TripletLossOptions o; 
- m=o.margin(); pw=o.p(); e=o.eps(); s=o.swap(); r=o.reduce();
- if(n && xnum(x,i,m))  i++,n--;
- if(n && xnum(x,i,pw)) i++,n--;
- if(n && xdouble(x,i,e))  i++,n--;
- if(n && xbool(x,i,s)) i++,n--;
- if(n && xreduce(x,i,r)) i++,n--;
- if(n)
-  AT_ERROR("Unrecognized arg(s) for triplet margin loss");
- while(xpair(p)) {
-  switch(lset(p.k)) {
-   case Setting::margin: m=pdouble(p); break;
-   case Setting::p:      pw=pdouble(p); break;
-   case Setting::eps:    e=pdouble(p); break;
-   case Setting::swap:   s=pbool(p); break;
-   case Setting::reduce: r=rmap(psym(p)); break;
-   default: AT_ERROR("Unrecognized option: ",p.k," for triplet margin loss"); break;
-  }
- }
-}
-
 static torch::nn::TripletMarginLossOptions triplet(K x,J i,Cast c) {
  Pairs p; J n=xargc(x,i,p); S s=nullptr; torch::nn::TripletMarginLossOptions o;
  if(n && xsym(x,i+n-1,s)) n--;
@@ -610,29 +548,9 @@ KAPI Triplet(K a) {
 }
 
 // ------------------------------------------------------------------------------------------------------
-// poissonargs - process optional margin,p,eps,swap flag & reduction args for poisson nll loss
+// poisson - get/set optional margin,p,eps,swap flag & reduction args for poisson nll loss
 // poissonloss  - functional form of poisson nll loss function
 // ------------------------------------------------------------------------------------------------------
-static void poissonargs(K x,J i,bool& l,bool& f,double& e,int64_t& r) {
- Pairs p; J n=xargc(x,i,p); PoissonLossOptions o; 
- l=o.log(); f=o.full(); e=o.eps(); r=o.reduce();
- if(n && xbool(x,i,l))   i++,n--;
- if(n && xbool(x,i,f))   i++,n--;
- if(n && xdouble(x,i,e)) i++,n--;
- if(n && xreduce(x,i,r)) i++,n--;
- if(n)
-  AT_ERROR("Unrecognized arg(s) for poisson nll loss");
- while(xpair(p)) {
-  switch(lset(p.k)) {
-   case Setting::log:    l=pbool(p); break;
-   case Setting::full:   f=pbool(p); break;
-   case Setting::eps:    e=pdouble(p); break;
-   case Setting::reduce: r=rmap(psym(p)); break;
-   default: AT_ERROR("Unrecognized option: ",p.k," for poisson nll loss"); break;
-  }
- }
-}
-
 static torch::nn::PoissonNLLLossOptions poisson(K x,J i,Cast c) {
  Pairs p; J n=xargc(x,i,p); S s=nullptr; torch::nn::PoissonNLLLossOptions o;
  if(n && xsym(x,i+n-1,s)) n--;
@@ -730,44 +648,15 @@ KAPI Ctc(K a) {
 }
 
 // ---------------------------------------------------------------------------------------------------
-// lossinit - initialize loss modules, return k pointer
-// lossopt - retrieve loss module options, return k dictionary of symbol -> setting
+// lossinit - initialize loss modules by parsing loss fn name & optional args, return AnyModule
+// lossopt - retrieve loss module options, return k dictionary of module name & options
 // lossdict - dictionary of loss module & options or full state (w'class, empty name, parms & buffers)
 // lossfwd - given loss object, calls forward function on remaining inputs and returns loss
 // lossto - given loss object and device/data type, converts tensors in options (e.g. class weights)
 // losswt - return class wts if tensor is defined (used to determine device/datatype)
 // loss - main api function that creates/calls loss objects and queries their properties
 // ---------------------------------------------------------------------------------------------------
-static K lossinit(S s,K x,J i) {
- J j; double m; Cast c=lmap(s); Tensor w; int64_t r; Lossptr a;
- switch(c) {
-  case Cast::bce:         a=std::make_shared<BCELoss>(reduce(s,x,i)); break;
-  case Cast::kl:          a=std::make_shared<KLDivLoss>(reduce(s,x,i)); break;
-  case Cast::l1:          a=std::make_shared<L1Loss>(reduce(s,x,i)); break;
-  case Cast::mse:         a=std::make_shared<MSELoss>(reduce(s,x,i)); break;
-  case Cast::multilabel:  a=std::make_shared<MultiLabelMarginLoss>(reduce(s,x,i)); break;
-  case Cast::smoothl1:    a=std::make_shared<SmoothL1Loss>(reduce(s,x,i)); break;
-  case Cast::softmargin:  a=std::make_shared<SoftMarginLoss>(reduce(s,x,i)); break;
-
-  case Cast::bcelogits:   wtargs(c,s,x,i,w,j,r); a=std::make_shared<BCEWithLogitsLoss>(w,r); break;
-  case Cast::multisoft:   wtargs(c,s,x,i,w,j,r); a=std::make_shared<MultiLabelSoftMarginLoss>(w,r); break;
-  case Cast::ce:          wtargs(c,s,x,i,w,j,r); a=std::make_shared<CrossEntropyLoss>(w,j,r); break;
-  case Cast::nll:         wtargs(c,s,x,i,w,j,r); a=std::make_shared<NLLLoss>(w,j,r); break;
-
-  case Cast::hinge:       marginargs(c,s,x,i,m,r); a=std::make_shared<HingeEmbeddingLoss>(m,r); break;
-  case Cast::cosineloss:  marginargs(c,s,x,i,m,r); a=std::make_shared<CosineEmbeddingLoss>(m,r); break;
-  case Cast::margin:      marginargs(c,s,x,i,m,r); a=std::make_shared<MarginRankingLoss>(m,r); break;
-
-  case Cast::multimargin: {Scalar p,m;        multiargs(x,i,p,m,w,r);   a=std::make_shared<MultiMarginLoss>(p,m,w,r); break;}
-  case Cast::triplet:     {bool s;double e,p; triargs(x,i,m,p,e,s,r);   a=std::make_shared<TripletMarginLoss>(m,p,e,s,r); break;}
-  case Cast::poissonloss: {bool l,f;double e; poissonargs(x,i,l,f,e,r); a=std::make_shared<PoissonNLLLoss>(l,f,e,r); break;}
-  case Cast::ctc:         {bool z;int64_t b;  ctc1(x,i,b,z,r);          a=std::make_shared<CTCLoss>(b,z,r); break;}
-  default: AT_ERROR("Unrecognized loss function: ",s); break;
- }
- return kloss(c,a);
-}
-
-static AnyModule lossinit2(S s,Cast c,K x,J i) {
+static AnyModule lossinit(S s,Cast c,K x,J i) {
  namespace nn=torch::nn;
  switch(c) {
   case Cast::bce:         return AnyModule(nn::BCELoss(             reduce<nn::BCELossOptions>(x,i,c)));
@@ -795,55 +684,7 @@ static AnyModule lossinit2(S s,Cast c,K x,J i) {
  }
 }
 
-static K lossopt(bool a,Cast c,Loss *l) {
- K x=xD(ktn(KS,0),ktn(0,0));
- if (auto* p=dynamic_cast<BasicLoss*>(l)) {
-  LossOptions d,o=p->options;
-  if(a || d.reduce() != o.reduce()) OPTION(x, reduce, ks(rmap(o.reduce())));
- } else if(auto* p=dynamic_cast<WeightedLoss*>(l)) {
-  WeightedLossOptions d,o=p->options;
-  if(a || o.weight().defined())     OPTION(x, weight, kget(o.weight()));
-  if(a || d.reduce() != o.reduce()) OPTION(x, reduce, ks(rmap(o.reduce())));
- } else if(auto* p=dynamic_cast<LogLoss*>(l)) {
-  LogLossOptions d,o=p->options;
-  if(a || o.weight().defined())     OPTION(x, weight, kget(o.weight()));
-  if(a || d.ignore() != o.ignore()) OPTION(x, ignore, kj(o.ignore()));
-  if(a || d.reduce() != o.reduce()) OPTION(x, reduce, ks(rmap(o.reduce())));
- } else if(auto* p=dynamic_cast<MarginLoss*>(l)) {
-  MarginLossOptions d(marginval(c)),o=p->options;
-  if(a || d.margin() != o.margin()) OPTION(x, margin, kf(o.margin()));
-  if(a || d.reduce() != o.reduce()) OPTION(x, reduce, ks(rmap(o.reduce())));
- } else if(auto* p=dynamic_cast<MultiMarginLoss*>(l)) {
-  MultiMarginLossOptions d,o=p->options;
-  if(a || !match(d.p(),o.p()))           OPTION(x, p,      kscalar(o.p()));
-  if(a || !match(d.margin(),o.margin())) OPTION(x, margin, kscalar(o.margin()));
-  if(a || o.weight().defined())          OPTION(x, weight, kget(o.weight()));
-  if(a || d.reduce() != o.reduce())      OPTION(x, reduce, ks(rmap(o.reduce())));
- } else if(auto* p=dynamic_cast<TripletMarginLoss*>(l)) {
-  TripletLossOptions d,o=p->options;
-  if(a || d.margin() != o.margin()) OPTION(x, margin, kf(o.margin()));
-  if(a || d.p()      != o.p())      OPTION(x, p,      kf(o.p()));
-  if(a || d.eps()    != o.eps())    OPTION(x, eps,    kf(o.eps()));
-  if(a || d.swap()   != o.swap())   OPTION(x, swap,   kb(o.swap()));
-  if(a || d.reduce() != o.reduce()) OPTION(x, reduce, ks(rmap(o.reduce())));
- } else if(auto* p=dynamic_cast<PoissonNLLLoss*>(l)) {
-  PoissonLossOptions d,o=p->options;
-  if(a || d.log()    != o.log())    OPTION(x, log,    kb(o.log()));
-  if(a || d.full()   != o.full())   OPTION(x, full,   kb(o.full()));
-  if(a || d.eps()    != o.eps())    OPTION(x, eps,    kf(o.eps()));
-  if(a || d.reduce() != o.reduce()) OPTION(x, reduce, ks(rmap(o.reduce())));
- } else if(auto* p=dynamic_cast<CTCLoss*>(l)) {
-  CTCLossOptions d,o=p->options;
-  if(a || d.blank()   != o.blank())   OPTION(x, blank,   kj(o.blank()));
-  if(a || d.zeroinf() != o.zeroinf()) OPTION(x, zeroinf, kb(o.zeroinf()));
-  if(a || d.reduce()  != o.reduce())  OPTION(x, reduce,  ks(rmap(o.reduce())));
- } else {
-  AT_ERROR("Unrecognized loss pointer",(I)c);
- }
- return x;
-}
- 
-static K lossopt2(bool a,Cast c,AnyModule& m) {
+static K lossopt(bool a,Cast c,AnyModule& m) {
  namespace nn=torch::nn;
  K x=xD(ktn(KS,0),ktn(0,0));
  switch(c) {
@@ -873,7 +714,7 @@ static K lossopt2(bool a,Cast c,AnyModule& m) {
  return x;
 }
 
-K lossdict(bool a,bool b,Cast c,Loss* l) {
+K lossdict(bool a,bool b,Cast c,AnyModule &m) {
  //a:true if all options, b:true if full state
  K k,v;
  if(b) {
@@ -888,50 +729,34 @@ K lossdict(bool a,bool b,Cast c,Loss* l) {
   kS(k)[1]=statekey(State::options);
  }
  kK(v)[b ? 1 : 0]=ks(lmap(c));
- kK(v)[b ? 3 : 1]=lossopt(a,c,l);
+ kK(v)[b ? 3 : 1]=lossopt(a,c,m);
  return xD(k,v);
 }
- 
+
 // this version of lossdict() called from generic state() function in k-level api
 K lossdict(Ktag *g,K x) {
  bool a=env().alloptions;
  if(x->n==1 || (x->n==2 && xbool(x,1,a)))
-  return lossdict(a,true,g->c,((Kloss*)g)->l.get());
+  return lossdict(a,true,g->c,((Kmodule*)g)->m);
  else
   AT_ERROR("Loss state requires 1-2 args: previously allocated ptr or (ptr;options flag)");
 }
 
-K lossdict2(bool a,bool b,Cast c,AnyModule &m) {
- //a:true if all options, b:true if full state
- K k,v;
- if(b) {
-  k=statekeys(); v=ktn(0,k->n);
-  kK(v)[0]=kc('l');   //class="l" for loss
-  kK(v)[2]=ks((S)""); //empty user-defined name
-  kK(v)[4]=ktn(0,0);  //empty parms
-  kK(v)[5]=ktn(0,0);  //and buffers
- } else {
-  k=ktn(KS,2),v=ktn(0,2);
-  kS(k)[0]=statekey(State::module);
-  kS(k)[1]=statekey(State::options);
- }
- kK(v)[b ? 1 : 0]=ks(lmap(c));
- kK(v)[b ? 3 : 1]=lossopt2(a,c,m);
- return xD(k,v);
-}
-
-static K lossfwd(Cast c,Loss *l,K a) {
+static K lossfwd(Cast c,AnyModule& m,K a) {
  bool p; Tensor r,x,y,z;
  if(a->n==3) {
   p=xtenarg(a,1,x,y);
-  r=l->forward(x,y);
+  r=m.forward(x,y);
  } else if(a->n==4) {
   p=xtenarg(a,1,x,y,z);
-  r=l->forward(x,y,z);
+  r=m.forward(x,y,z);
  } else if(c==Cast::ctc && a->n==5) {
+  AT_ERROR("ctc not implemented yet");
+/*
   IntArrayRef jx,jy; Tensor nx,ny; p=ctc2(a,1,x,y,nx,ny,jx,jy);
   if(nx.defined())
    r=nx.defined() ? l->forward(x,y,nx,ny) : l->forward(x,y,jx,jy);
+*/
  }
  if(r.defined())
   return p ? kten(r) : kget(r);
@@ -939,11 +764,11 @@ static K lossfwd(Cast c,Loss *l,K a) {
   AT_ERROR("Unrecognized arg(s) for ",lmap(c)," forward call");
 }
 
-K lossto(Kloss* l,const TensorOptions& o,bool a) {
- auto s=torch::typeMetaToScalarType(o.dtype());
- if(o.has_device() && o.has_dtype()) l->l->to(o.device(),s,a);
- else if(o.has_device())             l->l->to(o.device(),a);
- else                                l->l->to(s,a);
+K lossto(Kmodule* l,const TensorOptions& o,bool a) {
+ auto s=torch::typeMetaToScalarType(o.dtype()); auto m=l->m.ptr();
+ if(o.has_device() && o.has_dtype()) m->to(o.device(),s,a);
+ else if(o.has_device())             m->to(o.device(),a);
+ else                                m->to(s,a);
  return (K)0;
 }
 
@@ -958,7 +783,8 @@ Tensor losswt(Loss *l) {
  return {};
 }
 
-KAPI loss(K x) {
+/*
+KAPI loss1(K x) {
  KTRY
   S s; bool a=env().alloptions; Kloss *l;
   if(xsyms(x,s) || xsym(x,0,s)) {
@@ -974,32 +800,29 @@ KAPI loss(K x) {
   }
  KCATCH("Loss module");
 }
+*/
 
-KAPI loss2(K x) {
+KAPI loss(K x) {
  KTRY
   S s; bool a=env().alloptions; Kmodule *l;
   if(xsyms(x,s) || xsym(x,0,s)) {
    Cast c=lmap(s);
-   return kloss(c, lossinit2(s,c,x,1));
-/*
+   return kloss(c, lossinit(s,c,x,1));
   } else if(xdict(x)) {    //define loss from state dictionary
-   return lossinit(statesym(State::module,x),statedict(State::options,x),-1);
-*/
+   AT_ERROR("nyi"); //return lossinit(statesym(State::module,x),statedict(State::options,x),-1);
   } else if(((l=xLoss(x))) || (xbool(x,1,a) && x->n==2 && ((l=xLoss(x,0))))) {
-   return lossdict2(a,false,l->c,l->m); //given allocated loss ptr or ptr w'boolean, return options
-/*
-  } else if((l=xloss(x,0)) && x->n>1) {
-   return lossfwd(l->c,l->get(),x); //else, run forward calculation w'loss and input,target,..
-*/
+   return lossdict(a,false,l->c,l->m); //given allocated loss ptr or ptr w'boolean, return options
+  } else if((l=xLoss(x,0)) && x->n>1) {
+   return lossfwd(l->c,l->m,x); //else, run forward calculation w'loss and input,target,..
   } else {
    AT_ERROR("Unrecognized arg(s)");
   }
  KCATCH("Loss module");
 }
 
-K lossattr(const Lossptr& l,Ktype k,Attr a) {
+K lossattr(const AnyModule& m,Ktype k,Attr a) {
  switch(a) {
-  case Attr::ref:     return kj(l.use_count());
+  //case Attr::ref:     return kj(m.ptr()->use_count());
   default: AT_ERROR(mapattr(a),": not implemented for loss modules");
  }
 }

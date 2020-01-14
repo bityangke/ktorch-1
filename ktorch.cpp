@@ -454,8 +454,6 @@ Sequential* xseq(K x) {
 bool xseq(K x,J i,Sequential& s) {return xind(x,i) && xseq(kK(x)[i],s);}
 Sequential* xseq(K x,J i) {return xind(x,i) ? xseq(kK(x)[i]) : nullptr;}
 
-Kloss* xloss(K x) {auto* g=xtag(x); return (g && g->a==Class::loss) ? (Kloss*)g : nullptr;}
-Kloss* xloss(K x,J i) {return xind(x,i) ? xloss(kK(x)[i]) : nullptr;}
 Kmodule* xLoss(K x) {auto* g=xtag(x); return (g && g->a==Class::loss) ? (Kmodule*)g : nullptr;}
 Kmodule* xLoss(K x,J i) {return xind(x,i) ? xLoss(kK(x)[i]) : nullptr;}
 
@@ -910,8 +908,8 @@ KAPI addref(K x) {
   switch(g->a) {
    case Class::tensor:     return kten(((Kten*)g)->t);
    case Class::sequential: return kseq(((Kseq*)g)->q);
-   case Class::loss:       return kloss(g->c, ((Kloss*)g)->l);
-   case Class::optimizer:  return  kopt(g->c,  ((Kopt*)g)->o);
+   case Class::loss:       return kloss(g->c,((Kmodule*)g)->m);
+   case Class::optimizer:  return  kopt(g->c,   ((Kopt*)g)->o);
    default: AT_ERROR("addref not implemented for ",mapclass(g->a));
   }
  KCATCH("addref");
@@ -1043,7 +1041,7 @@ KAPI to(K x) {
     case Class::tensor:     return tento((Kten*)g,o,a,b);
     case Class::vector:     return vecto((Kvec*)g,o,a);
     case Class::sequential: return seqto((Kseq*)g,o,a);
-    case Class::loss:       return lossto((Kloss*)g,o,a);
+    case Class::loss:       return lossto((Kmodule*)g,o,a);
     default: AT_ERROR("to() not implemented for: ",mapclass(g->a));
    }
   } else {
@@ -1336,11 +1334,11 @@ static K attr(K x,Ktype k,Attr a) {
   auto* g=xtag(x);
   TORCH_CHECK(g, mapattr(a),": unrecognized arg(s) - ",kname(x->t));
   switch(g->a) {
-   case Class::tensor:     return tensorattr(((Kten*)g)->t,k,a);
-   case Class::vector:     return vectorattr(((Kvec*)g)->v,k,a);
-   case Class::loss:       return  lossattr(((Kloss*)g)->l,k,a);
-   case Class::optimizer:  return    optattr(((Kopt*)g)->o,k,a);
-   case Class::sequential: return    seqattr(((Kseq*)g)->q,k,a);
+   case Class::tensor:     return  tensorattr(((Kten*)g)->t,k,a);
+   case Class::vector:     return  vectorattr(((Kvec*)g)->v,k,a);
+   case Class::loss:       return lossattr(((Kmodule*)g)->m,k,a);
+   case Class::optimizer:  return     optattr(((Kopt*)g)->o,k,a);
+   case Class::sequential: return     seqattr(((Kseq*)g)->q,k,a);
    default: AT_ERROR(mapattr(a),": not implemented for ",mapclass(g->a));
   }
  KCATCH("attr");

@@ -1,26 +1,11 @@
 #include "ktorch.h"
 #include "knn.h"
-#include "kloss.h"
 
 #define OPTION(x,k,v) dictadd(x, lset(Setting::k), v)
 
-template<typename O> void test1(O& o) {
- Tensor w=torch::randn({3});
- if(std::is_same<O,torch::nn::BCEWithLogitsLossOptions>::value)
-  std::cerr <<"yes, bce w'logits\n";
- else
-  std::cerr <<"no, not bce w'logits\n";
- //std::enable_if_t<std::is_same<O,torch::nn::BCEWithLogitsLossOptions>::value> o.pos_weights(w);
-}
-
-KAPI enable(K x) {
- KTRY
-  torch::nn::BCEWithLogitsLossOptions o1;
-  torch::nn::MultiLabelSoftMarginLossOptions o2;
-  test1(o1);
-  test1(o2);
-  return (K)0;
- KCATCH("enable if");
+KAPI randint_type(K x) {
+ std::cerr << torch::randint(10,{3}) << "\n";
+ return (K)0;
 }
 
 KAPI wt(K x,K y,K w) {
@@ -38,81 +23,11 @@ KAPI wt(K x,K y,K w) {
  KCATCH("bce wt");
 }
 
-KAPI red(K x) {
- std::cerr << torch::Reduction::Sum << "\n";
- return(K)0;
-}
-
 KAPI memtest(K x) {
  std::vector<torch::Tensor> v;
  v.reserve(10000000);
  for(size_t i=0; i<10000000; ++i) v.emplace_back(torch::arange(10));
  return kj(v.size());
-}
-
-static Cast lmap(S s) {
- for(auto&m:env().loss)
-  if(std::get<0>(m)==s) return std::get<1>(m);
- AT_ERROR("Unrecognized loss function: ",s);
-}
-
-static S lmap(Cast c) {
- for(auto&m:env().loss)
-  if(std::get<1>(m)==c) return std::get<0>(m);
- AT_ERROR("Unrecognized loss function: ",(I)c);
-}
-
-static S lset(Setting s) {
- for(auto&m:env().lset)
-  if(std::get<1>(m)==s) return std::get<0>(m);
- AT_ERROR("Unrecognized loss setting: ",(I)s);
-}
-
-KAPI testloss1(K x) {
- KTRY
-  Cast c=lmap(x->s); AnyModule a;
-  switch(c) {
-   case Cast::bce:         a=AnyModule(torch::nn::BCELoss()); break;
-   case Cast::mse:         a=AnyModule(torch::nn::MSELoss(torch::kNone)); break;
-   case Cast::l1:          a=AnyModule(torch::nn::L1Loss()); break;
-   case Cast::cosineloss:  a=AnyModule(torch::nn::CosineEmbeddingLoss(torch::nn::CosineEmbeddingLossOptions().reduction(torch::kSum).margin(0.001))); break;
-   default: AT_ERROR("Unrecognized loss function: ",x->s); break;
- }
- return kloss(c,a);
- KCATCH("loss1");
-}
-
-static K lossopts(bool a,Cast c,const AnyModule& g) { //g:generic module, a:true if all options, v:k values, i:table row
- K x=xD(ktn(KS,0),ktn(0,0));
- switch(c) {
-  case Cast::bce: OPTION(x, reduce, ks(ESYM(g.get<torch::nn::BCELoss>()->options.reduction()))); break;
-  case Cast::mse: OPTION(x, reduce, ks(ESYM(g.get<torch::nn::MSELoss>()->options.reduction()))); break;
-  case Cast::cosineloss: {
-   auto o=g.get<torch::nn::CosineEmbeddingLoss>()->options;
-   OPTION(x, margin, kf(o.margin()));
-   OPTION(x, reduce, ks(ESYM(o.reduction())));
-   break;
-  }
-  default: AT_ERROR("Unrecognized loss module");
- }
- return x;
-}
-
-KAPI testloss2(K x) {
- KTRY
-  auto* l=xLoss(x);
-  if(l) {
-   bool a=env().alloptions;
-   K k=ktn(KS,2),v=ktn(0,2);
-   kS(k)[0]=statekey(State::module);
-   kS(k)[1]=statekey(State::options);
-   kK(v)[0]=ks(lmap(l->c));
-   kK(v)[1]=lossopts(a,l->c,l->m);
-   return xD(k,v);
-  } else {
-   return KERR("not a loss pointer");
-  }
- KCATCH("loss2");
 }
 
 KAPI testloss3(K x,K y) {

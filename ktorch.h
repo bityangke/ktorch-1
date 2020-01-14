@@ -75,8 +75,6 @@ using Optptr=std::shared_ptr<OptimizerBase>;
 using Optimizer=torch::optim::Optimizer;
 using LossClosureOptimizer=torch::optim::LossClosureOptimizer;
 using TensorDict = torch::OrderedDict<std::string, torch::Tensor>;
-class TORCH_API Loss;
-using Lossptr=std::shared_ptr<Loss>;
 using at::detail::computeStorageSize;
 using torch::Reduction::Reduction;
 
@@ -225,13 +223,6 @@ struct TORCH_API Kmodule : public Ktag {
  torch::nn::AnyModule m;
 };
 
-struct TORCH_API Kloss : public Ktag {
- Lossptr l;
- Kloss(Cast x,const Lossptr& y) : l(std::move(y)) {a=Class::loss; c=x;}
- bool is_empty() const noexcept {return l == nullptr;}
- Loss* get() {TORCH_CHECK(!is_empty(), "Undefined loss function"); return l.get();}
-};
-
 struct TORCH_API Kopt : public Ktag {
  Optptr o;
  Kopt(Cast x,const Optptr& y) : o(std::move(y)) {a=Class::optimizer; c=x;}
@@ -243,9 +234,9 @@ struct TORCH_API Kmodel : public Ktag {
  Cast lc;          // loss fn
  Cast oc;          // optimizer
  Sequential q;     // sequential module
- Lossptr l;        // shared ptr to loss module
+ AnyModule l;      // loss module
  Optptr o;         // shared ptr to optimizer
- Kmodel(Kseq *x,Kloss *y,Kopt *z) : lc(y->c),oc(z->c),q(x->q),l(y->l),o(z->o) {a=Class::model; c=Cast::model;}
+ Kmodel(Kseq *x,Kmodule *y,Kopt *z) : lc(y->c),oc(z->c),q(x->q),l(y->m),o(z->o) {a=Class::model; c=Cast::model;}
 };
 
 S krrbuf(const char *);
@@ -329,8 +320,6 @@ bool xseq(K,Sequential&);
 bool xseq(K,J,Sequential&);
 Sequential* xseq(K);
 Sequential* xseq(K,J);
-Kloss* xloss(K);
-Kloss* xloss(K,J);
 Kmodule* xLoss(K);
 Kmodule* xLoss(K,J);
 Kopt* xoptim(K);
@@ -468,12 +457,11 @@ void nnfn(K);
 K mstate(K);
 
 // loss functions:
-K kloss(Cast,const Lossptr&);
 K kloss(Cast,const AnyModule&);
 K lossdict(Ktag*,K);
-K lossdict(bool,bool,Cast,Loss*);
-K lossto(Kloss*,const TensorOptions&,bool);
-K lossattr(const Lossptr&,Ktype,Attr);
+K lossdict(bool,bool,Cast,AnyModule&);
+K lossto(Kmodule*,const TensorOptions&,bool);
+K lossattr(const AnyModule&,Ktype,Attr);
 void lossfn(K);
 
 // optimization functions:

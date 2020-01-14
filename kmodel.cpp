@@ -1,6 +1,5 @@
 #include "ktorch.h"
 #include "knn.h"
-#include "kloss.h"
 
 // -------------------------------------------------------------------------------------------
 // modelpart - parse args from k to define sequential, loss & optimizer modules
@@ -9,12 +8,12 @@
 // modeltable
 // model - create model from sequential, loss & optimizer modules or retrieve input options
 // -------------------------------------------------------------------------------------------
-static void modelpart(K x,J i,Kseq*& q,Kloss*& l,Kopt*& o) {
+static void modelpart(K x,J i,Kseq*& q,Kmodule*& l,Kopt*& o) {
  for(;i<x->n;++i) {
   auto* g=xtag(x,i);
   switch(g ? g->a : Class::undefined) {
    case Class::sequential: q=(Kseq*)g;  break;
-   case Class::loss:       l=(Kloss*)g; break;
+   case Class::loss:       l=(Kmodule*)g; break;
    case Class::optimizer:  o=(Kopt*)g;  break;
    default: AT_ERROR("model arg[",i,"] unrecognized: ",
                     (g ? mapclass(g->a) : kname(x,i))); break;
@@ -32,7 +31,7 @@ K modelkeys() {
 }
 
 K modelstate(bool a,bool b,Kmodel *m) {
- return xD(modelkeys(), knk(3, mtable(m->q,a,b), lossdict(a,b,m->lc,m->l.get()), optstate(a,b,m->oc,m->o.get())));
+ return xD(modelkeys(), knk(3, mtable(m->q,a,b), lossdict(a,b,m->lc,m->l), optstate(a,b,m->oc,m->o.get())));
 }
 
 // this version of modelstate called from generic state function in k-level api
@@ -59,7 +58,7 @@ KAPI modeltable(K x) {
 KAPI model(K x) {
  KTRY
   bool a=env().alloptions;
-  Kseq *q=nullptr; Kloss *l=nullptr; Kopt *o=nullptr; Kmodel *m=nullptr;
+  Kseq *q=nullptr; Kmodule *l=nullptr; Kopt *o=nullptr; Kmodel *m=nullptr;
   TORCH_CHECK(!x->t, "model not implemented for ",kname(x->t));
   if((m=xmodel(x)) || (x->n==2 && xbool(x,1,a) && (m=xmodel(x,0)))) {
    return modelstate(a,false,m);
@@ -67,7 +66,7 @@ KAPI model(K x) {
    m=xmodel(x,0); modelpart(x,m ? 1 : 0,q,l,o);
    if(m) {
     if(q) m->q=q->q;              // reassign model's sequential module
-    if(l) m->lc=l->c, m->l=l->l;  // loss function
+    if(l) m->lc=l->c, m->l=l->m;  // loss function
     if(o) m->oc=o->c, m->o=o->o;  // optimizer
     modelfree(x,1);
     return (K)0;
@@ -93,7 +92,7 @@ Tensor mforward(Kmodel *m,TensorVector& v) {
 K mbackward(K x) {
  Kmodel *m; Tensor *input,*label,loss;
  if((m=xmodel(x,0)) && (input=xten(x,1)) && (label=xten(x,2))) {
-  loss=m->l->forward(m->q->forward(*input),*label);
+  loss=m->l.forward(m->q->forward(*input),*label);
  } else {
   AT_ERROR("backward expects (model; inputs; labels)");
  }
@@ -103,9 +102,9 @@ K mbackward(K x) {
 
 Tensor mloss(Kmodel *m,TensorVector &v,const Tensor& x) {
  if(v.size()==2)
-  return m->l->forward(x,v[1]);
+  return m->l.forward(x,v[1]);
  else if(v.size()==3)
-  return m->l->forward(x,v[1],v[2]);
+  return m->l.forward(x,v[1],v[2]);
  else
   AT_ERROR("model: ", v.size()," inputs, expecting 2-3");
 }

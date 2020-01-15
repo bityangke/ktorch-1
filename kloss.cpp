@@ -83,44 +83,9 @@ static double ldouble(const Pairs& p,Cast c) {
  return pdouble(p);
 }
 
-// ------------------------------------------------------------------------------------------------------
-// rmsg,rmap - message and mapping for loss reduction to/from sym and enumeration
-// xreduce - check if sym, if matches loss reduction, set int, e.g. `none -> 0, `mean -> 1, `sum -> 2
-// ------------------------------------------------------------------------------------------------------
-static std::string rmsg(bool b) {
- std::string s;
- for(auto&m:env().reduce)
-  s += (b ? std::get<0>(m) : std::to_string(std::get<1>(m))) + ",";
- s.pop_back();
- return s;
-}
-
-static int64_t rmap(S s) {
- for(auto&m:env().reduce)
-  if(std::get<0>(m)==s) return std::get<1>(m);
- AT_ERROR("Unrecognized setting for loss reduction: ",s,", expecting one of ",rmsg(true));
-}
-
-static S rmap(int64_t r) {
- for(auto&m:env().reduce)
-  if(std::get<1>(m)==r) return std::get<0>(m);
- AT_ERROR("Unrecognized setting for loss reduction: ",r,", expecting one of ",rmsg(false));
-}
-
-static bool xreduce(K x,int64_t &r) {
- if(x->t == -KS) return r=rmap(x->s), true;
- return false;
-}
-
-static bool xreduce(K x,J i,int64_t &r) {
- if(x->t == KS && -1<x->n && x->n>i)
-  return r=rmap(kS(x)[i]),true;
- else
-  return xind(x,i) && xreduce(kK(x)[i],r);
-}
-
 // -----------------------------------------------------------------------------------------------
 //  reduction arg uses variant, using functions below to translate sym -> variant value
+//  (can simplify once KL loss removes "batchmean" reduction)
 // -----------------------------------------------------------------------------------------------
 using Reduce1=c10::variant<torch::enumtype::kNone, torch::enumtype::kMean, torch::enumtype::kSum>;
 using Reduce2=c10::variant<torch::enumtype::kNone, torch::enumtype::kBatchMean, torch::enumtype::kSum, torch::enumtype::kMean>;
@@ -144,11 +109,9 @@ static void reduce(Reduce2& r,Cast c,S s) {
  }
 }
 
-// ------------------------------------------------------------------------------------------------------
-// reduce - return default reduction mode, or process given arg(s) & offset to return reduction mode
-// lossfunc - call loss function with x,y tensors/arrays and optional reduction mode
-// bce - binary cross entropy has option of batch weights, so function parses (x;y) or (x;y;wt)
-// ------------------------------------------------------------------------------------------------------
+// ----------------------------------------------------------------
+// reduce - get/set reduction mode for various loss module options
+// ----------------------------------------------------------------
 template<typename O> static O reduce(K x,J i,Cast c) {
  O o; Pairs p; J n=xargc(x,i,p); S s=nullptr;
  TORCH_CHECK(n<2, lmap(c),": only 1 positional argument(reduce) expected, ",n," given");
@@ -161,26 +124,16 @@ template<typename O> static O reduce(K x,J i,Cast c) {
  return o;
 }
 
-template<typename O> static void reduce2(bool a,K x,const O& o,const O d=O());
-template<typename O> static void reduce2(bool a,K x,const O& o,const O d) {
+template<typename O> static void reduce(bool a,K x,const O& o,const O d=O());
+template<typename O> static void reduce(bool a,K x,const O& o,const O d) {
  if(a || d.reduction().index() != o.reduction().index())
   OPTION(x, reduce, ks(ESYM(o.reduction())));
 }
 
-int64_t reduce() {return Reduction::Mean;}
-
-int64_t reduce(const char* s,K x,J i) { // check argument(s) for sym or named pair/dict, e.g. (`reduce;`mean))
- Pairs p; J n=xargc(x,i,p); auto r=reduce();
- if(!(n==0 || (n==1 && xreduce(x,i,r))))
-  AT_ERROR("Unrecognized argument(s) for ",s," loss");
- while(xpair(p))
-  if(lset(p.k) == Setting::reduce)
-   r=rmap(psym(p));
-  else
-   AT_ERROR("Unrecognized option: ",p.k,", ",s," loss expects single option: reduce");
- return r;
-}
-
+// ------------------------------------------------------------------------------------------------------
+// lossfunc - call loss function with x,y tensors/arrays and optional reduction mode
+// bce - binary cross entropy has option of batch weights, so function parses (x;y) or (x;y;wt)
+// ------------------------------------------------------------------------------------------------------
 static K lossfunc(K a,Cast c) {
  KTRY
   namespace nn=torch::nn; namespace f=nn::functional; bool b,p; Tensor r,x,y;
@@ -219,24 +172,27 @@ KAPI multilabel(K x)  {return lossfunc(x, Cast::multilabel);}
 KAPI smoothl1(K x)    {return lossfunc(x, Cast::smoothl1);}
 KAPI softmargin(K x)  {return lossfunc(x, Cast::softmargin);}
 
-static bool bcearg(K x) {return x->t==-KS || x->t==KS || xempty(x) || xdict(x);}  // true if arg is a setting (rather than wt tensor)
+// ----------------------------------------------------------------------------
+// binary cross entropy: optional 3rd input of batch weights
+// bcearg - evaluate arg to see if weight input or reduction option
+// ----------------------------------------------------------------------------
+static bool bcearg(K x) {return x->t==-KS || x->t==KS || xempty(x) || xdict(x);}
 
 KAPI bce(K a) {
  KTRY
-  bool p=false; Tensor l,x,y,w;
-  if(!a->t && 1<a->n && a->n<5) {
-   J n=(a->n==2) ? 2 : (a->n==4 ? 3 : 3-bcearg(kK(a)[2]));
-   auto r=reduce("binary cross entropy",a,n);
-   p=n==2 ? xtenarg(a,x,y) : xtenarg(a,x,y,w);
-   l=torch::binary_cross_entropy(x,y,w,r);
-  } else if(0 < a->t && a->t<20 && 1<a->n && a->n<4) {
-   x=kput(a);
-   l=a->n==2 ? torch::binary_cross_entropy(x[0],x[1]) : torch::binary_cross_entropy(x[0],x[1],x[2]);
+  auto r=BCELossOptions().reduction(); bool p; Tensor x,y,w; Cast c=Cast::bce;
+  TORCH_CHECK(0<=a->t && a->t<11, lmap(c),": not implemented for ",kname(a));
+  TORCH_CHECK(a->n>1, lmap(c),": expects input,target,optional batch weight,optional reduce mode");
+  if(a->t) {
+   TORCH_CHECK(a->n<4,lmap(c),": unrecognized args, expecting 2-3 elements for input,target,optional weight");
+   p=false; x=kput(a); if(a->n==3) w=x[2]; y=x[1]; x=x[0];
   } else {
-   AT_ERROR("binary cross entropy loss expects (input;target), (input;target;reduction), (input;target;weights) or (input;target;weights;reduce)");
+   bool b=a->n==2 ? true : bcearg(kK(a)[2]);
+   p = b ? xtenarg(a,x,y) : xtenarg(a,x,y,w);
+   r=reduce<BCELossOptions>(a,3-b,c).reduction();
   }
-  return p ? kten(l) : kget(l);
- KCATCH("binary cross entropy")
+  return kresult(p, torch::nn::functional::detail::binary_cross_entropy(x,y,w,r));
+ KCATCH("bce");
 }
 
 // ------------------------------------------------------------------------------------------------------
@@ -292,61 +248,29 @@ template<typename O> O classwt(K x,J i,Cast c) {
  return o;
 }
 
-static void wtargs(Cast c,const char* s,K x,J i,Tensor& w,J& j,int64_t &r) {
- bool b=c==Cast::ce || c==Cast::nll; Pairs p; J n=xargc(x,i,p); j=-100; r=reduce();
- if(n && xreduce(x,i+n-1,r)) n--;
- if(n && xlong(x,i+n-1,j)) {if(b) n--; else AT_ERROR("Index to ignore not expected for ",s," loss");}
- if(n==1) {n--; if(!xten(x,i+n,w) && xlen(kK(x)[i+n])) w=kput(x,i+n);}
- if(n)
-  AT_ERROR("Unrecognized arg(s) for ",s," loss");
- while(xpair(p)) {
-  switch(lset(p.k)) {
-   case Setting::weight: pten(p,w); break;
-   case Setting::ignore: if(b) j=plong(p); else AT_ERROR("Index to ignore not expected for ",s," loss"); break;
-   case Setting::reduce: r=rmap(psym(p)); break;
-   default: AT_ERROR("Unrecognized option: ",p.k," for ",s," loss"); break;
-  }
- }
-}
-
 // ------------------------------------------------------------------------------------------------------
 // classwt - get optional class weights & reduction mode, also index to ignore for some losses
 // ------------------------------------------------------------------------------------------------------
 static void classwt(bool a,K x,const torch::nn::BCEWithLogitsLossOptions& o) {
  if(a || o.pos_weight().defined()) OPTION(x,weight,kget(o.pos_weight()));
- reduce2(a,x,o);
+ reduce(a,x,o);
 }
 
 static void classwt(bool a,K x,const torch::nn::MultiLabelSoftMarginLossOptions& o) {
  if(a || o.weight().defined()) OPTION(x,weight,kget(o.weight()));
- reduce2(a,x,o);
+ reduce(a,x,o);
 }
 
 template<typename O> static void classwt(bool a,K x,const O& o) {
  const O d;
  if(a || o.weight().defined()) OPTION(x, weight, kget(o.weight()));
  if(a || d.ignore_index() != o.ignore_index()) OPTION(x, ignore, kj(o.ignore_index()));
- reduce2(a,x,o,d);
+ reduce(a,x,o,d);
 }
 
 // ------------------------------------------------------------------------------------------------------
-// wtloss - functional form for nll,cross entropy, multi-label soft margin (no c++ version yet)
+// classwt - functional form for cross entropy, nll, multi-label soft margin loss
 // ------------------------------------------------------------------------------------------------------
-/*
-Tensor multilabel_soft_margin_loss(const Tensor& x,const Tensor& y,const Tensor& w,int64_t r) {
- auto l = -(y * torch::log_sigmoid(x) + (1 - y) * torch::log_sigmoid(-x));
- if(w.defined()) l *= w;
- l = l.sum(1) / x.size(1); // only return n=batch size loss values
- switch(r) {
-  case Reduction::None: return l;
-  case Reduction::Mean: return l.mean();
-  case Reduction::Sum:  return l.sum();
-  default: AT_ERROR("Unrecognized reduction: ",r);
- }
- // unable to use torch::apply_loss_reduction(l,r), in anonymous namespace in ATen/native/Loss.cpp
-}
-*/
-
 static K classwt(K a,Cast c) {
  KTRY
   namespace nn=torch::nn; namespace f=nn::functional;
@@ -376,6 +300,8 @@ KAPI multisoft(K x) {return classwt(x, Cast::multisoft);}
 // ---------------------------------------------------------------------------------------
 static K bceloss(K a,bool b,const char* s) {  //a:args, b:true if batch wts
  KTRY
+  AT_ERROR("nyi");
+/*
   bool p=false; J i=2+b,j; int64_t r; Tensor x,y,bw,w;
   if(a->t) {
    AT_ERROR(s," loss not implemented for ",kname(a->t));
@@ -387,6 +313,7 @@ static K bceloss(K a,bool b,const char* s) {  //a:args, b:true if batch wts
   p=xtenarg(a,x,y);
   if(b && !xten(a,2,bw)) bw=kput(a,2);
   return kresult(p, torch::binary_cross_entropy_with_logits(x,y,bw,w,r));
+*/
  KCATCH(s)
 }
 
@@ -415,7 +342,7 @@ template<typename O> static O margin(K x,J i,Cast c) {
 template<typename O> static void margin(bool a,K x,const O& o) {
  const O d;
  if(a || d.margin() != o.margin()) OPTION(x, margin, kf(o.margin()));
- reduce2(a,x,o,d);
+ reduce(a,x,o,d);
 }
 
 static K marginloss(K a,Cast c) {
@@ -484,7 +411,7 @@ static void multi(bool a,K x,const torch::nn::MultiMarginLossOptions& o) {
  if(a || d.p()      != o.p())      OPTION(x, p,      kj(o.p()));
  if(a || d.margin() != o.margin()) OPTION(x, margin, kf(o.margin()));
  if(a || o.weight().defined())     OPTION(x, weight, kget(o.weight()));
- reduce2(a,x,o,d);
+ reduce(a,x,o,d);
 }
 
 KAPI multimargin(K a) {
@@ -532,7 +459,7 @@ static void triplet(bool a,K x,const torch::nn::TripletMarginLossOptions& o) {
  if(a || d.p()      != o.p())      OPTION(x, p,      kf(o.p()));
  if(a || d.eps()    != o.eps())    OPTION(x, eps,    kf(o.eps()));
  if(a || d.swap()   != o.swap())   OPTION(x, swap,   kb(o.swap()));
- reduce2(a,x,o,d);
+ reduce(a,x,o,d);
 }
 
 KAPI Triplet(K a) {
@@ -578,7 +505,7 @@ static void poisson(bool a,K x,const torch::nn::PoissonNLLLossOptions& o) {
  if(a || d.log_input() != o.log_input()) OPTION(x, log,  kb(o.log_input()));
  if(a || d.full()      != o.full())      OPTION(x, full, kb(o.full()));
  if(a || d.eps()       != o.eps())       OPTION(x, eps,  kf(o.eps()));
- reduce2(a,x,o,d);
+ reduce(a,x,o,d);
 }
 
 KAPI poissonloss(K a) {
@@ -594,56 +521,46 @@ KAPI poissonloss(K a) {
 }
 
 // -------------------------------------------------------------------------------------------------------------------
-// ctc1 - process args for CTC loss, blank value, flag for setting infinities -> zero & reduction method
-// ctc2 - check inputs for tensor or arrays for input/target lengths (different forward call)
-// ctc - funcional form of connectionist temporal classification loss between continuous time series & target sequence
+// ctc - connectionist temporal classification loss between continuous time series & target sequence
+//       get/set args for CTC loss, blank value, flag for setting infinities -> zero & reduction method
 // -------------------------------------------------------------------------------------------------------------------
-static void ctc1(K x,J i,int64_t& b,bool& z,int64_t& r) {
- Pairs p; J n=xargc(x,i,p); CTCLossOptions o; 
- b=o.blank(); z=o.zeroinf(); r=o.reduce();
- while(n) {
-  if(xint64(x,i,b) || xbool(x,i,z) || xreduce(x,i,r))
-   i++,n--;
-  else
-   AT_ERROR("Unrecognized argument(position ",i,") for CTC loss");
- }
- while(xpair(p)) {
+static torch::nn::CTCLossOptions ctc(K x,J i,Cast c) {
+ Pairs p; J n=xargc(x,i,p); S s=nullptr; torch::nn::CTCLossOptions o;
+ if(n && xsym(x,i+n-1,s)) n--;
+ for(J j=0;j<n;++j)
+  switch(j) {
+   case 0: o.blank(int64(x,i+j,c,Setting::blank)); break;
+   case 1: o.zero_infinity(lbool(x,i+j,c,Setting::zeroinf)); break;
+   default: AT_ERROR(lmap(c),": unrecognized positional arg(s), expecting up to 3 args, blank label, zero infinity flag & reduce mode");
+  }
+ while(xpair(p))
   switch(lset(p.k)) {
-   case Setting::blank:   b=plong(p); break;
-   case Setting::zeroinf: z=pbool(p); break;
-   case Setting::reduce:  r=rmap(psym(p)); break;
+   case Setting::blank:   o.blank(int64(p,c)); break;
+   case Setting::zeroinf: o.zero_infinity(lbool(p,c)); break;
+   case Setting::reduce:  s=lsym(p,c); break;
    default: AT_ERROR("Unrecognized option: ",p.k," for CTC loss"); break;
   }
- }
-}
-
-static bool ctc2(K a,J i,Tensor& x,Tensor& y,Tensor& nx,Tensor& ny,IntArrayRef& jx,IntArrayRef& jy) {
-  bool p=xtenarg(a,i,x,y);
-  if(!(xsize(a,i+2,jx) && xsize(a,i+3,jy))) { // unless both lengths given as k arrays
-    if(!xten(a,i+2,nx)) nx=kput(a,2);  // define input lengths as tensor
-    if(!xten(a,i+3,ny)) ny=kput(a,3);  // define target lengths as tensor
-  }
-  return p;
+ if(s) reduce(o.reduction(),c,s);
+ return o;
 }
 
 static void ctc(bool a,K x,const torch::nn::CTCLossOptions& o) {
  const torch::nn::CTCLossOptions d;
  if(a || d.blank()         != o.blank())         OPTION(x, blank,   kj(o.blank()));
  if(a || d.zero_infinity() != o.zero_infinity()) OPTION(x, zeroinf, kb(o.zero_infinity()));
- reduce2(a,x,o,d);
+ reduce(a,x,o,d);
 }
 
 KAPI Ctc(K a) {
  KTRY
-  bool p,z; IntArrayRef jx,jy; Tensor x,y,nx,ny; int64_t b,r; 
+  bool p; Tensor x,y,nx,ny;
   if(a->t) {
    AT_ERROR("CTC loss not implemented for ",kname(a->t));
   } else if(a->n < 4) {
    AT_ERROR("CTC loss expects at least 4 args, (input;target;input lengths;target lengths)");
   }
-  ctc1(a,4,b,z,r); 
-  p=ctc2(a,0,x,y,nx,ny,jx,jy);
-  return kresult(p, nx.defined() ? torch::ctc_loss(x,y,nx,ny,b,r,z) : torch::ctc_loss(x,y,jx,jy,b,r,z));
+  p=xtenarg(a,x,y); xtenarg(a,2,nx,ny);
+  return kresult(p, torch::nn::functional::ctc_loss(x,y,nx,ny,ctc(a,4,Cast::ctc)));
  KCATCH("CTC loss");
 }
 
@@ -659,7 +576,7 @@ KAPI Ctc(K a) {
 static AnyModule lossinit(S s,Cast c,K x,J i) {
  namespace nn=torch::nn;
  switch(c) {
-  case Cast::bce:         return AnyModule(nn::BCELoss(             reduce<nn::BCELossOptions>(x,i,c)));
+  case Cast::bce:         return AnyModule(    BCELoss(             reduce<    BCELossOptions>(x,i,c)));
   case Cast::kl:          return AnyModule(nn::KLDivLoss(           reduce<nn::KLDivLossOptions>(x,i,c)));
   case Cast::l1:          return AnyModule(nn::L1Loss(              reduce<nn::L1LossOptions>(x,i,c)));
   case Cast::mse:         return AnyModule(nn::MSELoss(             reduce<nn::MSELossOptions>(x,i,c)));
@@ -679,7 +596,7 @@ static AnyModule lossinit(S s,Cast c,K x,J i) {
   case Cast::multimargin: return AnyModule(nn::MultiMarginLoss(multi(x,i,c))); break;
   case Cast::triplet:     return AnyModule(nn::TripletMarginLoss(triplet(x,i,c))); break;
   case Cast::poissonloss: return AnyModule(nn::PoissonNLLLoss(poisson(x,i,c))); break;
-//case Cast::ctc:         {bool z;int64_t b;  ctc1(x,i,b,z,r);          a=std::make_shared<CTCLoss>(b,z,r); break;}
+  case Cast::ctc:         return AnyModule(nn::CTCLoss(ctc(x,i,c))); break;
   default: AT_ERROR("Unrecognized loss function: ",s);
  }
 }
@@ -688,13 +605,13 @@ static K lossopt(bool a,Cast c,AnyModule& m) {
  namespace nn=torch::nn;
  K x=xD(ktn(KS,0),ktn(0,0));
  switch(c) {
-  case Cast::bce:        reduce2(a, x, m.get<nn::BCELoss>()->options); break;
-  case Cast::kl:         reduce2(a, x, m.get<nn::KLDivLoss>()->options); break;
-  case Cast::l1:         reduce2(a, x, m.get<nn::L1Loss>()->options); break;
-  case Cast::mse:        reduce2(a, x, m.get<nn::MSELoss>()->options); break;
-  case Cast::multilabel: reduce2(a, x, m.get<nn::MultiLabelMarginLoss>()->options); break;
-  case Cast::smoothl1:   reduce2(a, x, m.get<nn::SmoothL1Loss>()->options); break;
-  case Cast::softmargin: reduce2(a, x, m.get<nn::SoftMarginLoss>()->options); break;
+  case Cast::bce:        reduce(a, x, m.get<nn::BCELoss>()->options); break;
+  case Cast::kl:         reduce(a, x, m.get<nn::KLDivLoss>()->options); break;
+  case Cast::l1:         reduce(a, x, m.get<nn::L1Loss>()->options); break;
+  case Cast::mse:        reduce(a, x, m.get<nn::MSELoss>()->options); break;
+  case Cast::multilabel: reduce(a, x, m.get<nn::MultiLabelMarginLoss>()->options); break;
+  case Cast::smoothl1:   reduce(a, x, m.get<nn::SmoothL1Loss>()->options); break;
+  case Cast::softmargin: reduce(a, x, m.get<nn::SoftMarginLoss>()->options); break;
 
   case Cast::bcelogits:  classwt(a, x, m.get<nn::BCEWithLogitsLoss>()->options); break;
   case Cast::multisoft:  classwt(a, x, m.get<nn::MultiLabelSoftMarginLoss>()->options); break;
@@ -751,17 +668,12 @@ static K lossfwd(Cast c,AnyModule& m,K a) {
   p=xtenarg(a,1,x,y,z);
   r=m.forward(x,y,z);
  } else if(c==Cast::ctc && a->n==5) {
-  AT_ERROR("ctc not implemented yet");
-/*
-  IntArrayRef jx,jy; Tensor nx,ny; p=ctc2(a,1,x,y,nx,ny,jx,jy);
-  if(nx.defined())
-   r=nx.defined() ? l->forward(x,y,nx,ny) : l->forward(x,y,jx,jy);
-*/
- }
- if(r.defined())
-  return p ? kten(r) : kget(r);
- else
+  Tensor nx,ny; p=xtenarg(a,1,x,y); xtenarg(a,3,nx,ny);
+  r=m.forward(x,y,nx,ny);
+ } else {
   AT_ERROR("Unrecognized arg(s) for ",lmap(c)," forward call");
+ }
+ return kresult(p,r);
 }
 
 K lossto(Kmodule* l,const TensorOptions& o,bool a) {
@@ -772,36 +684,6 @@ K lossto(Kmodule* l,const TensorOptions& o,bool a) {
  return (K)0;
 }
 
-Tensor losswt(Loss *l) {
- if(auto* p=dynamic_cast<WeightedLoss*>(l))
-  return p->options.weight();
- else if(auto* p=dynamic_cast<LogLoss*>(l))
-  return p->options.weight();
- else if(auto* p=dynamic_cast<MultiMarginLoss*>(l))
-  return p->options.weight();
- else
- return {};
-}
-
-/*
-KAPI loss1(K x) {
- KTRY
-  S s; bool a=env().alloptions; Kloss *l;
-  if(xsyms(x,s) || xsym(x,0,s)) {
-   return lossinit(s,x,1); //define loss from sym or (sym;option(s)..)
-  } else if(xdict(x)) {    //define loss from state dictionary
-   return lossinit(statesym(State::module,x),statedict(State::options,x),-1);
-  } else if(((l=xloss(x))) || (xbool(x,1,a) && x->n==2 && ((l=xloss(x,0))))) {
-   return lossdict(a,false,l->c,l->get()); //given allocated loss ptr or ptr w'boolean, return options
-  } else if((l=xloss(x,0)) && x->n>1) {
-   return lossfwd(l->c,l->get(),x); //else, run forward calculation w'loss and input,target,..
-  } else {
-   AT_ERROR("Unrecognized arg(s)");
-  }
- KCATCH("Loss module");
-}
-*/
-
 KAPI loss(K x) {
  KTRY
   S s; bool a=env().alloptions; Kmodule *l;
@@ -810,9 +692,9 @@ KAPI loss(K x) {
    return kloss(c, lossinit(s,c,x,1));
   } else if(xdict(x)) {    //define loss from state dictionary
    AT_ERROR("nyi"); //return lossinit(statesym(State::module,x),statedict(State::options,x),-1);
-  } else if(((l=xLoss(x))) || (xbool(x,1,a) && x->n==2 && ((l=xLoss(x,0))))) {
+  } else if(((l=xloss(x))) || (xbool(x,1,a) && x->n==2 && ((l=xloss(x,0))))) {
    return lossdict(a,false,l->c,l->m); //given allocated loss ptr or ptr w'boolean, return options
-  } else if((l=xLoss(x,0)) && x->n>1) {
+  } else if((l=xloss(x,0)) && x->n>1) {
    return lossfwd(l->c,l->m,x); //else, run forward calculation w'loss and input,target,..
   } else {
    AT_ERROR("Unrecognized arg(s)");
@@ -822,7 +704,7 @@ KAPI loss(K x) {
 
 K lossattr(const AnyModule& m,Ktype k,Attr a) {
  switch(a) {
-  //case Attr::ref:     return kj(m.ptr()->use_count());
+  case Attr::ref:     return kj(m.ptr().use_count());
   default: AT_ERROR(mapattr(a),": not implemented for loss modules");
  }
 }

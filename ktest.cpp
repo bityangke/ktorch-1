@@ -30,18 +30,6 @@ KAPI memtest(K x) {
  return kj(v.size());
 }
 
-KAPI testloss3(K x,K y) {
- KTRY
-  Kmodule *l=xLoss(x); Tensor a,b,c,r;
-  TORCH_CHECK(l,"Supply a loss module");
-  if(xten(y,0,a) && xten(y,1,b) && xten(y,2,c)) {
-    r=l->m.forward(a,b,c);
-  } else if(xten(y,0,a) && xten(y,1,b)) {
-    r=l->m.forward(a,b);
-  }
-  return r.defined() ? kget(r) : (K)0;
- KCATCH("loss3");
-}
 //#include <c10/cuda/CUDAMacros.h>
 //#include <c10/cuda/CUDACachingAllocator.h>
 

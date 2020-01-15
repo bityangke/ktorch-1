@@ -76,7 +76,6 @@ using Optimizer=torch::optim::Optimizer;
 using LossClosureOptimizer=torch::optim::LossClosureOptimizer;
 using TensorDict = torch::OrderedDict<std::string, torch::Tensor>;
 using at::detail::computeStorageSize;
-using torch::Reduction::Reduction;
 
 typedef struct {
  Ktype a = 0;  // type: 1-dict, 2-list of pairs, 3-general list, 4-sym list
@@ -320,8 +319,8 @@ bool xseq(K,Sequential&);
 bool xseq(K,J,Sequential&);
 Sequential* xseq(K);
 Sequential* xseq(K,J);
-Kmodule* xLoss(K);
-Kmodule* xLoss(K,J);
+Kmodule* xloss(K);
+Kmodule* xloss(K,J);
 Kopt* xoptim(K);
 Kopt* xoptim(K,J);
 Kmodel* xmodel(K);
@@ -823,12 +822,6 @@ typedef struct {
   std::make_tuple(cs("retain"),     true,  false),
   std::make_tuple(cs("create"),     true,  true),
   std::make_tuple(cs("createfree"), false, true)
- }};
-
- std::array<std::tuple<S,int64_t>,3> reduce = {{
-  std::make_tuple(cs("none"), Reduction::None),
-  std::make_tuple(cs("mean"), Reduction::Mean),
-  std::make_tuple(cs("sum"),  Reduction::Sum)
  }};
 
  // array must match order of Enum, so enum can be used as index

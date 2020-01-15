@@ -454,8 +454,8 @@ Sequential* xseq(K x) {
 bool xseq(K x,J i,Sequential& s) {return xind(x,i) && xseq(kK(x)[i],s);}
 Sequential* xseq(K x,J i) {return xind(x,i) ? xseq(kK(x)[i]) : nullptr;}
 
-Kmodule* xLoss(K x) {auto* g=xtag(x); return (g && g->a==Class::loss) ? (Kmodule*)g : nullptr;}
-Kmodule* xLoss(K x,J i) {return xind(x,i) ? xLoss(kK(x)[i]) : nullptr;}
+Kmodule* xloss(K x) {auto* g=xtag(x); return (g && g->a==Class::loss) ? (Kmodule*)g : nullptr;}
+Kmodule* xloss(K x,J i) {return xind(x,i) ? xloss(kK(x)[i]) : nullptr;}
 
 Kopt* xoptim(K x) {auto* g=xtag(x); return (g && g->a==Class::optimizer) ? (Kopt*)g : nullptr;}
 Kopt* xoptim(K x,J i) {return xind(x,i) ? xoptim(kK(x)[i]) : nullptr;}

@@ -618,7 +618,18 @@ KAPI Equal(K x) {
 
 // ----------------------------------------------------------------------------------------------
 // comparison functions that check for special values (nan, +/- inf) on floating point tensors
+// torch::isinf not in version 1.4.0, so fn is defined here until later version
 // ----------------------------------------------------------------------------------------------
+Tensor isinf(const Tensor &self) {
+  // Integral tensor types are always not inf
+  if (torch::isIntegralType(self.scalar_type(),true)) {
+    return torch::zeros_like(self, torch::kBool, at::MemoryFormat::Preserve);
+  }
+  return AT_DISPATCH_FLOATING_TYPES_AND_HALF(self.scalar_type(), "isinf", [&]() {
+    return self.abs() == std::numeric_limits<scalar_t>::infinity();
+  });
+}
+
 static K special(K x,Ft f) {
  KTRY
   Tensor *t=xten(x);
@@ -626,9 +637,9 @@ static K special(K x,Ft f) {
  KCATCH("special");
 }
 
-KAPI Isfinite(K x) {return special(x, torch::isfinite);}
-KAPI Isinf(K x)    {return special(x, torch::isinf);}
-KAPI Isnan(K x)    {return special(x, torch::isnan);}
+KAPI Finite(K x) {return special(x, torch::isfinite);}
+KAPI Inf(K x)    {return special(x,        isinf);}
+KAPI Nan(K x)    {return special(x, torch::isnan);}
 
 // ------------------------------------------------------------------------------------------------
 // minmaxerr - error message for min/max, argmin/max, min/max_values if unrecognized args
@@ -1739,6 +1750,7 @@ void mathfn(K x) {
  fn(x, "flatten",            KFN(Flatten),            1);
  fn(x, "Flip",               KFN(Flip),               1);
  fn(x, "Floor",              KFN(Floor),              1);
+ fn(x, "finite",             KFN(Finite),             1);
  fn(x, "fmod",               KFN(Fmod),               1);
  fn(x, "fnorm",              KFN(Fnorm),              1);
  fn(x, "frac",               KFN(Frac),               1);
@@ -1752,10 +1764,8 @@ void mathfn(K x) {
  fn(x, "histc",              KFN(Histc),              1);
  fn(x, "inverse",            KFN(Inverse),            1);
  fn(x, "ifft",               KFN(Ifft),               1);
+ fn(x, "inf",                KFN(Inf),                1);
  fn(x, "irfft",              KFN(Irfft),              1);
- fn(x, "isfinite",           KFN(Isfinite),           1);
- fn(x, "isinf",              KFN(Isinf),              1);
- fn(x, "isnan",              KFN(Isnan),              1);
  fn(x, "kthvalue",           KFN(Kthvalue),           1);
  fn(x, "le",                 KFN(Le),                 1);
  fn(x, "lerp",               KFN(Lerp),               1);
@@ -1788,6 +1798,7 @@ void mathfn(K x) {
  fn(x, "mul",                KFN(Mul),                1);
  fn(x, "mv",                 KFN(Mv),                 1);
  fn(x, "mvlgamma",           KFN(Mvlgamma),           1);
+ fn(x, "nan",                KFN(Nan),                1);
  fn(x, "ne",                 KFN(Ne),                 1);
  fn(x, "Neg",                KFN(Neg),                1);
  fn(x, "Not",                KFN(Not),                1);

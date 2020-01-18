@@ -942,8 +942,8 @@ KAPI Kfree(K x){
 // objnum - number of elements in tensor's underlying storage or sum across tensors
 // kobj - k api fn returns table of ptr,object,device,dtype,size,number of elements
 // -----------------------------------------------------------------------------------------
-static S objdevice(const Tensor& t) {return tensorsym(t,Attr::device);}
-static S objdevice(const TensorVector& v,S s) {return v.size() ? objdevice(v[0]) : s;}
+S objdevice(const Tensor& t) {return tensorsym(t,Attr::device);}
+S objdevice(const TensorVector& v,S s) {return v.size() ? objdevice(v[0]) : s;}
 
 static S objdevice(Ktag *g) {
  S s=cs("");
@@ -953,6 +953,7 @@ static S objdevice(Ktag *g) {
   case Class::sequential: return objdevice(((Kseq*)g)->q->parameters(), s);
   case Class::optimizer:  return objdevice(((Kopt*)g)->o->parameters(), s);
   case Class::model:      return objdevice(((Kmodel*)g)->q->parameters(), s);
+  case Class::loss:       return objdevice(((Kmodule*)g)->m.ptr()->buffers(), s);
   default: return s;
  }
 }

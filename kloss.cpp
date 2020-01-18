@@ -213,7 +213,7 @@ static void classwt(K x,J i,Cast c,S& s,Tensor& w) {
   }
 }
 
-static auto& classwt(K x,J i,Cast c,torch::nn::BCEWithLogitsLossOptions&& o) {
+static auto& classwt(K x,J i,Cast c,BCEWithLogitsLossOptions&& o) {
  S s; Tensor w; classwt(x,i,c,s,w);
  if(s) reduce(o.reduction(),c,s);
  if(w.defined()) o.pos_weight(w);
@@ -251,7 +251,7 @@ template<typename O> O classwt(K x,J i,Cast c) {
 // ------------------------------------------------------------------------------------------------------
 // classwt - get optional class weights & reduction mode, also index to ignore for some losses
 // ------------------------------------------------------------------------------------------------------
-static void classwt(bool a,K x,const torch::nn::BCEWithLogitsLossOptions& o) {
+static void classwt(bool a,K x,const BCEWithLogitsLossOptions& o) {
  if(a || o.pos_weight().defined()) OPTION(x,weight,kget(o.pos_weight()));
  reduce(a,x,o);
 }
@@ -295,30 +295,26 @@ KAPI multisoft(K x) {return classwt(x, Cast::multisoft);}
 
 // ---------------------------------------------------------------------------------------
 // bceloss - handle binary cross-entropy with logits, separate call if batch weights
-// bcelogits - input & target, with options for reduction and class weights
-// bcelogitw - input, target & batch weights, along with options for reduction & class wts
+// bcelogit1 - input & target, with optional class weights and reduction mode
+// bcelogit2 - input, target & batch weights, along with options for class weight,reduce
 // ---------------------------------------------------------------------------------------
-static K bceloss(K a,bool b,const char* s) {  //a:args, b:true if batch wts
+static K bceloss(K a,bool b,const char* s) {  // a:args, b:true if batch wts, s:label
  KTRY
-  AT_ERROR("nyi");
-/*
-  bool p=false; J i=2+b,j; int64_t r; Tensor x,y,bw,w;
+  bool p; J n=2+b; Tensor x,y,w;
+  TORCH_CHECK(0<=a->t && a->t<11, s,": not implemented for ",kname(a));
+  TORCH_CHECK(a->n>=n, s," expects at least ", n, " args, input", (b ? ", target & batch weights" : " & target"));
+  auto o=classwt(a,n,Cast::bcelogits,BCEWithLogitsLossOptions());
   if(a->t) {
-   AT_ERROR(s," loss not implemented for ",kname(a->t));
-  } else if(a->n < i) {
-   AT_ERROR(s,(b ? " loss expects at least 3 args, (input;target;batch weights)"
-                 : " loss expects at least 2 args, (input;target)"));
+   p=false; x=kput(a); if(b) w=x[2]; y=x[1]; x=x[0];
+  } else {
+   p=b ? xtenarg(a,x,y,w) : xtenarg(a,x,y);
   }
-  wtargs(Cast::bcelogits,s,a,i,w,j,r);
-  p=xtenarg(a,x,y);
-  if(b && !xten(a,2,bw)) bw=kput(a,2);
-  return kresult(p, torch::binary_cross_entropy_with_logits(x,y,bw,w,r));
-*/
- KCATCH(s)
+  return kresult(p, torch::nn::functional::detail::binary_cross_entropy_with_logits(x, y, w, o.reduction(), o.pos_weight()));
+ KCATCH(s);
 }
 
-KAPI bcelogits(K x) {return bceloss(x, false, "binary cross-entropy with logits");}
-KAPI bcelogitw(K x) {return bceloss(x, true,  "binary cross-entropy with logits & batch weights");}
+KAPI bcelogit1(K x) {return bceloss(x, false, "bcelogit1");}
+KAPI bcelogit2(K x) {return bceloss(x, true,  "bcelogit2");}
 
 // ------------------------------------------------------------------------------------------------------
 // margin - get/set optional margin & reduction arguments
@@ -568,6 +564,7 @@ KAPI Ctc(K a) {
 // lossinit - initialize loss modules by parsing loss fn name & optional args, return AnyModule
 // lossopt - retrieve loss module options, return k dictionary of module name & options
 // lossdict - dictionary of loss module & options or full state (w'class, empty name, parms & buffers)
+// losswt - handle loss w'optional batch weights (e.g. bce/bcelogits)
 // lossfwd - given loss object, calls forward function on remaining inputs and returns loss
 // lossto - given loss object and device/data type, converts tensors in options (e.g. class weights)
 // losswt - return class wts if tensor is defined (used to determine device/datatype)
@@ -584,7 +581,7 @@ static AnyModule lossinit(S s,Cast c,K x,J i) {
   case Cast::smoothl1:    return AnyModule(nn::SmoothL1Loss(        reduce<nn::SmoothL1LossOptions>(x,i,c)));
   case Cast::softmargin:  return AnyModule(nn::SoftMarginLoss(      reduce<nn::SoftMarginLossOptions>(x,i,c)));
 
-  case Cast::bcelogits:   return AnyModule(nn::BCEWithLogitsLoss(classwt(x,i,c,nn::BCEWithLogitsLossOptions())));
+  case Cast::bcelogits:   return AnyModule(BCEWithLogitsLoss(classwt(x,i,c,BCEWithLogitsLossOptions())));
   case Cast::multisoft:   return AnyModule(nn::MultiLabelSoftMarginLoss(classwt(x,i,c,nn::MultiLabelSoftMarginLossOptions())));
   case Cast::ce:          return AnyModule(nn::CrossEntropyLoss(classwt<nn::CrossEntropyLossOptions>(x,i,c)));
   case Cast::nll:         return AnyModule(nn::NLLLoss(classwt<nn::NLLLossOptions>(x,i,c)));
@@ -605,7 +602,7 @@ static K lossopt(bool a,Cast c,AnyModule& m) {
  namespace nn=torch::nn;
  K x=xD(ktn(KS,0),ktn(0,0));
  switch(c) {
-  case Cast::bce:        reduce(a, x, m.get<nn::BCELoss>()->options); break;
+  case Cast::bce:        reduce(a, x, m.get<BCELoss>()->options); break;
   case Cast::kl:         reduce(a, x, m.get<nn::KLDivLoss>()->options); break;
   case Cast::l1:         reduce(a, x, m.get<nn::L1Loss>()->options); break;
   case Cast::mse:        reduce(a, x, m.get<nn::MSELoss>()->options); break;
@@ -613,7 +610,7 @@ static K lossopt(bool a,Cast c,AnyModule& m) {
   case Cast::smoothl1:   reduce(a, x, m.get<nn::SmoothL1Loss>()->options); break;
   case Cast::softmargin: reduce(a, x, m.get<nn::SoftMarginLoss>()->options); break;
 
-  case Cast::bcelogits:  classwt(a, x, m.get<nn::BCEWithLogitsLoss>()->options); break;
+  case Cast::bcelogits:  classwt(a, x, m.get<BCEWithLogitsLoss>()->options); break;
   case Cast::multisoft:  classwt(a, x, m.get<nn::MultiLabelSoftMarginLoss>()->options); break;
   case Cast::ce:         classwt(a, x, m.get<nn::CrossEntropyLoss>()->options); break;
   case Cast::nll:        classwt(a, x, m.get<nn::NLLLoss>()->options); break;
@@ -659,11 +656,15 @@ K lossdict(Ktag *g,K x) {
   AT_ERROR("Loss state requires 1-2 args: previously allocated ptr or (ptr;options flag)");
 }
 
+Tensor losswt(Cast c,AnyModule& m,const Tensor& x,const Tensor&y) {
+  return (c==Cast::bce || c==Cast::bcelogits) ? m.forward(x,y,Tensor{}) : m.forward(x,y);
+}
+
 static K lossfwd(Cast c,AnyModule& m,K a) {
  bool p; Tensor r,x,y,z;
  if(a->n==3) {
   p=xtenarg(a,1,x,y);
-  r=m.forward(x,y);
+  r=losswt(c,m,x,y);
  } else if(a->n==4) {
   p=xtenarg(a,1,x,y,z);
   r=m.forward(x,y,z);
@@ -704,7 +705,9 @@ KAPI loss(K x) {
 
 K lossattr(const AnyModule& m,Ktype k,Attr a) {
  switch(a) {
-  case Attr::ref:     return kj(m.ptr().use_count());
+  case Attr::ref:     return kj(m.ptr().use_count()-1);
+  case Attr::ptr:     return kj((intptr_t)m.ptr().get());
+  case Attr::device:  return ks(objdevice(m.ptr()->buffers(), optsym(torch::Device(torch::kCPU))));
   default: AT_ERROR(mapattr(a),": not implemented for loss modules");
  }
 }
@@ -715,8 +718,8 @@ K lossattr(const AnyModule& m,Ktype k,Attr a) {
 void lossfn(K x) {
  fn(x, "loss",        KFN(loss),1);
  fn(x, "bce",         KFN(bce),1);
- fn(x, "bcelogits",   KFN(bcelogits),1);
- fn(x, "bcelogitw",   KFN(bcelogitw),1);
+ fn(x, "bcelogit1",   KFN(bcelogit1),1);
+ fn(x, "bcelogit2",   KFN(bcelogit2),1);
  fn(x, "ce",          KFN(ce),1);
  fn(x, "cosineloss",  KFN(cosineloss),1);
  fn(x, "ctc",         KFN(Ctc),1);

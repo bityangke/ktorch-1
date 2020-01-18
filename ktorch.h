@@ -135,7 +135,7 @@ enum class Cast:char {
  tanh,            tanhshrink,      threshold,
  unfold,          unsqueeze,       zeropad2d,            
 
- bce,         bcelogits,   bcelogitw,      // loss fns
+ bce,         bcelogits,                   // loss fns
  ce,          cosineloss,  ctc,
  hinge,       kl,          l1,
  margin,      mse,         multilabel,
@@ -401,10 +401,11 @@ K klist(J,const double*);
 K kexpand(J,const int64_t*);
 K kexpand(J,const double*);
 #define KEX(x) kexpand(x.size(),(*x).data())  // k list from ExpandingArray
+S objdevice(const Tensor&);
+S objdevice(const TensorVector&,S);
 bool kfree(K);
 bool kfree(K,J);
 void fn(K,const char*,void*,I);
-
 void randomfn(K);
 void mathfn(K);
 
@@ -457,6 +458,7 @@ K mstate(K);
 
 // loss functions:
 K kloss(Cast,const AnyModule&);
+Tensor losswt(Cast,AnyModule&,const Tensor&,const Tensor&);
 K lossdict(Ktag*,K);
 K lossdict(bool,bool,Cast,AnyModule&);
 K lossto(Kmodule*,const TensorOptions&,bool);
@@ -729,10 +731,9 @@ typedef struct {
   std::make_tuple(cs("buffers"), State::buffers)
  }};
 
- std::array<std::tuple<S,Cast>,19> loss = {{             // loss: map symbol -> enum
+ std::array<std::tuple<S,Cast>,18> loss = {{             // loss: map symbol -> enum
   std::make_tuple(cs("bce"),          Cast::bce),
   std::make_tuple(cs("bcelogits"),    Cast::bcelogits),
-  std::make_tuple(cs("bcelogitw"),    Cast::bcelogitw),
   std::make_tuple(cs("ce"),           Cast::ce),
   std::make_tuple(cs("cosineloss"),   Cast::cosineloss),
   std::make_tuple(cs("ctc"),          Cast::ctc),

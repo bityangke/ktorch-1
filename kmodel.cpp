@@ -83,7 +83,7 @@ KAPI model(K x) {
 // -------------------------------------------------------------------------------------------
 // mforward - return tensor from running sequential forward calcs on input(s)
 // mbackward - given model, input & target, do forward calcs, get loss, backward prop on loss
-// mloss
+// mloss - given model and vector of inputs, e.g. v=x,y, loss=loss(sequential(v[0]),v[1])
 // -------------------------------------------------------------------------------------------
 Tensor mforward(Kmodel *m,TensorVector& v) {
  return m->q->forward(v[0]);
@@ -100,16 +100,16 @@ K mbackward(K x) {
  return kget(loss);
 }
 
-Tensor mloss(Kmodel *m,TensorVector &v,const Tensor& x) {
+Tensor mloss(Kmodel *m,const Tensor& x,TensorVector &v) {
  if(v.size()==2)
-  return m->l.forward(x,v[1]);
+  return losswt(m->lc,m->l,x,v[1]);
  else if(v.size()==3)
   return m->l.forward(x,v[1],v[2]);
  else
   AT_ERROR("model: ", v.size()," inputs, expecting 2-3");
 }
 
-Tensor mloss(Kmodel *m,TensorVector &v) { return mloss(m,v,mforward(m,v));}
+Tensor mloss(Kmodel *m,TensorVector &v) { return mloss(m,mforward(m,v),v);}
 
 // -------------------------------------------------------------------------------------------
 // trainbatch - run model's forward calc, loss, backward calcs and optimizer step in batches
@@ -197,7 +197,7 @@ static K eval(Kmodel *m,TensorVector& v,int64_t w,int64_t a) {
   x=mforward(m,v);
  }
  if(b) m->q->train(true);
- auto z=mloss(m,v,x).item<double>();
+ auto z=mloss(m,x,v).item<double>();
  switch(a) {
   case 1: return knk(2,kf(z),kget(x));
   case 2: return knk(2,kf(z),kget(x.argmax(1)));

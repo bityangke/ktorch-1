@@ -1366,10 +1366,13 @@ KAPI     pinned(K x) {return attr(x, -KB, Attr::pinned);}
 KAPI       size(K x) {return attr(x,  KJ, Attr::size);}
 KAPI     stride(K x) {return attr(x,  KJ, Attr::stride);}
 
-// -----------------------------------------------------------------------------------------
+// ----------------------------------------------------------------------------------------------
+// filewrite - write zero bytes if file writable, create any necessary dir(s), drop leading colon
 //  pt
 // png - write PNG file given name & array/tensor
-// -----------------------------------------------------------------------------------------
+// ----------------------------------------------------------------------------------------------
+S filewrite(S s) {k(0,(S)"1:",ks(s),ktn(KB,0),0); return s[0]==':' ? s+1 : s;}
+
 KAPI pt(K x) {
  KTRY
   S s; Tensor t;
@@ -1389,8 +1392,8 @@ KAPI png(K x) {
   TORCH_CHECK(xsym(x,0,s) && x->n==2, "png: unrecognized arg(s), expects (PNG file name; image array/tensor)");
   if(!xten(x,1,t)) t=kput(x,1);
   auto a=t.to(torch::kCPU,torch::kByte).permute({1,2,0}).flatten(1);
-  stbi_write_png(s[0]==':' ? ++s : s,t.size(2),t.size(1),t.size(0),a.data_ptr(),t.size(0)*t.size(2));
-  return(K)0;
+  stbi_write_png(filewrite(s),t.size(2),t.size(1),t.size(0),a.data_ptr(),t.size(0)*t.size(2));
+  return ks(s);
  KCATCH("png");
 }
 

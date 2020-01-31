@@ -186,7 +186,11 @@ enum class Attr:char {
  data, storage                                                   // other: list,dict,..
 };
  
-enum class Enum {
+enum class Metric: char {
+ loss, accuracy, max, out
+};
+
+enum class Enum {  // enums to match pytorch variants
  undefined=-1,
  area,            batchmean,       bicubic,         bilinear,  border,   
  circular,        constant,        conv1d,          conv2d,    conv3d,   
@@ -823,6 +827,13 @@ typedef struct {
   std::make_tuple(cs("retain"),     true,  false),
   std::make_tuple(cs("create"),     true,  true),
   std::make_tuple(cs("createfree"), false, true)
+ }};
+
+ std::array<std::tuple<S,Metric>,4> metric = {{
+  std::make_tuple(cs("loss"),       Metric::loss),
+  std::make_tuple(cs("accuracy"),   Metric::accuracy),
+  std::make_tuple(cs("max"),        Metric::max),
+  std::make_tuple(cs("out"),        Metric::out)
  }};
 
  // array must match order of Enum, so enum can be used as index

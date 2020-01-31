@@ -567,7 +567,6 @@ KAPI Ctc(K a) {
 // losswt - handle loss w'optional batch weights (e.g. bce/bcelogits)
 // lossfwd - given loss object, calls forward function on remaining inputs and returns loss
 // lossto - given loss object and device/data type, converts tensors in options (e.g. class weights)
-// losswt - return class wts if tensor is defined (used to determine device/datatype)
 // loss - main api function that creates/calls loss objects and queries their properties
 // ---------------------------------------------------------------------------------------------------
 static AnyModule lossinit(S s,Cast c,K x,J i) {

@@ -260,7 +260,6 @@ KAPI evaluate(K x) {
   } else {
    TensorVector a;
    for(J i=1;i<n;++i) {Tensor* t=xten(x,i); a.emplace_back(t ? *t : kput(x,i));}
-   std::cerr << a[0] << "\n";
    return metrics(q,m,a,w,b,s);
   }
  KCATCH("evaluate");

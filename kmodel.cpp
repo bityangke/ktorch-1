@@ -2,15 +2,6 @@
 #include "knn.h"
 
 // -------------------------------------------------------------------------------------------
-//  metric - map k symbol to metric, e.g. `accuracy -> Metric::accuracy
-// -------------------------------------------------------------------------------------------
-static Metric metric(S s) {
- for(auto& m:env().metric) 
-  if(std::get<0>(m)==s) return std::get<1>(m);
- AT_ERROR("Unrecognized metric: ",s);
-}
-
-// -------------------------------------------------------------------------------------------
 // modelpart - parse args from k to define sequential, loss & optimizer modules
 // modelkeys - return list of symbols used for model state dictionary
 // modelstate - return a dictionary with state of sequential module, loss fn & optimizer
@@ -186,11 +177,9 @@ KAPI ktrain(K x) {
  KCATCH("train");
 }
 
-// -------------------------------------------------------------------------------------------
-// eval
-// -------------------------------------------------------------------------------------------
-enum class Eval:char {fwd, max, pct};
-
+// --------------------------------------------------------------------------------------------
+// evalfwd - forward calc on given sequential module and inputs, in batches if batchsize given
+// --------------------------------------------------------------------------------------------
 static Tensor evalfwd(Sequential& q,Tensor& x,int64_t w) {
  bool b=q->is_training(); Tensor y;
  if(b) q->train(false);                // turn off training mode
@@ -210,15 +199,15 @@ static Tensor evalfwd(Sequential& q,Tensor& x,int64_t w) {
  return y;
 }
 
-static K eval(Kmodel *m,TensorVector& v,int64_t w,Eval e) {
- auto y=evalfwd(m->q,v[0],w);
- auto z=mloss(m,y,v).item<double>();
- switch(e) {
-  case Eval::fwd: return knk(2,kf(z),kget(y));
-  case Eval::max: return knk(2,kf(z),kget(y.argmax(1)));
-  case Eval::pct: return knk(2,kf(z),kf(100.0*torch::sum(v[v.size()-1].eq(y.argmax(1))).item<double>()/y.size(0)));
-  default: AT_ERROR("Unrecognized evaluation mode");
- }
+// --------------------------------------------------------------------------------------------
+//  metric  - map k symbol to metric, e.g. `accuracy -> Metric::accuracy
+//          - calculate single metric given model, vector of inputs/targets, tensor of fwd calc
+//  metrics - handle multiple metrics, return scalar/list/tensor or k list of metrics
+// --------------------------------------------------------------------------------------------
+static Metric metric(S s) {
+ for(auto& m:env().metric) 
+  if(std::get<0>(m)==s) return std::get<1>(m);
+ AT_ERROR("Unrecognized metric: ",s);
 }
 
 static Tensor metric(Metric e,Kmodel *m,const TensorVector& v,const Tensor& y) {
@@ -234,65 +223,48 @@ static Tensor metric(Metric e,Kmodel *m,const TensorVector& v,const Tensor& y) {
  }
 }
 
-static K keval(K a,Eval e,const char* s) {
- KTRY
-  torch::NoGradGuard g;
-  Sequential *q=xseq(a,0); Kmodel *m=xmodel(a,0);
-  Tensor *x=xten(a,1); TensorVector *v=xvec(a,1); int64_t w=0;
-  TORCH_CHECK(q || m, s,": 1st arg is a model or sequential module");
-  //TORCH_CHECK(x || v, s,": 2nd arg is a tensor or vector of inputs");
-  TORCH_CHECK(a->n==2 || (a->n==3 && xint64(a,2,w)), 
-              s, ": unrecognized arg(s), expecting (sequential/model; array/tensor/vector of inputs; optional batch size)");
-  TORCH_CHECK(!v || v->size(), s, ": vector of inputs is empty");
-  TORCH_CHECK(w>-1, s, ": batch size cannot be negative");
-  if(q) {
-   //return kresult(v||x, evalfwd(*q, v ? (*v)[0] : (x ? *x : kput(a,1)), w));
-   return kresult(v||x, evalfwd(*q, v ? (*v)[0] : *x, w));
+static K metrics(Sequential *q,Kmodel *m,TensorVector& v,int64_t w,bool b,K s) {
+ Tensor y=evalfwd(q ? *q : m->q, v[0], w);
+ if(s) {
+  if(s->t == -KS) {
+   return kresult(b, metric(metric(s->s),m,v,y));
   } else {
-   return eval(m,*v,w,e);
+   K x=ktn(0, s->n);
+   try {
+    for(J i=0; i<s->n; ++i)
+     kK(x)[i]=kresult(b, metric(metric(kS(s)[i]),m,v,y));
+   } catch(...) {
+    if(x) r0(x);
+    throw;
+   }
+   return x;
   }
- KCATCH(s);
+ } else {
+  return kresult(b, y);
+ }
 }
 
-KAPI Eval(K a) {
+KAPI evaluate(K x) {
  KTRY
   torch::NoGradGuard g;
-  Sequential *q=xseq(a,0); Kmodel *m=xmodel(a,0); bool b=false; int64_t w=0;
-  TORCH_CHECK(q || m, "evaluate: expects model or sequential module as 1st arg");
-  J n=a->n; K z=nullptr;
-  if(abs(kK(a)[n-1]->t)==KS) n--, z=kK(a)[n];  // metric symbol(s) given as last arg
-  if(n>2 && xbool(a,n-1,b)) n--;               // tensor flag at the end of remaining args
-  if(n>2 && xint64(a,n-1,w)) n--;              // batch size at the end of remaining args
+  Sequential *q=xseq(x,0); Kmodel *m=xmodel(x,0); TensorVector *v; bool b=false; int64_t w=0;
+  TORCH_CHECK(q || m, "evaluate: expects (model/sequential; vector/tensor(s)/array(s);optional args..)\n"
+                      "          optional args: (batch size; tensor flag; metric(s))");
+  J n=x->n; K s=nullptr;
+  if(abs(kK(x)[n-1]->t)==KS) n--, s=kK(x)[n];  // metric symbol(s) given as last arg
+  if(n>2 && xbool(x,n-1,b)) n--;               // tensor flag at the end of remaining args
+  if(n>2 && xint64(x,n-1,w)) n--;              // batch size at the end of remaining args
   TORCH_CHECK(n>1, "evaluate: expects at least one input as 2nd arg");
-  if(false) {
+  if((v=xvec(x,1))) {
+   return metrics(q,m,*v,w,b,s);
   } else {
-   TensorVector v;
-   for(J i=1;i<n;++n) {
-    Tensor* t=xten(a,i);
-    v.emplace_back(t ? *t : kput(a,i));
-   }
+   TensorVector a;
+   for(J i=1;i<n;++i) {Tensor* t=xten(x,i); a.emplace_back(t ? *t : kput(x,i));}
+   std::cerr << a[0] << "\n";
+   return metrics(q,m,a,w,b,s);
   }
-/*
-  Tensor *x=xten(a,1); TensorVector *v=xvec(a,1); int64_t w=0;
-  //TORCH_CHECK(x || v, s,": 2nd arg is a tensor or vector of inputs");
-  TORCH_CHECK(a->n==2 || (a->n==3 && xint64(a,2,w)), 
-              s, ": unrecognized arg(s), expecting (sequential/model; array/tensor/vector of inputs; optional batch size)");
-  TORCH_CHECK(!v || v->size(), s, ": vector of inputs is empty");
-  TORCH_CHECK(w>-1, s, ": batch size cannot be negative");
-  if(q) {
-   //return kresult(v||x, evalfwd(*q, v ? (*v)[0] : (x ? *x : kput(a,1)), w));
-   return kresult(v||x, evalfwd(*q, v ? (*v)[0] : *x, w));
-  } else {
-   return eval(m,*v,w,e);
-  }
-*/
- return (K)0;
  KCATCH("evaluate");
 }
-
-KAPI evaluate(K x) {return keval(x, Eval::fwd, "evaluate");}
-KAPI evalmax (K x) {return keval(x, Eval::max, "evalmax");}
-KAPI evalpct (K x) {return keval(x, Eval::pct, "evalpct");}
 
 // -------------------------------------------------------------------------------------------
 // xseq - given tag, returns sequential reference or error
@@ -323,6 +295,4 @@ void modelfn(K x) {
  fn(x, "model",    KFN(model),    1);
  fn(x, "train",    KFN(ktrain),   1);
  fn(x, "evaluate", KFN(evaluate), 1);
- fn(x, "evalmax",  KFN(evalmax),  1);
- fn(x, "evalpct",  KFN(evalpct),  1);
 }

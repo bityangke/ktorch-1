@@ -474,6 +474,9 @@ K kopt(Cast,const Optptr&);
 K optstate(Ktag*,K);
 K optstate(bool,bool,Cast,OptimizerBase*);
 K optattr(const Optptr&,Ktype,Attr);
+void optstep(Cast,Optptr&);
+void optstep(Kopt*);
+void optstep(Kmodel*);
 void optfn(K);
 
 // model functions:

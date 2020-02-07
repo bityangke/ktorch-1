@@ -85,9 +85,8 @@ KAPI model(K x) {
 // mbackward - given model, input & target, do forward calcs, get loss, backward prop on loss
 // mloss - given model and vector of inputs, e.g. v=x,y, loss=loss(sequential(v[0]),v[1])
 // -------------------------------------------------------------------------------------------
-Tensor mforward(Kmodel *m,TensorVector& v) {
- return m->q->forward(v[0]);
-}
+Tensor mforward(Kmodel *m,const Tensor& x) {return m->q->forward(x);}
+Tensor mforward(Kmodel *m,const TensorVector& v) {return mforward(m,v[0]);}
 
 K mbackward(K a) {
  Kmodel *m; Tensor *x,*y,r;
@@ -109,7 +108,8 @@ Tensor mloss(Kmodel *m,const Tensor& x,const TensorVector &v) {
   AT_ERROR("model: ", v.size()," inputs given, expecting 2-3");
 }
 
-Tensor mloss(Kmodel *m,TensorVector &v) { return mloss(m,mforward(m,v),v);}
+Tensor mloss(Kmodel *m,const TensorVector &v) {return mloss(m,mforward(m,v),v);}
+Tensor mloss(Kmodel *m,const Tensor& x,const Tensor& y) {return losswt(m->lc,m->l,mforward(m,x),y);}
 
 // -------------------------------------------------------------------------------------------
 // trainbatch - run model's forward calc, loss, backward calcs and optimizer step in batches
@@ -175,6 +175,26 @@ KAPI ktrain(K x) {
    return KERR("train: unrecognized arg(s)");
   }
  KCATCH("train");
+}
+
+KAPI ganstep(K a) {
+ KTRY
+  Kmodel *d=xmodel(a,0), *g=xmodel(a,1);
+  TORCH_CHECK(d && g, "ganstep: supply discriminator & generator model as 1st & 2nd args");
+  Tensor* x=xten(a,1); Tensor* y=xten(a,2); Tensor* z=xten(a,3);
+  d->o->zero_grad();
+  Tensor l0=mloss(d, *x, (*y)[0]);
+  l0.backward();
+  Tensor gx=g->q->forward(*z);
+  Tensor l1=mloss(d, gx.detach(), (*y)[1]);
+  l1.backward();
+  optstep(d);
+  g->o->zero_grad();
+  Tensor l2=mloss(d, gx, (*y)[2]);
+  l2.backward();
+  optstep(g);
+  return(K)0;
+ KCATCH("ganstep");
 }
 
 // --------------------------------------------------------------------------------------------

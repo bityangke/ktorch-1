@@ -1080,7 +1080,7 @@ KAPI zerograd(K x) {
    case Class::vector:     for(auto& t:((Kvec*)g)->v) f(t); break;
    case Class::sequential: ((Kseq*)g)->q->zero_grad(); break;
    case Class::optimizer:  ((Kopt*)g)->o->zero_grad(); break;
-   case Class::model:      ((Kmodel*)g)->q->zero_grad(); break;
+   case Class::model:      ((Kmodel*)g)->o->zero_grad(); break;
    default: AT_ERROR("zerograd not implemented for ",mapclass(g->a));
   }
   return (K)0;

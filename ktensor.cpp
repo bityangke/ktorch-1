@@ -1025,9 +1025,20 @@ KAPI makegrid(K x,K y,K z) {
 }
 
 // ------------------------------------------------------------------------------------------
+// reset - replace tensor saved in k tag with a new tensor/array, freeing source tensor
 // tensorcopy - tgt <- src values, must have same type & device, tgt resized if src larger
 // tensorcopy_ - copy in place method
 // ------------------------------------------------------------------------------------------
+KAPI reset(K x,K y) {
+ KTRY
+  Ktag *g=xtag(x); Tensor *t=xten(y);
+  TORCH_CHECK(g && g->a==Class::tensor, "reset: 1st arg must be a tensor");
+  ((Kten*)g)->t = t ? *t : kput(y);
+  if(t) TORCH_CHECK(kfree(y), "reset: unable to free source tensor");
+  return (K)0;
+ KCATCH("reset");
+}
+ 
 void tensorcopy(Tensor &t,const Tensor &s,bool a) {
  if(s.dtype() != t.dtype()) {
   AT_ERROR("Unable to copy values from ",s.dtype()," tensor to ",t.dtype()," tensor");
@@ -1112,6 +1123,7 @@ void tensorfn(K x) {
  fn(x, "fill",         KFN(fill),          1);
  fn(x, "filldiagonal", KFN(filldiagonal),  1);
  fn(x, "makegrid",     KFN(makegrid),      1);
+ fn(x, "reset",        KFN(reset),         2);
  fn(x, "copy",         KFN(tensorcopy_),   1);
  fn(x, "grad",         KFN(kgrad),         1);
  fn(x, "detach",       KFN(detach),        1);

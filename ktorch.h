@@ -115,7 +115,8 @@ enum class Cast:char {
  conv1d,          conv2d,          conv3d,     
  convtranspose1d, convtranspose2d, convtranspose3d, crossmap2d,
  drop,            drop2d,          drop3d,     
- elu,             embed,           embedbag,        expand,     
+ elu,             embed,           embedmax,
+ embedmean,       embedsum,        expand,     
  fadrop,          fdrop,           flatten,    
  fmaxpool2d,      fmaxpool3d,      fold,            gelu,       
  glu,             groupnorm,       gru,             hardshrink, 
@@ -160,17 +161,18 @@ enum class Prob:char {  // probablility distributions
 
 enum class Setting:char {
  undefined,
- affine,    alpha,     amsgrad,   batchfirst, beta,     beta1,     beta2,  
- bi,        bias,      blank,     ceiling,    centered, changetol, channels, cols,   
- countpad,  dampening, decay,     dilate,     dim,      divisor,   drop,   
- end,       eps,       eval,      fn,         freeze,   full,     gradtol,   groups, 
- hidden,    history,   ignore,    in,         indices,  init,      inplace,
- iter,  k,  lambda,    layers,    log,        lower,    lr,        lrdecay,
- margin,    max,       maxnorm,   min,       mode,       momentum, nesterov,  out,
- outpad,    outsize,   p,         pad,        padindex, padmode,   ratio,
- reduce,    rows,      scale,     shape,     size,       slope,    sparse,    start,     stride,    swap, 
- threshold, track,     train,     transpose,  type,     upper,     value,
- weight,    zeroinf
+ affine,     alpha,    amsgrad,   batchfirst, beta,     beta1,     beta2,    
+ bi,         bias,     blank,     ceiling,    centered, changetol, channels, 
+ cols,       countpad, dampening, decay,      dilate,   dim,       divisor,  
+ drop,       end,      eps,       eval,       fn,       freeze,    full,     
+ gradtol,    groups,   hidden,    history,    ignore,   in,        in1,      
+ in2,        indices,  init,      inplace,    iter,     k,         lambda,   
+ lastoffset, layers,   log,       lower,      lr,       lrdecay,   margin,   
+ max,        maxnorm,  min,       mode,       momentum, nesterov,  out,      
+ outpad,     outsize,  p,         pad,        padindex, padmode,   ratio,    
+ reduce,     rows,     scale,     shape,      size,     slope,     sparse,   
+ start,      stride,   swap,      threshold,  track,    train,     transpose,
+ type,       upper,    value,     weight,     zeroinf                        
 };
 
 enum class State:char {
@@ -579,7 +581,7 @@ typedef struct {
   std::make_tuple(cs("tanh"),torch::nn::RNNActivation::Tanh)
  }};
 
- std::array<std::tuple<S,Cast>,87> module = {{  // module sym -> enum
+ std::array<std::tuple<S,Cast>,89> module = {{  // module sym -> enum
   std::make_tuple(cs("adaptavg1d"),      Cast::adaptavg1d),
   std::make_tuple(cs("adaptavg2d"),      Cast::adaptavg2d),
   std::make_tuple(cs("adaptavg3d"),      Cast::adaptavg3d),
@@ -607,7 +609,9 @@ typedef struct {
   std::make_tuple(cs("drop3d"),          Cast::drop3d),
   std::make_tuple(cs("elu"),             Cast::elu),
   std::make_tuple(cs("embed"),           Cast::embed),
-  std::make_tuple(cs("embedbag"),        Cast::embedbag),
+  std::make_tuple(cs("embedmax"),        Cast::embedmax),
+  std::make_tuple(cs("embedmean"),       Cast::embedmean),
+  std::make_tuple(cs("embedsum"),        Cast::embedsum),
   std::make_tuple(cs("expand"),          Cast::expand),
   std::make_tuple(cs("fdrop"),           Cast::fdrop),
   std::make_tuple(cs("fadrop"),          Cast::fadrop),
@@ -669,7 +673,7 @@ typedef struct {
   std::make_tuple(cs("zeropad2d"),       Cast::zeropad2d)
  }};
 
- std::array<std::tuple<S,Setting>,57> mset = {{      // module option sym -> enum
+ std::array<std::tuple<S,Setting>,60> mset = {{      // module option sym -> enum
   std::make_tuple(cs("affine"),     Setting::affine),
   std::make_tuple(cs("alpha"),      Setting::alpha),
   std::make_tuple(cs("batchfirst"), Setting::batchfirst),
@@ -691,11 +695,14 @@ typedef struct {
   std::make_tuple(cs("groups"),     Setting::groups),
   std::make_tuple(cs("hidden"),     Setting::hidden),
   std::make_tuple(cs("in"),         Setting::in),
+  std::make_tuple(cs("in1"),        Setting::in1),
+  std::make_tuple(cs("in2"),        Setting::in2),
   std::make_tuple(cs("indices"),    Setting::indices),
   std::make_tuple(cs("init"),       Setting::init),
   std::make_tuple(cs("inplace"),    Setting::inplace),
   std::make_tuple(cs("k"),          Setting::k),
   std::make_tuple(cs("lambda"),     Setting::lambda),
+  std::make_tuple(cs("lastoffset"), Setting::lastoffset),
   std::make_tuple(cs("layers"),     Setting::layers),
   std::make_tuple(cs("lower"),      Setting::lower),
   std::make_tuple(cs("max"),        Setting::max),

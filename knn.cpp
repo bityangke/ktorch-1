@@ -547,34 +547,71 @@ static void drop(bool a,K x,const torch::nn::DropoutOptions& o) {
 }
 
 // --------------------------------------------------------------------------------------
-// embed - create embedding module given options/set dictionary of options given module
+// create embedding/embedding bag module given options:
+// embedset - set name/value pairs specific to Embedding vs EmbeddingBag
+// embedpair - handle name/value pairs for both types of embedding modules
+// embedwt - handle options depending on whether pre-trained weights supplied
+// embed, embedbag - process args and return Embedding/EmbeddingBag module
 // --------------------------------------------------------------------------------------
-static torch::nn::EmbeddingBagMode embedmode(S s) {
- switch(emap(s)) {
-  case Enum::sum:  return torch::kSum;
-  case Enum::mean: return torch::kMean;
-  case Enum::max:  return torch::kMax;
-  default: AT_ERROR("unrecognized mode for embedding bag: ",s);
+static void embedset(Cast c,Setting s,Pairs& p,torch::nn::EmbeddingOptions& o) {
+ if(s == Setting::padindex) o.padding_idx(int64n(p,c));
+}
+
+static void embedset(Cast c,Setting s,Pairs& p,torch::nn::EmbeddingBagOptions& o) {
+ //if(s == Setting::lastoffset) o.include_last_offset(mbool(p,c));
+}
+
+template<typename O> static void embedpair(Cast c,Pairs& p,O& o,Tensor& w,bool &z) {
+ while(xpair(p))
+  switch(mset(p.k)) {
+   case Setting::rows:       o.num_embeddings(int64(p,c)); break;
+   case Setting::cols:       o.embedding_dim (int64(p,c)); break;
+   case Setting::padindex:   embedset(c,Setting::padindex,p,o); break;
+   case Setting::maxnorm:    o.max_norm(optdouble(p,c)); break;
+   case Setting::p:          o.norm_type(mdouble(p,c)); break;
+   case Setting::scale:      o.scale_grad_by_freq(mbool(p,c)); break;
+   case Setting::sparse:     o.sparse(mbool(p,c)); break;
+   case Setting::weight:     if(!pempty(p)) pten(p,w); break;
+   case Setting::freeze:     z=mbool(p,c); break;
+ //case Setting::lastoffset: embedset(c,Setting::lastoffset,p,o);
+   default: AT_ERROR("Embedding option: ",p.k," unrecognized");
+  }
+}
+
+template<typename M,typename O> static M embedwt(Cast c,O o,const Tensor& w,bool z) {
+ bool a=o.num_embeddings()!=nj,b=o.embedding_dim()!=nj;
+ if(w.defined()) {
+  TORCH_CHECK(w.dim()==2, msym(c),": ",w.dim(),"-dim weights given, 2-dim matrix expected");
+  TORCH_CHECK(w.is_floating_point(), msym(c),": weight matrix is not floating point");
+  if(!a) o.num_embeddings(w.size(0));
+  else TORCH_CHECK(o.num_embeddings()==w.size(0), "rows = ",o.num_embeddings()," but weights are ",w.sizes());
+  if(!b) o.embedding_dim(w.size(1));
+  else TORCH_CHECK(o.embedding_dim() ==w.size(1), "cols = ",o.embedding_dim(), " but weights are ",w.sizes());
+   M m=M(o._weight(w));
+   m->weight.set_requires_grad(!z);
+   return m;
+ } else {
+  TORCH_CHECK(a,"embed: supply number of rows in the embedding matrix");
+  TORCH_CHECK(b,"embed: supply number of cols in the embedding matrix");
+  return M(o);
  }
 }
 
-static void embedmode(torch::nn::EmbeddingOptions& o,S s) {AT_ERROR("cannot specify mode for embed module");}
-static void embedmode(torch::nn::EmbeddingBagOptions& o,S s) { o.mode(embedmode(s));}
-
 static torch::nn::Embedding embed(K x,J i,Cast c) {
- bool a=false,b=false,z=false; Pairs p; Tensor w; J n=xargc(x,i,p); torch::nn::EmbeddingOptions o(0,0);
+ bool z=false; Pairs p; Tensor w; J n=xargc(x,i,p);
+ torch::nn::EmbeddingOptions o(nj,nj);
  for(J j=0;j<n;++j) {
    switch(j) {
     case 0:
      switch(kK(x)[i+j]->t) {
       case 0:   if(!xten(x,i+j,w)) w=kput(x,i+j); break;
-      case -KJ: o.num_embeddings(int64(x,i+j,c,Setting::rows)); a=true; break;
+      case -KJ: o.num_embeddings(int64(x,i+j,c,Setting::rows)); break;
       default:  AT_ERROR("embed: 1st arg is number of rows or weight matrix");
      }
      break;
     case 1: 
      if(w.defined()) z=mbool(x,i+j,c,Setting::freeze);
-     else  o.embedding_dim(int64(x,i+j,c,Setting::cols)), b=true;
+     else  o.embedding_dim(int64(x,i+j,c,Setting::cols));
      break;
     case 2: o.padding_idx(int64n(x,i+j,c,Setting::padindex)); break;
     case 3: o.max_norm(optdouble(x,i+j,c,Setting::maxnorm)); break;
@@ -584,55 +621,77 @@ static torch::nn::Embedding embed(K x,J i,Cast c) {
     default: AT_ERROR(msym(c),": up to 7 positional arguments expected, ",n," given");
   }
  }
- while(xpair(p))
-  switch(mset(p.k)) {
-   case Setting::rows:     o.num_embeddings(int64(p,c)); a=true; break;
-   case Setting::cols:     o.embedding_dim (int64(p,c)); b=true; break;
-   case Setting::padindex: o.padding_idx(int64n(p,c)); break;
-   case Setting::maxnorm:  o.max_norm(optdouble(p,c)); break;
-   case Setting::p:        o.norm_type(mdouble(p,c)); break;
-   case Setting::scale:    o.scale_grad_by_freq(mbool(p,c)); break;
-   case Setting::mode:     embedmode(o,mode(p,c)); break;
-   case Setting::sparse:   o.sparse(mbool(p,c)); break;
-   case Setting::weight:   if(!pempty(p)) pten(p,w); break;
-   case Setting::freeze:   z=mbool(p,c); break;
-   default: AT_ERROR("Embedding option: ",p.k," unrecognized");
-  }
- if(w.defined()) {
-  TORCH_CHECK(w.dim()==2, msym(c),": ",w.dim(),"-dim weights given, 2-dim matrix expected");
-  TORCH_CHECK(w.is_floating_point(), msym(c),": weight matrix is not floating point");
-  if(!a)
-   o.num_embeddings(w.size(0));
-  else
-   TORCH_CHECK(o.num_embeddings()==w.size(0), "rows = ",o.num_embeddings()," but weights are ",w.sizes());
-  if(!b)
-   o.embedding_dim(w.size(1));
-  else
-   TORCH_CHECK(o.embedding_dim() ==w.size(1), "cols = ",o.embedding_dim(), " but weights are ",w.sizes());
-  auto m=torch::nn::Embedding(o._weight(w));
-  m->weight.set_requires_grad(!z);
-  return m;
- } else {
-  TORCH_CHECK(a,"embed: supply number of rows in the embedding matrix");
-  TORCH_CHECK(b,"embed: supply number of cols in the embedding matrix");
-  return torch::nn::Embedding(o);
- }
+ embedpair(c,p,o,w,z);
+ return embedwt<torch::nn::Embedding,torch::nn::EmbeddingOptions>(c,o,w,z);
 }
 
-static void embed(bool a,K x,const torch::nn::EmbeddingImpl* m) {
- torch::nn::EmbeddingOptions o=m->options, d(o.num_embeddings(),o.embedding_dim());
+static torch::nn::EmbeddingBag embedbag(K x,J i,Cast c) {
+ bool z=false; Pairs p; Tensor w; J n=xargc(x,i,p);
+ torch::nn::EmbeddingBagOptions o(nj,nj);
+ for(J j=0;j<n;++j) {
+   switch(j) {
+    case 0:
+     switch(kK(x)[i+j]->t) {
+      case 0:   if(!xten(x,i+j,w)) w=kput(x,i+j); break;
+      case -KJ: o.num_embeddings(int64(x,i+j,c,Setting::rows)); break;
+      default:  AT_ERROR("embed: 1st arg is number of rows or weight matrix");
+     }
+     break;
+    case 1: 
+     if(w.defined()) z=mbool(x,i+j,c,Setting::freeze);
+     else  o.embedding_dim(int64(x,i+j,c,Setting::cols));
+     break;
+    case 2: o.max_norm(optdouble(x,i+j,c,Setting::maxnorm)); break;
+    case 3: o.norm_type(mdouble(x,i+j,c,Setting::p)); break;
+    case 4: o.scale_grad_by_freq(mbool(x,i+j,c,Setting::scale)); break;
+    case 5: o.sparse(mbool(x,i+j,c,Setting::sparse)); break;
+    default: AT_ERROR(msym(c),": up to 6 positional arguments expected, ",n," given");
+  }
+ }
+ embedpair(c,p,o,w,z);
+ return embedwt<torch::nn::EmbeddingBag,torch::nn::EmbeddingBagOptions>(c,o,w,z);
+}
+
+// -----------------------------------------------------------------------------------------
+// retrieve settings from existing Embedding/EmbeddingBag:
+// bagmode - translates the mode in an existing module to an enumeration
+// embedget - templated fucntion to retrieve options specific to Embedding or EmbeddingBag
+// embed - templated function which gets options and initial optional weights
+// -----------------------------------------------------------------------------------------
+static Cast bagmode(const torch::nn::EmbeddingBagMode& m) {
+ if      (c10::get_if<torch::enumtype::kMax> (&m)) return Cast::embedmax;
+ else if (c10::get_if<torch::enumtype::kMean>(&m)) return Cast::embedmean;
+ else if (c10::get_if<torch::enumtype::kSum> (&m)) return Cast::embedsum;
+ else AT_ERROR("Unrecognized embedding bag mode");
+}
+
+static void embedget(bool a,K x,Cast c,Setting s,const torch::nn::EmbeddingOptions& o,const torch::nn::EmbeddingOptions& d) {
+ if(s == Setting::padindex && (a || o.padding_idx().has_value()))
+  OPTION(x, padindex, kj(o.padding_idx() ? o.padding_idx().value() : nj));
+}
+
+static void embedget(bool a,K x,Cast c,Setting s,const torch::nn::EmbeddingBagOptions& o,const torch::nn::EmbeddingBagOptions& d) {
+ /*
+ if(s == Setting::lastoffset && (a || o.include_last_offset() != d.include_last_offset())
+  OPTION(x, lastoffset, kb(o.include_last_offset()));
+ */
+}
+
+template<typename O>static void embed(bool a,K x,Cast c,const O& o,const Tensor& w) {
+ O d(o.num_embeddings(),o.embedding_dim());
  if(o._weight().defined()) {
   OPTION(x, weight, kget(o._weight()));
-  OPTION(x, freeze, kb(!m->weight.requires_grad()));
+  OPTION(x, freeze, kb(!w.requires_grad()));
  } else {
   OPTION(x, rows, kj(o.num_embeddings()));
   OPTION(x, cols, kj(o.embedding_dim()));
  }
- if(a || o.padding_idx().has_value()) OPTION(x, padindex, kj(o.padding_idx() ? o.padding_idx().value() : nj));
- if(a || o.max_norm().has_value())    OPTION(x, maxnorm,  kf(o.max_norm()    ? o.max_norm().value()    : nf));
- if(a || o.norm_type()          != d.norm_type())          OPTION(x, p,      kf(o.norm_type()));
- if(a || o.scale_grad_by_freq() != d.scale_grad_by_freq()) OPTION(x, scale,  kb(o.scale_grad_by_freq()));
- if(a || o.sparse()             != d.sparse())             OPTION(x, sparse, kb(o.sparse()));
+ embedget(a,x,c,Setting::padindex,o,d);
+ if(a || o.max_norm().has_value())                         OPTION(x, maxnorm, kf(o.max_norm() ? o.max_norm().value() : nf));
+ if(a || o.norm_type()          != d.norm_type())          OPTION(x, p,       kf(o.norm_type()));
+ if(a || o.scale_grad_by_freq() != d.scale_grad_by_freq()) OPTION(x, scale,   kb(o.scale_grad_by_freq()));
+ if(a || o.sparse()             != d.sparse())             OPTION(x, sparse,  kb(o.sparse()));
+ //embedget(a,x,c,Setting::lastoffset,o,d);
 }
 
 // --------------------------------------------------------------------------------------
@@ -1556,131 +1615,9 @@ void mparms(S s,Sequential &q,K p,K f) {
  if(f) mparms(s,*q[i],f,false);
 }
 
-AnyModule mdefine(Sequential &q,Cast c,J i,K x) {
- switch(c) {
-  case Cast::batchnorm:    return AnyModule(torch::nn::BatchNorm  (batchnorm<torch::nn::BatchNormOptions>(x,i,c)));
-  case Cast::batchnorm1d:  return AnyModule(torch::nn::BatchNorm1d(batchnorm<torch::nn::BatchNormOptions>(x,i,c)));
-  case Cast::batchnorm2d:  return AnyModule(torch::nn::BatchNorm2d(batchnorm<torch::nn::BatchNormOptions>(x,i,c)));
-  case Cast::batchnorm3d:  return AnyModule(torch::nn::BatchNorm3d(batchnorm<torch::nn::BatchNormOptions>(x,i,c)));
-
-  case Cast::instancenorm1d:  return AnyModule(torch::nn::InstanceNorm1d(batchnorm<torch::nn::InstanceNormOptions>(x,i,c)));
-  case Cast::instancenorm2d:  return AnyModule(torch::nn::InstanceNorm2d(batchnorm<torch::nn::InstanceNormOptions>(x,i,c)));
-  case Cast::instancenorm3d:  return AnyModule(torch::nn::InstanceNorm3d(batchnorm<torch::nn::InstanceNormOptions>(x,i,c)));
-
-  case Cast::groupnorm:  return AnyModule(torch::nn::GroupNorm(groupnorm(x,i,c)));
-  case Cast::layernorm:  return AnyModule(torch::nn::LayerNorm(layernorm(x,i,c)));
-  case Cast::localnorm:  return AnyModule(torch::nn::LocalResponseNorm(localnorm<torch::nn::LocalResponseNormOptions>(x,i,c)));
-  case Cast::crossmap2d: return AnyModule(torch::nn::CrossMapLRN2d(localnorm<torch::nn::CrossMapLRN2dOptions>(x,i,c)));
-
-  case Cast::embed:        return AnyModule(embed(x,i,c));
-  case Cast::linear:       return AnyModule(torch::nn::Linear(linear(x,i,c)));
-
-  case Cast::drop:         return AnyModule(torch::nn::Dropout(drop(x,i,c)));
-  case Cast::drop2d:       return AnyModule(torch::nn::Dropout2d(drop(x,i,c)));
-  case Cast::drop3d:       return AnyModule(torch::nn::Dropout3d(drop(x,i,c)));
-  case Cast::fdrop:        return AnyModule(torch::nn::FeatureDropout(drop(x,i,c)));
-  case Cast::adrop:        return AnyModule(torch::nn::AlphaDropout(drop(x,i,c)));
-  case Cast::fadrop:       return AnyModule(torch::nn::FeatureAlphaDropout(drop(x,i,c)));
-
-  case Cast::conv1d:       return AnyModule(torch::nn::Conv1d(conv<1>(x,i,c)));
-  case Cast::conv2d:       return AnyModule(torch::nn::Conv2d(conv<2>(x,i,c)));
-  case Cast::conv3d:       return AnyModule(torch::nn::Conv3d(conv<3>(x,i,c)));
-
-  case Cast::convtranspose1d:  return AnyModule(ConvTranspose1d(convtran<1>(x,i,c)));
-  case Cast::convtranspose2d:  return AnyModule(ConvTranspose2d(convtran<2>(x,i,c)));
-  case Cast::convtranspose3d:  return AnyModule(ConvTranspose3d(convtran<3>(x,i,c)));
-
-  case Cast::fold:         return AnyModule(torch::nn::Fold(fold(x,i,c)));
-  case Cast::unfold:       return AnyModule(torch::nn::Unfold(unfold(x,i,c)));
-
-  case Cast::maxpool1d:    return AnyModule(torch::nn::MaxPool1d(maxpool<1>(x,i,c)));
-  case Cast::maxpool2d:    return AnyModule(torch::nn::MaxPool2d(maxpool<2>(x,i,c)));
-  case Cast::maxpool3d:    return AnyModule(torch::nn::MaxPool3d(maxpool<3>(x,i,c)));
-
-  case Cast::avgpool1d:    return AnyModule(torch::nn::AvgPool1d(avgpool<1>(x,i,c)));
-  case Cast::avgpool2d:    return AnyModule(torch::nn::AvgPool2d(avgpool<2>(x,i,c)));
-  case Cast::avgpool3d:    return AnyModule(torch::nn::AvgPool3d(avgpool<3>(x,i,c)));
-
-  case Cast::adaptmax1d:   return AnyModule(torch::nn::AdaptiveMaxPool1d(adapt<1,torch::nn::AdaptiveMaxPool1dOptions>(x,i,c)));
-  case Cast::adaptmax2d:   return AnyModule(torch::nn::AdaptiveMaxPool2d(adapt<2,torch::nn::AdaptiveMaxPool2dOptions>(x,i,c)));
-  case Cast::adaptmax3d:   return AnyModule(torch::nn::AdaptiveMaxPool3d(adapt<3,torch::nn::AdaptiveMaxPool3dOptions>(x,i,c)));
-
-  case Cast::adaptavg1d:   return AnyModule(torch::nn::AdaptiveAvgPool1d(adapt<1,torch::nn::AdaptiveAvgPool1dOptions>(x,i,c)));
-  case Cast::adaptavg2d:   return AnyModule(torch::nn::AdaptiveAvgPool2d(adapt<2,torch::nn::AdaptiveAvgPool2dOptions>(x,i,c)));
-  case Cast::adaptavg3d:   return AnyModule(torch::nn::AdaptiveAvgPool3d(adapt<3,torch::nn::AdaptiveAvgPool3dOptions>(x,i,c)));
-
-  case Cast::fmaxpool2d:   return AnyModule(FractionalMaxPool2d(fpool<2>(x,i,c)));
-  case Cast::fmaxpool3d:   return AnyModule(FractionalMaxPool3d(fpool<3>(x,i,c)));
-
-  case Cast::lppool1d:     return AnyModule(torch::nn::LPPool1d(lppool<1>(x,i,c)));
-  case Cast::lppool2d:     return AnyModule(torch::nn::LPPool2d(lppool<2>(x,i,c)));
-
-  case Cast::pad:          return AnyModule(Pad(pad(x,i,c)));
-  case Cast::pad1d:        return AnyModule(torch::nn::ConstantPad1d(cpad<1,torch::nn::ConstantPad1dOptions>(x,i,c)));
-  case Cast::pad2d:        return AnyModule(torch::nn::ConstantPad2d(cpad<2,torch::nn::ConstantPad2dOptions>(x,i,c)));
-  case Cast::pad3d:        return AnyModule(torch::nn::ConstantPad3d(cpad<3,torch::nn::ConstantPad3dOptions>(x,i,c)));
-  case Cast::reflect1d:    return AnyModule(torch::nn::ReflectionPad1d(npad<1,torch::nn::ReflectionPad1dOptions>(x,i,c)));
-  case Cast::reflect2d:    return AnyModule(torch::nn::ReflectionPad2d(npad<2,torch::nn::ReflectionPad2dOptions>(x,i,c)));
-  case Cast::replicate1d:  return AnyModule(torch::nn::ReplicationPad1d(npad<1,torch::nn::ReplicationPad1dOptions>(x,i,c)));
-  case Cast::replicate2d:  return AnyModule(torch::nn::ReplicationPad2d(npad<2,torch::nn::ReplicationPad2dOptions>(x,i,c)));
-  case Cast::replicate3d:  return AnyModule(torch::nn::ReplicationPad3d(npad<3,torch::nn::ReplicationPad3dOptions>(x,i,c)));
-  case Cast::zeropad2d:    return AnyModule(torch::nn::ZeroPad2d(npad<2,torch::nn::ZeroPad2dOptions>(x,i,c)));
-
-  case Cast::rnn:          return AnyModule(rnn<torch::nn::RNN, torch::nn::RNNOptions> (c,x,i));
-  case Cast::gru:          return AnyModule(rnn<torch::nn::GRU, torch::nn::GRUOptions> (c,x,i));
-  case Cast::lstm:         return AnyModule(rnn<torch::nn::LSTM,torch::nn::LSTMOptions>(c,x,i));
-
-  case Cast::logsigmoid:   noarg(c,x,i); return AnyModule(torch::nn::LogSigmoid());
-  case Cast::sigmoid:      noarg(c,x,i); return AnyModule(torch::nn::Sigmoid());
-  case Cast::softsign:     noarg(c,x,i); return AnyModule(torch::nn::Softsign());
-  case Cast::softmax2d:    noarg(c,x,i); return AnyModule(torch::nn::Softmax2d());
-  case Cast::tanh:         noarg(c,x,i); return AnyModule(torch::nn::Tanh());
-  case Cast::tanhshrink:   noarg(c,x,i); return AnyModule(torch::nn::Tanhshrink());
-  case Cast::gelu:         noarg(c,x,i); return AnyModule(torch::nn::GELU());
-
-  case Cast::relu:         return AnyModule(torch::nn::ReLU(inplace(x,i,c)));
-  case Cast::relu6:        return AnyModule(torch::nn::ReLU6(inplace(x,i,c)));
-  case Cast::selu:         return AnyModule(torch::nn::SELU(inplace(x,i,c)));
-
-  case Cast::softmax:      return AnyModule(torch::nn::Softmax(dim(x,i,c)));
-  case Cast::softmin:      return AnyModule(torch::nn::Softmin(dim(x,i,c)));
-  case Cast::logsoftmax:   return AnyModule(torch::nn::LogSoftmax(dim(x,i,c)));
-  case Cast::flatten:      return AnyModule(torch::nn::Flatten(flatten(x,i)));
-  case Cast::squeeze:      return AnyModule(Squeeze(squeeze(x,i,c)));
-  case Cast::unsqueeze:    return AnyModule(Unsqueeze(squeeze(x,i,c)));
-  case Cast::expand:       return AnyModule(Expand(getsize(x,i,c)));
-  case Cast::reshape:      return AnyModule(Reshape(getsize(x,i,c)));
-
-  case Cast::elu:          return AnyModule(torch::nn::ELU (alpha<torch::nn::ELUOptions> (x,i,c)));
-  case Cast::celu:         return AnyModule(torch::nn::CELU(alpha<torch::nn::CELUOptions>(x,i,c)));
-  case Cast::leakyrelu:    return AnyModule(torch::nn::LeakyReLU(slope(x,i,c)));
-  case Cast::glu:          return AnyModule(torch::nn::GLU(dim(x,i,c)));
-  case Cast::hardshrink:   return AnyModule(torch::nn::Hardshrink(lambda(x,i,c)));
-  case Cast::softshrink:   return AnyModule(torch::nn::Softshrink(lambda(x,i,c)));
-  case Cast::prelu:        return AnyModule(torch::nn::PReLU(prelu(x,i,c)));
-  case Cast::rrelu:        return AnyModule(torch::nn::RReLU(rrelu(x,i,c)));
-  case Cast::hardtanh:     return AnyModule(torch::nn::Hardtanh(hardtanh(x,i,c)));
-  case Cast::softplus:     return AnyModule(torch::nn::Softplus(softplus(x,i,c)));
-  case Cast::threshold:    return AnyModule(torch::nn::Threshold(threshold(x,i,c)));
-  default: AT_ERROR("Unrecognized module: ",(I)c);
- }
-}
-
 //s:type, n:name(optional), i:offset into x, x:options(list/dictionary), p:parms, f:buffers
 void mdefine(Sequential &q,S s,S n=nullptr,J i=-1,K x=nullptr,K p=nullptr,K f=nullptr);
 void mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) { 
- /*
- auto m=mdefine(q,msym(s),i,x);
- if(p || f) mparms(s,*m.ptr(),p,f);  // set parms/buffers if k dictionaries supplied
- if(n) {
-  std::cerr << n << "\n";
-  q->extend(*Sequential(torch::OrderedDict<std::string, AnyModule>{{n,m}}));
-  //q->extend(*q2);
-  //torch::nn::NamedAnyModule(n,m); //q->extend(Sequential{{n,m}});
- } else {
-  q->extend(std::array<AnyModule,1>{m});
- }
- */
  Cast c=msym(s);
  switch(c) {
   case Cast::batchnorm:    PUSH(q,n,torch::nn::BatchNorm  (batchnorm<torch::nn::BatchNormOptions>(x,i,c))); break;
@@ -1698,6 +1635,10 @@ void mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) {
   case Cast::crossmap2d: PUSH(q,n,torch::nn::CrossMapLRN2d(localnorm<torch::nn::CrossMapLRN2dOptions>(x,i,c))); break;
 
   case Cast::embed:        PUSH(q,n,embed(x,i,c)); break;
+  case Cast::embedmax:
+  case Cast::embedmean:
+  case Cast::embedsum:     PUSH(q,n,embedbag(x,i,c)); break;
+
   case Cast::linear:       PUSH(q,n,torch::nn::Linear(linear(x,i,c))); break;
 
   case Cast::drop:         PUSH(q,n,torch::nn::Dropout(drop(x,i,c))); break;
@@ -1826,7 +1767,8 @@ void mopt(Module &g,bool a,K &v,J i) { //g:generic module, a:true if all options
  } else if(auto* m=g.as<torch::nn::LocalResponseNorm>()) { c=Cast::localnorm;      localnorm(a,x,c,m->options);
  } else if(auto* m=g.as<torch::nn::CrossMapLRN2d>())     { c=Cast::crossmap2d;     localnorm(a,x,c,m->options);
 
- } else if(auto* m=g.as<torch::nn::Embedding>())      { c=Cast::embed;     embed(a,x,m);
+ } else if(auto* m=g.as<torch::nn::Embedding>())      { c=Cast::embed; embed(a,x,c,m->options,m->weight);
+ } else if(auto* m=g.as<torch::nn::EmbeddingBag>())   { c=bagmode(m->options.mode()); embed(a,x,c,m->options,m->weight);
  } else if(auto* m=g.as<torch::nn::Linear>())         { c=Cast::linear;    linear(a,x,m);
 
  } else if(auto* m=g.as<torch::nn::Dropout>())             { c=Cast::drop;   drop(a,x,m->options);
@@ -2121,10 +2063,10 @@ void nnfn(K x) {
 
 /*
 fractional pool -- use pytorch version after fix for output ratio, also try w;indices registered as buffer?
-functional form of various normalization methods
+normalize -- functional form & module?, also CrossMapLRN2d?
 embedding, embeddingbag
 multi-head attention
-bilinear & identity layers
+bilinear & identity layers, C++ identity doesn't accept multiple args, not useful?
 pairwise & cosine similarity distance 
 rename mode, dropout vs p,..
 */

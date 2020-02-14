@@ -553,6 +553,17 @@ static void drop(bool a,K x,const torch::nn::DropoutOptions& o) {
 // embedwt - handle options depending on whether pre-trained weights supplied
 // embed, embedbag - process args and return Embedding/EmbeddingBag module
 // --------------------------------------------------------------------------------------
+/*
+static torch::nn::EmbeddingBagMode embedmode(S s) {
+ switch(emap(s)) {
+  case Enum::sum:  return torch::kSum;
+  case Enum::mean: return torch::kMean;
+  case Enum::max:  return torch::kMax;
+  default: AT_ERROR("unrecognized mode for embedding bag: ",s);
+ }
+}
+*/
+
 static void embedset(Cast c,Setting s,Pairs& p,torch::nn::EmbeddingOptions& o) {
  if(s == Setting::padindex) o.padding_idx(int64n(p,c));
 }

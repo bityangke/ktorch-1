@@ -739,7 +739,7 @@ static void linear(bool a,K x,const torch::nn::LinearImpl *m) {
  if(a || (o.bias() != d.bias())) OPTION(x, bias, kb(o.bias()));
 }
 
-KAPI klinear(K x) {
+KAPI Linear(K x) {
  KTRY
   TORCH_CHECK(!x->t, "linear not implemented for ",kname(x->t));
   TORCH_CHECK(x->n==2 || x->n==3, "linear requires 2-3 args, (input; weight; optional bias)");
@@ -751,6 +751,54 @@ KAPI klinear(K x) {
   return kresult(a||w||b, r);
  KCATCH("linear");
 }
+
+// --------------------------------------------------------------------------------------
+// bilinear - parse/retrieve args, callable functional form
+// --------------------------------------------------------------------------------------
+static torch::nn::BilinearOptions bilinear(K x,J i,Cast c) {
+ bool b=true; int64_t in1=nj,in2=nj,out=nj; Pairs p; J n=xargc(x,i,p);
+ for(J j=0;j<n;++j) {
+   switch(j) {
+    case 0: in1=int64(x,i+j,c,Setting::in1);   break;
+    case 1: in2=int64(x,i+j,c,Setting::in2);   break;
+    case 2: out=int64(x,i+j,c,Setting::out);  break;
+    case 3:   b=mbool(x,i+j,c,Setting::bias); break;
+    default: AT_ERROR(msym(c),": up to 4 positional arguments(in1,in2,out,biasflag) expected, ",n," given");
+  }
+ }
+ while(xpair(p))
+  switch(mset(p.k)) {
+   case Setting::in1:  in1=int64(p,c); break;
+   case Setting::in2:  in2=int64(p,c); break;
+   case Setting::out:  out=int64(p,c); break;
+   case Setting::bias: b=mbool(p,c); break;
+   default: AT_ERROR("Unrecognized bilinear option: ",p.k); break;
+  }
+ TORCH_CHECK(in1>0 && in2>0, msym(c), ": positive input sizes required");
+ TORCH_CHECK(out>0,          msym(c), ": positive output size required");
+ return torch::nn::BilinearOptions(in1,in2,out).bias(b);
+}
+
+static void bilinear(bool a,K x,const torch::nn::BilinearImpl *m) {
+ torch::nn::BilinearOptions o=m->options, d(o.in1_features(),o.in2_features(),o.out_features());
+ OPTION(x, in1,  kj(o.in1_features()));
+ OPTION(x, in2,  kj(o.in2_features()));
+ OPTION(x, out, kj(o.out_features()));
+ if(a || (o.bias() != d.bias())) OPTION(x, bias, kb(o.bias()));
+}
+
+KAPI Bilinear(K x) {
+ KTRY
+  TORCH_CHECK(!x->t, "bilinear not implemented for ",kname(x->t));
+  TORCH_CHECK(x->n==3 || x->n==4, "blinear requires 3-4 args, (input1; input2; weight; optional bias)");
+  Tensor r, *x1=xten(x,0), *x2=xten(x,1), *w=xten(x,2), *b=xten(x,3);
+  return kresult(x1||x2||w||b, torch::bilinear(x1 ? *x1 : kput(x,0),
+                                               x2 ? *x2 : kput(x,1),
+                                                w ?  *w : kput(x,2),
+                                                x->n==3 ? Tensor{} : (b ? *b : kput(x,3))));
+ KCATCH("bilinear");
+}
+
 
 // --------------------------------------------------------------------------------------
 // rnn - create rnn/gru/lstm module given options/set dictionary of options from module
@@ -770,7 +818,7 @@ static M rnn(Cast c,K x,J k) {
    case Setting::bias:        b=pbool(p); break;
    case Setting::bi:         bi=pbool(p); break;
    case Setting::batchfirst: ba=pbool(p); break;
-   case Setting::drop:      d=pdouble(p); break;
+   case Setting::dropout:   d=pdouble(p); break;
    case Setting::fn: if(r) f=rnnfn(psym(p)); else AT_ERROR("activation function only for RNN module"); break;
    default: AT_ERROR(msym(c)," option: ",p.k," unrecognized, expected one of in,hidden,layers,bias,bi,batchfirst,drop,fn");
   }
@@ -785,7 +833,7 @@ static void rnn(bool a,K x,const M* m) {
  OPTION(x, in,     kj(o.input_size()));
  OPTION(x, hidden, kj(o.hidden_size()));
  if(a || (o.layers()        != d.layers()))       OPTION(x, layers,     kj(o.layers()));
- if(a || (o.dropout()       != d.dropout()))      OPTION(x, drop,       kf(o.dropout()));
+ if(a || (o.dropout()       != d.dropout()))      OPTION(x, dropout,    kf(o.dropout()));
  if((a && f) || f           != rnnfn(d))          OPTION(x, fn,         ks(f));
  if(a || (o.with_bias()     != d.with_bias()))    OPTION(x, bias,       kb(o.with_bias()));
  if(a || (o.bidirectional() != d.bidirectional()))OPTION(x, bi,         kb(o.bidirectional()));
@@ -1650,6 +1698,7 @@ void mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) {
   case Cast::embed:        PUSH(q,n,embed(x,i,c)); break;
   case Cast::embedbag:     PUSH(q,n,embedbag(x,i,c)); break;
   case Cast::linear:       PUSH(q,n,torch::nn::Linear(linear(x,i,c))); break;
+  case Cast::bilinear:     PUSH(q,n,torch::nn::Bilinear(bilinear(x,i,c))); break;
 
   case Cast::drop:         PUSH(q,n,torch::nn::Dropout(drop(x,i,c))); break;
   case Cast::drop2d:       PUSH(q,n,torch::nn::Dropout2d(drop(x,i,c))); break;
@@ -1780,6 +1829,7 @@ void mopt(Module &g,bool a,K &v,J i) { //g:generic module, a:true if all options
  } else if(auto* m=g.as<torch::nn::Embedding>())      { c=Cast::embed;    embed(a,x,c,m->options,m->weight);
  } else if(auto* m=g.as<torch::nn::EmbeddingBag>())   { c=Cast::embedbag; embed(a,x,c,m->options,m->weight);
  } else if(auto* m=g.as<torch::nn::Linear>())         { c=Cast::linear;   linear(a,x,m);
+ } else if(auto* m=g.as<torch::nn::Bilinear>())       { c=Cast::bilinear; bilinear(a,x,m);
 
  } else if(auto* m=g.as<torch::nn::Dropout>())             { c=Cast::drop;   drop(a,x,m->options);
  } else if(auto* m=g.as<torch::nn::Dropout2d>())           { c=Cast::drop2d; drop(a,x,m->options);
@@ -2047,7 +2097,8 @@ void nnfn(K x) {
  fn(x, "hardshrink", KFN(hardshrink),  1);
  fn(x, "hardtanh",   KFN(Hardtanh),    1);
  fn(x, "leakyrelu",  KFN(leakyrelu),   1);
- fn(x, "linear",     KFN(klinear),     1);
+ fn(x, "linear",     KFN(Linear),      1);
+ fn(x, "bilinear",   KFN(Bilinear),    1);
  fn(x, "logsigmoid", KFN(logsigmoid),  1);
  fn(x, "logsoftmax", KFN(logsoftmax),  1);
  fn(x, "lppool1d",   KFN(lppool1d),    1);
@@ -2076,7 +2127,6 @@ fractional pool -- use pytorch version after fix for output ratio, also try w;in
 normalize -- functional form & module?
 embeddingbag -- enable lastoffset option, forward w'defaults should work with sequential
 multi-head attention -- not in 1.4, wait for patch or 1.5
-bilinear & identity layers, C++ identity doesn't accept multiple args, not useful?
+identity layer, C++ identity doesn't accept multiple args, not useful?
 pairwise & cosine similarity distance 
-rename mode, dropout vs p,..
 */

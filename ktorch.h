@@ -107,24 +107,24 @@ enum class Cast:char {
  undefined=0, 
  tensor,          sequential,      model,         //basic structures
 
- adaptavg1d,      adaptavg2d,     adaptavg3d,     adaptmax1d,      adaptmax2d,        //modules
- adaptmax3d,      adrop,          avgpool1d,      avgpool2d,       avgpool3d,      
- batchnorm,       batchnorm1d,    batchnorm2d,    batchnorm3d,     celu,           
- conv1d,          conv2d,         conv3d,         convtranspose1d, convtranspose2d,
- convtranspose3d, crossmap2d,     drop,           drop2d,          drop3d,         
- elu,             embed,          embedbag,       expand,          fadrop,         
- fdrop,           flatten,        fmaxpool2d,     fmaxpool3d,      fold,           
- gelu,            glu,            groupnorm,      gru,             hardshrink,     
- hardtanh,        instancenorm1d, instancenorm2d, instancenorm3d,  layernorm,      
- leakyrelu,       linear,         localnorm,      logsigmoid,      logsoftmax,     
- lppool1d,        lppool2d,       lstm,           maxpool1d,       maxpool2d,      
- maxpool3d,       out,            pad,            pad1d,           pad2d,          
- pad3d,           prelu,          reflect1d,      reflect2d,       relu,           
- relu6,           replicate1d,    replicate2d,    replicate3d,     reshape,        
- rnn,             rrelu,          selu,           sigmoid,         softmax,        
- softmax2d,       softmin,        softplus,       softshrink,      softsign,       
- squeeze,         tanh,           tanhshrink,     threshold,       unfold,         
- unsqueeze,       zeropad2d,
+ adaptavg1d,      adaptavg2d,      adaptavg3d,     adaptmax1d,     adaptmax2d,      //modules
+ adaptmax3d,      adrop,           avgpool1d,      avgpool2d,      avgpool3d,
+ batchnorm,       batchnorm1d,     batchnorm2d,    batchnorm3d,    bilinear,
+ celu,            conv1d,          conv2d,         conv3d,         convtranspose1d,
+ convtranspose2d, convtranspose3d, crossmap2d,     drop,           drop2d,
+ drop3d,          elu,             embed,          embedbag,       expand,
+ fadrop,          fdrop,           flatten,        fmaxpool2d,     fmaxpool3d,
+ fold,            gelu,            glu,            groupnorm,      gru,
+ hardshrink,      hardtanh,        instancenorm1d, instancenorm2d, instancenorm3d,
+ layernorm,       leakyrelu,       linear,         localnorm,      logsigmoid,
+ logsoftmax,      lppool1d,        lppool2d,       lstm,           maxpool1d,
+ maxpool2d,       maxpool3d,       out,            pad,            pad1d,
+ pad2d,           pad3d,           prelu,          reflect1d,      reflect2d,
+ relu,            relu6,           replicate1d,    replicate2d,    replicate3d,
+ reshape,         rnn,             rrelu,          selu,           sigmoid,
+ softmax,         softmax2d,       softmin,        softplus,       softshrink,
+ softsign,        squeeze,         tanh,           tanhshrink,     threshold,
+ unfold,          unsqueeze,       zeropad2d,
 
  bce,       bcelogits, ce,          cosineloss, ctc,        hinge,        //loss fns
  kl,        l1,        margin,      mse,        multilabel, multimargin,
@@ -146,18 +146,19 @@ enum class Prob:char {  // probablility distributions
 
 enum class Setting:char {
  undefined,
- affine,     alpha,    amsgrad,   batchfirst, beta,     beta1,     beta2,    
- bi,         bias,     blank,     ceiling,    centered, changetol, channels, 
- cols,       countpad, dampening, decay,      dilate,   dim,       divisor,  
- drop,       end,      eps,       eval,       fn,       freeze,    full,     
- gradtol,    groups,   hidden,    history,    ignore,   in,        in1,      
- in2,        indices,  init,      inplace,    iter,     k,         lambda,   
- lastoffset, layers,   log,       lower,      lr,       lrdecay,   margin,   
- max,        maxnorm,  min,       mode,       momentum, nesterov,  out,      
- outpad,     outsize,  p,         pad,        padindex, padmode,   ratio,    
- reduce,     rows,     scale,     shape,      size,     slope,     sparse,   
- start,      stride,   swap,      threshold,  track,    train,     transpose,
- type,       upper,    value,     weight,     zeroinf                        
+ affine,    alpha,    amsgrad,   batchfirst, beta,       beta1,     beta2,   
+ bi,        bias,     blank,     ceiling,    centered,   changetol, channels,
+ cols,      countpad, dampening, decay,      dilate,     dim,       divisor, 
+ dropout,   end,      eps,       eval,       fn,         freeze,    full,    
+ gradtol,   groups,   heads,     hidden,     history,    ignore,    in,      
+ in1,       in2,      indices,   init,       inplace,    iter,      k,       
+ kdim,      kvbias,   kvzeros,   lambda,     lastoffset, layers,    log,     
+ lower,     lr,       lrdecay,   margin,     max,        maxnorm,   min,     
+ mode,      momentum, nesterov,  out,        outpad,     outsize,   p,       
+ pad,       padindex, padmode,   ratio,      reduce,     rows,      scale,   
+ shape,     size,     slope,     sparse,     start,      stride,    swap,    
+ threshold, track,    train,     transpose,  type,       upper,     value,   
+ vdim,      weight,   zeroinf                                                
 };
 
 enum class State:char {
@@ -566,7 +567,7 @@ typedef struct {
   std::make_tuple(cs("tanh"),torch::nn::RNNActivation::Tanh)
  }};
 
- std::array<std::tuple<S,Cast>,87> module = {{  // module sym -> enum
+ std::array<std::tuple<S,Cast>,88> module = {{  // module sym -> enum
   std::make_tuple(cs("adaptavg1d"),      Cast::adaptavg1d),
   std::make_tuple(cs("adaptavg2d"),      Cast::adaptavg2d),
   std::make_tuple(cs("adaptavg3d"),      Cast::adaptavg3d),
@@ -581,6 +582,7 @@ typedef struct {
   std::make_tuple(cs("batchnorm1d"),     Cast::batchnorm1d),
   std::make_tuple(cs("batchnorm2d"),     Cast::batchnorm2d),
   std::make_tuple(cs("batchnorm3d"),     Cast::batchnorm3d),
+  std::make_tuple(cs("bilinear"),        Cast::bilinear),
   std::make_tuple(cs("celu"),            Cast::celu),
   std::make_tuple(cs("conv1d"),          Cast::conv1d),
   std::make_tuple(cs("conv2d"),          Cast::conv2d),
@@ -656,7 +658,7 @@ typedef struct {
   std::make_tuple(cs("zeropad2d"),       Cast::zeropad2d)
  }};
 
- std::array<std::tuple<S,Setting>,60> mset = {{      // module option sym -> enum
+ std::array<std::tuple<S,Setting>,65> mset = {{      // module option sym -> enum
   std::make_tuple(cs("affine"),     Setting::affine),
   std::make_tuple(cs("alpha"),      Setting::alpha),
   std::make_tuple(cs("batchfirst"), Setting::batchfirst),
@@ -670,12 +672,13 @@ typedef struct {
   std::make_tuple(cs("dilate"),     Setting::dilate),
   std::make_tuple(cs("divisor"),    Setting::divisor),
   std::make_tuple(cs("dim"),        Setting::dim),
-  std::make_tuple(cs("drop"),       Setting::drop),
+  std::make_tuple(cs("dropout"),    Setting::dropout),
   std::make_tuple(cs("end"),        Setting::end),
   std::make_tuple(cs("eps"),        Setting::eps),
   std::make_tuple(cs("fn"),         Setting::fn),
   std::make_tuple(cs("freeze"),     Setting::freeze),
   std::make_tuple(cs("groups"),     Setting::groups),
+  std::make_tuple(cs("heads"),      Setting::heads),
   std::make_tuple(cs("hidden"),     Setting::hidden),
   std::make_tuple(cs("in"),         Setting::in),
   std::make_tuple(cs("in1"),        Setting::in1),
@@ -684,6 +687,9 @@ typedef struct {
   std::make_tuple(cs("init"),       Setting::init),
   std::make_tuple(cs("inplace"),    Setting::inplace),
   std::make_tuple(cs("k"),          Setting::k),
+  std::make_tuple(cs("kdim"),       Setting::kdim),
+  std::make_tuple(cs("kvbias"),     Setting::kvbias),
+  std::make_tuple(cs("kvzeros"),    Setting::kvzeros),
   std::make_tuple(cs("lambda"),     Setting::lambda),
   std::make_tuple(cs("lastoffset"), Setting::lastoffset),
   std::make_tuple(cs("layers"),     Setting::layers),
@@ -716,6 +722,7 @@ typedef struct {
   std::make_tuple(cs("type"),       Setting::type),
   std::make_tuple(cs("upper"),      Setting::upper),
   std::make_tuple(cs("value"),      Setting::value),
+  std::make_tuple(cs("vdim"),       Setting::vdim),
   std::make_tuple(cs("weight"),     Setting::weight)
  }};
 

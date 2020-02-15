@@ -548,12 +548,12 @@ static void drop(bool a,K x,const torch::nn::DropoutOptions& o) {
 
 // --------------------------------------------------------------------------------------
 // create embedding/embedding bag module given options:
+// embedmode - translate symbol to internal embedding mode (variant)
 // embedset - set name/value pairs specific to Embedding vs EmbeddingBag
 // embedpair - handle name/value pairs for both types of embedding modules
 // embedwt - handle options depending on whether pre-trained weights supplied
 // embed, embedbag - process args and return Embedding/EmbeddingBag module
 // --------------------------------------------------------------------------------------
-/*
 static torch::nn::EmbeddingBagMode embedmode(S s) {
  switch(emap(s)) {
   case Enum::sum:  return torch::kSum;
@@ -562,14 +562,16 @@ static torch::nn::EmbeddingBagMode embedmode(S s) {
   default: AT_ERROR("unrecognized mode for embedding bag: ",s);
  }
 }
-*/
 
 static void embedset(Cast c,Setting s,Pairs& p,torch::nn::EmbeddingOptions& o) {
  if(s == Setting::padindex) o.padding_idx(int64n(p,c));
+ else AT_ERROR("Unrecognized option for ",msym(c),": ",mset(s));
 }
 
 static void embedset(Cast c,Setting s,Pairs& p,torch::nn::EmbeddingBagOptions& o) {
- //if(s == Setting::lastoffset) o.include_last_offset(mbool(p,c));
+ if       (s == Setting::mode) o.mode(embedmode(psym(p)));
+ //else if(s == Setting::lastoffset) o.include_last_offset(mbool(p,c));
+ else AT_ERROR("Unrecognized option for ",msym(c),": ",mset(s));
 }
 
 template<typename O> static void embedpair(Cast c,Pairs& p,O& o,Tensor& w,bool &z) {
@@ -584,6 +586,7 @@ template<typename O> static void embedpair(Cast c,Pairs& p,O& o,Tensor& w,bool &
    case Setting::sparse:     o.sparse(mbool(p,c)); break;
    case Setting::weight:     if(!pempty(p)) pten(p,w); break;
    case Setting::freeze:     z=mbool(p,c); break;
+   case Setting::mode:       embedset(c,Setting::mode,p,o); break;
  //case Setting::lastoffset: embedset(c,Setting::lastoffset,p,o);
    default: AT_ERROR("Embedding option: ",p.k," unrecognized");
   }
@@ -639,6 +642,9 @@ static torch::nn::Embedding embed(K x,J i,Cast c) {
 static torch::nn::EmbeddingBag embedbag(K x,J i,Cast c) {
  bool z=false; Pairs p; Tensor w; J n=xargc(x,i,p);
  torch::nn::EmbeddingBagOptions o(nj,nj);
+ // allow mode if last arg even if early in sequence
+ if(!x->t && n>1 && n<6 && xsym(x,i+n-1))
+  n--, o.mode(embedmode(mode(x,i+n,c,Setting::mode)));
  for(J j=0;j<n;++j) {
    switch(j) {
     case 0:
@@ -655,8 +661,9 @@ static torch::nn::EmbeddingBag embedbag(K x,J i,Cast c) {
     case 2: o.max_norm(optdouble(x,i+j,c,Setting::maxnorm)); break;
     case 3: o.norm_type(mdouble(x,i+j,c,Setting::p)); break;
     case 4: o.scale_grad_by_freq(mbool(x,i+j,c,Setting::scale)); break;
-    case 5: o.sparse(mbool(x,i+j,c,Setting::sparse)); break;
-    default: AT_ERROR(msym(c),": up to 6 positional arguments expected, ",n," given");
+    case 5: o.mode(embedmode(mode(x,i+j,c,Setting::mode))); break;
+    case 6: o.sparse(mbool(x,i+j,c,Setting::sparse)); break;
+    default: AT_ERROR(msym(c),": up to 7 positional arguments expected, ",n," given");
   }
  }
  embedpair(c,p,o,w,z);
@@ -665,25 +672,19 @@ static torch::nn::EmbeddingBag embedbag(K x,J i,Cast c) {
 
 // -----------------------------------------------------------------------------------------
 // retrieve settings from existing Embedding/EmbeddingBag:
-// bagmode - translates the mode in an existing module to an enumeration
 // embedget - templated fucntion to retrieve options specific to Embedding or EmbeddingBag
 // embed - templated function which gets options and initial optional weights
 // -----------------------------------------------------------------------------------------
-static Cast bagmode(const torch::nn::EmbeddingBagMode& m) {
- if      (c10::get_if<torch::enumtype::kMax> (&m)) return Cast::embedmax;
- else if (c10::get_if<torch::enumtype::kMean>(&m)) return Cast::embedmean;
- else if (c10::get_if<torch::enumtype::kSum> (&m)) return Cast::embedsum;
- else AT_ERROR("Unrecognized embedding bag mode");
-}
-
 static void embedget(bool a,K x,Cast c,Setting s,const torch::nn::EmbeddingOptions& o,const torch::nn::EmbeddingOptions& d) {
  if(s == Setting::padindex && (a || o.padding_idx().has_value()))
   OPTION(x, padindex, kj(o.padding_idx() ? o.padding_idx().value() : nj));
 }
 
 static void embedget(bool a,K x,Cast c,Setting s,const torch::nn::EmbeddingBagOptions& o,const torch::nn::EmbeddingBagOptions& d) {
+ if(s == Setting::mode && (a || o.mode().index() != d.mode().index()))
+  OPTION(x, mode, ks(ESYM(o.mode())));
  /*
- if(s == Setting::lastoffset && (a || o.include_last_offset() != d.include_last_offset())
+ else if(s == Setting::lastoffset && (a || o.include_last_offset() != d.include_last_offset())
   OPTION(x, lastoffset, kb(o.include_last_offset()));
  */
 }
@@ -697,10 +698,11 @@ template<typename O>static void embed(bool a,K x,Cast c,const O& o,const Tensor&
   OPTION(x, rows, kj(o.num_embeddings()));
   OPTION(x, cols, kj(o.embedding_dim()));
  }
- embedget(a,x,c,Setting::padindex,o,d);
+ embedget(a,x,c,Setting::padindex,o,d); // embedding only
  if(a || o.max_norm().has_value())                         OPTION(x, maxnorm, kf(o.max_norm() ? o.max_norm().value() : nf));
  if(a || o.norm_type()          != d.norm_type())          OPTION(x, p,       kf(o.norm_type()));
  if(a || o.scale_grad_by_freq() != d.scale_grad_by_freq()) OPTION(x, scale,   kb(o.scale_grad_by_freq()));
+ embedget(a,x,c,Setting::mode,o,d); //EmbeddingBag only
  if(a || o.sparse()             != d.sparse())             OPTION(x, sparse,  kb(o.sparse()));
  //embedget(a,x,c,Setting::lastoffset,o,d);
 }
@@ -1646,10 +1648,7 @@ void mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) {
   case Cast::crossmap2d: PUSH(q,n,torch::nn::CrossMapLRN2d(localnorm<torch::nn::CrossMapLRN2dOptions>(x,i,c))); break;
 
   case Cast::embed:        PUSH(q,n,embed(x,i,c)); break;
-  case Cast::embedmax:
-  case Cast::embedmean:
-  case Cast::embedsum:     PUSH(q,n,embedbag(x,i,c)); break;
-
+  case Cast::embedbag:     PUSH(q,n,embedbag(x,i,c)); break;
   case Cast::linear:       PUSH(q,n,torch::nn::Linear(linear(x,i,c))); break;
 
   case Cast::drop:         PUSH(q,n,torch::nn::Dropout(drop(x,i,c))); break;
@@ -1778,9 +1777,9 @@ void mopt(Module &g,bool a,K &v,J i) { //g:generic module, a:true if all options
  } else if(auto* m=g.as<torch::nn::LocalResponseNorm>()) { c=Cast::localnorm;      localnorm(a,x,c,m->options);
  } else if(auto* m=g.as<torch::nn::CrossMapLRN2d>())     { c=Cast::crossmap2d;     localnorm(a,x,c,m->options);
 
- } else if(auto* m=g.as<torch::nn::Embedding>())      { c=Cast::embed; embed(a,x,c,m->options,m->weight);
- } else if(auto* m=g.as<torch::nn::EmbeddingBag>())   { c=bagmode(m->options.mode()); embed(a,x,c,m->options,m->weight);
- } else if(auto* m=g.as<torch::nn::Linear>())         { c=Cast::linear;    linear(a,x,m);
+ } else if(auto* m=g.as<torch::nn::Embedding>())      { c=Cast::embed;    embed(a,x,c,m->options,m->weight);
+ } else if(auto* m=g.as<torch::nn::EmbeddingBag>())   { c=Cast::embedbag; embed(a,x,c,m->options,m->weight);
+ } else if(auto* m=g.as<torch::nn::Linear>())         { c=Cast::linear;   linear(a,x,m);
 
  } else if(auto* m=g.as<torch::nn::Dropout>())             { c=Cast::drop;   drop(a,x,m->options);
  } else if(auto* m=g.as<torch::nn::Dropout2d>())           { c=Cast::drop2d; drop(a,x,m->options);
@@ -2074,9 +2073,9 @@ void nnfn(K x) {
 
 /*
 fractional pool -- use pytorch version after fix for output ratio, also try w;indices registered as buffer?
-normalize -- functional form & module?, also CrossMapLRN2d?
-embedding, embeddingbag
-multi-head attention
+normalize -- functional form & module?
+embeddingbag -- enable lastoffset option, forward w'defaults should work with sequential
+multi-head attention -- not in 1.4, wait for patch or 1.5
 bilinear & identity layers, C++ identity doesn't accept multiple args, not useful?
 pairwise & cosine similarity distance 
 rename mode, dropout vs p,..

@@ -105,47 +105,32 @@ enum class Class:char {
 
 enum class Cast:char {
  undefined=0, 
- tensor,          sequential,      model,           // basic structures
+ tensor,          sequential,      model,         //basic structures
 
- adaptavg1d,      adaptavg2d,      adaptavg3d,      // modules
- adaptmax1d,      adaptmax2d,      adaptmax3d, 
- adrop,           avgpool1d,       avgpool2d,  
- avgpool3d,       batchnorm,       batchnorm1d,
- batchnorm2d,     batchnorm3d,     celu,       
- conv1d,          conv2d,          conv3d,     
- convtranspose1d, convtranspose2d, convtranspose3d, crossmap2d,
- drop,            drop2d,          drop3d,     
- elu,             embed,           embedmax,
- embedmean,       embedsum,        expand,     
- fadrop,          fdrop,           flatten,    
- fmaxpool2d,      fmaxpool3d,      fold,            gelu,       
- glu,             groupnorm,       gru,             hardshrink, 
- hardtanh,        instancenorm1d,  instancenorm2d,
- instancenorm3d,  layernorm,       leakyrelu,       linear,     
- localnorm,       logsigmoid,      logsoftmax,
- lppool1d,        lppool2d,        lstm,
- maxpool1d,       maxpool2d,       maxpool3d,       out,        
- pad,             pad1d,           pad2d,      
- pad3d,           prelu,           reflect1d,  
- reflect2d,       relu,            relu6,      
- replicate1d,     replicate2d,     replicate3d,
- reshape,         rnn,             rrelu,      
- selu,            sigmoid,         softmax,
- softmax2d,       softmin,         softplus,
- softshrink,      softsign,        squeeze,
- tanh,            tanhshrink,      threshold,
- unfold,          unsqueeze,       zeropad2d,            
+ adaptavg1d,      adaptavg2d,     adaptavg3d,     adaptmax1d,      adaptmax2d,        //modules
+ adaptmax3d,      adrop,          avgpool1d,      avgpool2d,       avgpool3d,      
+ batchnorm,       batchnorm1d,    batchnorm2d,    batchnorm3d,     celu,           
+ conv1d,          conv2d,         conv3d,         convtranspose1d, convtranspose2d,
+ convtranspose3d, crossmap2d,     drop,           drop2d,          drop3d,         
+ elu,             embed,          embedbag,       expand,          fadrop,         
+ fdrop,           flatten,        fmaxpool2d,     fmaxpool3d,      fold,           
+ gelu,            glu,            groupnorm,      gru,             hardshrink,     
+ hardtanh,        instancenorm1d, instancenorm2d, instancenorm3d,  layernorm,      
+ leakyrelu,       linear,         localnorm,      logsigmoid,      logsoftmax,     
+ lppool1d,        lppool2d,       lstm,           maxpool1d,       maxpool2d,      
+ maxpool3d,       out,            pad,            pad1d,           pad2d,          
+ pad3d,           prelu,          reflect1d,      reflect2d,       relu,           
+ relu6,           replicate1d,    replicate2d,    replicate3d,     reshape,        
+ rnn,             rrelu,          selu,           sigmoid,         softmax,        
+ softmax2d,       softmin,        softplus,       softshrink,      softsign,       
+ squeeze,         tanh,           tanhshrink,     threshold,       unfold,         
+ unsqueeze,       zeropad2d,
 
- bce,         bcelogits,                   // loss fns
- ce,          cosineloss,  ctc,
- hinge,       kl,          l1,
- margin,      mse,         multilabel,
- multimargin, multisoft,   nll,
- poissonloss, smoothl1,    softmargin,
- triplet,    
+ bce,       bcelogits, ce,          cosineloss, ctc,        hinge,        //loss fns
+ kl,        l1,        margin,      mse,        multilabel, multimargin,
+ multisoft, nll,       poissonloss, smoothl1,   softmargin, triplet,    
 
- adagrad,     adam,        lbfgs,          // optimizers
- rmsprop,     sgd
+ adagrad, adam, lbfgs, rmsprop, sgd //optimizers
 };
 
 enum class Tensormode:char {   // tensor creation modes
@@ -581,7 +566,7 @@ typedef struct {
   std::make_tuple(cs("tanh"),torch::nn::RNNActivation::Tanh)
  }};
 
- std::array<std::tuple<S,Cast>,89> module = {{  // module sym -> enum
+ std::array<std::tuple<S,Cast>,87> module = {{  // module sym -> enum
   std::make_tuple(cs("adaptavg1d"),      Cast::adaptavg1d),
   std::make_tuple(cs("adaptavg2d"),      Cast::adaptavg2d),
   std::make_tuple(cs("adaptavg3d"),      Cast::adaptavg3d),
@@ -609,9 +594,7 @@ typedef struct {
   std::make_tuple(cs("drop3d"),          Cast::drop3d),
   std::make_tuple(cs("elu"),             Cast::elu),
   std::make_tuple(cs("embed"),           Cast::embed),
-  std::make_tuple(cs("embedmax"),        Cast::embedmax),
-  std::make_tuple(cs("embedmean"),       Cast::embedmean),
-  std::make_tuple(cs("embedsum"),        Cast::embedsum),
+  std::make_tuple(cs("embedbag"),        Cast::embedbag),
   std::make_tuple(cs("expand"),          Cast::expand),
   std::make_tuple(cs("fdrop"),           Cast::fdrop),
   std::make_tuple(cs("fadrop"),          Cast::fadrop),

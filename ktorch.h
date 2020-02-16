@@ -107,24 +107,26 @@ enum class Cast:char {
  undefined=0, 
  tensor,          sequential,      model,         //basic structures
 
- adaptavg1d,      adaptavg2d,      adaptavg3d,     adaptmax1d,     adaptmax2d,      //modules
- adaptmax3d,      adrop,           avgpool1d,      avgpool2d,      avgpool3d,
- batchnorm,       batchnorm1d,     batchnorm2d,    batchnorm3d,    bilinear,
- celu,            conv1d,          conv2d,         conv3d,         convtranspose1d,
- convtranspose2d, convtranspose3d, crossmap2d,     drop,           drop2d,
- drop3d,          elu,             embed,          embedbag,       expand,
- fadrop,          fdrop,           flatten,        fmaxpool2d,     fmaxpool3d,
- fold,            gelu,            glu,            groupnorm,      gru,
- hardshrink,      hardtanh,        instancenorm1d, instancenorm2d, instancenorm3d,
- layernorm,       leakyrelu,       linear,         localnorm,      logsigmoid,
- logsoftmax,      lppool1d,        lppool2d,       lstm,           maxpool1d,
- maxpool2d,       maxpool3d,       out,            pad,            pad1d,
- pad2d,           pad3d,           prelu,          reflect1d,      reflect2d,
- relu,            relu6,           replicate1d,    replicate2d,    replicate3d,
- reshape,         rnn,             rrelu,          selu,           sigmoid,
- softmax,         softmax2d,       softmin,        softplus,       softshrink,
- softsign,        squeeze,         tanh,           tanhshrink,     threshold,
- unfold,          unsqueeze,       zeropad2d,
+ adaptavg1d,      adaptavg2d,      adaptavg3d,      adaptmax1d,  adaptmax2d,  //modules
+ adaptmax3d,      adrop,           attention,       avgpool1d,   avgpool2d,
+ avgpool3d,       batchnorm,       batchnorm1d,     batchnorm2d, batchnorm3d,
+ bilinear,        celu,            conv1d,          conv2d,      conv3d,
+ convtranspose1d, convtranspose2d, convtranspose3d, crossmap2d,  drop,
+ drop2d,          drop3d,          elu,             embed,       embedbag,
+ expand,          fadrop,          fdrop,           flatten,     fmaxpool2d,
+ fmaxpool3d,      fold,            gelu,            glu,         groupnorm,
+ gru,             hardshrink,      hardtanh,        identity,    instancenorm1d,
+ instancenorm2d,  instancenorm3d,  layernorm,       leakyrelu,   linear,
+ localnorm,       logsigmoid,      logsoftmax,      lppool1d,    lppool2d,
+ lstm,            maxpool1d,       maxpool2d,       maxpool3d,   out,
+ pad,             pad1d,           pad2d,           pad3d,       prelu,
+ reflect1d,       reflect2d,       relu,            relu6,       replicate1d,
+ replicate2d,     replicate3d,     reshape,         rnn,         rrelu,
+ selu,            sigmoid,         softmax,         softmax2d,   softmin,
+ softplus,        softshrink,      softsign,        squeeze,     tanh,
+ tanhshrink,      threshold,       unfold,          unsqueeze,   zeropad2d,
+
+ pairwise,  similar, // distance functions
 
  bce,       bcelogits, ce,          cosineloss, ctc,        hinge,        //loss fns
  kl,        l1,        margin,      mse,        multilabel, multimargin,
@@ -146,19 +148,19 @@ enum class Prob:char {  // probablility distributions
 
 enum class Setting:char {
  undefined,
- affine,    alpha,    amsgrad,   batchfirst, beta,       beta1,     beta2,   
- bi,        bias,     blank,     ceiling,    centered,   changetol, channels,
- cols,      countpad, dampening, decay,      dilate,     dim,       divisor, 
- dropout,   end,      eps,       eval,       fn,         freeze,    full,    
- gradtol,   groups,   heads,     hidden,     history,    ignore,    in,      
- in1,       in2,      indices,   init,       inplace,    iter,      k,       
- kdim,      kvbias,   kvzeros,   lambda,     lastoffset, layers,    log,     
- lower,     lr,       lrdecay,   margin,     max,        maxnorm,   min,     
- mode,      momentum, nesterov,  out,        outpad,     outsize,   p,       
- pad,       padindex, padmode,   ratio,      reduce,     rows,      scale,   
- shape,     size,     slope,     sparse,     start,      stride,    swap,    
- threshold, track,    train,     transpose,  type,       upper,     value,   
- vdim,      weight,   zeroinf                                                
+ affine,  alpha,     amsgrad,   batchfirst, beta,      beta1,      beta2,
+ bi,      bias,      blank,     ceiling,    centered,  changetol,  channels,
+ cols,    countpad,  dampening, decay,      dilate,    dim,        divisor,
+ dropout, end,       eps,       eval,       fn,        freeze,     full,
+ gradtol, groups,    heads,     hidden,     history,   ignore,     in,
+ in1,     in2,       indices,   init,       inplace,   iter,       k,
+ kdim,    keepdim,   kvbias,    kvzeros,    lambda,    lastoffset, layers,
+ log,     lower,     lr,        lrdecay,    margin,    max,        maxnorm,
+ min,     mode,      momentum,  nesterov,   out,       outpad,     outsize,
+ p,       pad,       padindex,  padmode,    ratio,     reduce,     rows,
+ scale,   shape,     size,      slope,      sparse,    start,      stride,
+ swap,    threshold, track,     train,      transpose, type,       upper,
+ value,   vdim,      weight,    zeroinf
 };
 
 enum class State:char {
@@ -440,6 +442,12 @@ K tensorback(K);
 void tensorfn(K);
 
 // nn module & functional routines:
+// distance module arg set/get (for use in loss functions)
+torch::nn::CosineSimilarityOptions  similar(K,J,Cast);
+torch::nn::PairwiseDistanceOptions pairwise(K,J,Cast);
+void  similar(bool,K,const torch::nn::CosineSimilarityOptions&);
+void pairwise(bool,K,const torch::nn::PairwiseDistanceOptions&);
+
 K kseq(const Sequential&);
 K seqto(Kseq*,const TensorOptions&,bool);
 K mtable(const Sequential& q,bool a,bool b=true);
@@ -567,7 +575,7 @@ typedef struct {
   std::make_tuple(cs("tanh"),torch::nn::RNNActivation::Tanh)
  }};
 
- std::array<std::tuple<S,Cast>,88> module = {{  // module sym -> enum
+ std::array<std::tuple<S,Cast>,92> module = {{  // module sym -> enum
   std::make_tuple(cs("adaptavg1d"),      Cast::adaptavg1d),
   std::make_tuple(cs("adaptavg2d"),      Cast::adaptavg2d),
   std::make_tuple(cs("adaptavg3d"),      Cast::adaptavg3d),
@@ -575,6 +583,7 @@ typedef struct {
   std::make_tuple(cs("adaptmax2d"),      Cast::adaptmax2d),
   std::make_tuple(cs("adaptmax3d"),      Cast::adaptmax3d),
   std::make_tuple(cs("adrop"),           Cast::adrop),
+  std::make_tuple(cs("attention"),       Cast::attention),
   std::make_tuple(cs("avgpool1d"),       Cast::avgpool1d),
   std::make_tuple(cs("avgpool2d"),       Cast::avgpool2d),
   std::make_tuple(cs("avgpool3d"),       Cast::avgpool3d),
@@ -610,6 +619,7 @@ typedef struct {
   std::make_tuple(cs("gru"),             Cast::gru),
   std::make_tuple(cs("hardshrink"),      Cast::hardshrink),
   std::make_tuple(cs("hardtanh"),        Cast::hardtanh),
+  std::make_tuple(cs("identity"),        Cast::identity),
   std::make_tuple(cs("instancenorm1d"),  Cast::instancenorm1d),
   std::make_tuple(cs("instancenorm2d"),  Cast::instancenorm2d),
   std::make_tuple(cs("instancenorm3d"),  Cast::instancenorm3d),
@@ -629,6 +639,7 @@ typedef struct {
   std::make_tuple(cs("pad1d"),           Cast::pad1d),
   std::make_tuple(cs("pad2d"),           Cast::pad2d),
   std::make_tuple(cs("pad3d"),           Cast::pad3d),
+  std::make_tuple(cs("pairwise"),        Cast::pairwise),
   std::make_tuple(cs("prelu"),           Cast::prelu),
   std::make_tuple(cs("reflect1d"),       Cast::reflect1d),
   std::make_tuple(cs("reflect2d"),       Cast::reflect2d),
@@ -643,6 +654,7 @@ typedef struct {
   std::make_tuple(cs("selu"),            Cast::selu),
   std::make_tuple(cs("sequential"),      Cast::sequential),
   std::make_tuple(cs("sigmoid"),         Cast::sigmoid),
+  std::make_tuple(cs("similar"),         Cast::similar),
   std::make_tuple(cs("softmax"),         Cast::softmax),
   std::make_tuple(cs("softmax2d"),       Cast::softmax2d),
   std::make_tuple(cs("softmin"),         Cast::softmin),
@@ -658,7 +670,7 @@ typedef struct {
   std::make_tuple(cs("zeropad2d"),       Cast::zeropad2d)
  }};
 
- std::array<std::tuple<S,Setting>,65> mset = {{      // module option sym -> enum
+ std::array<std::tuple<S,Setting>,66> mset = {{        // module option sym -> enum
   std::make_tuple(cs("affine"),     Setting::affine),
   std::make_tuple(cs("alpha"),      Setting::alpha),
   std::make_tuple(cs("batchfirst"), Setting::batchfirst),
@@ -688,6 +700,7 @@ typedef struct {
   std::make_tuple(cs("inplace"),    Setting::inplace),
   std::make_tuple(cs("k"),          Setting::k),
   std::make_tuple(cs("kdim"),       Setting::kdim),
+  std::make_tuple(cs("keepdim"),    Setting::keepdim),
   std::make_tuple(cs("kvbias"),     Setting::kvbias),
   std::make_tuple(cs("kvzeros"),    Setting::kvzeros),
   std::make_tuple(cs("lambda"),     Setting::lambda),
@@ -735,7 +748,7 @@ typedef struct {
   std::make_tuple(cs("buffers"), State::buffers)
  }};
 
- std::array<std::tuple<S,Cast>,18> loss = {{             // loss: map symbol -> enum
+ std::array<std::tuple<S,Cast>,20> loss = {{             // loss: map symbol -> enum
   std::make_tuple(cs("bce"),          Cast::bce),
   std::make_tuple(cs("bcelogits"),    Cast::bcelogits),
   std::make_tuple(cs("ce"),           Cast::ce),
@@ -750,7 +763,9 @@ typedef struct {
   std::make_tuple(cs("multimargin"),  Cast::multimargin),
   std::make_tuple(cs("multisoft"),    Cast::multisoft),
   std::make_tuple(cs("nll"),          Cast::nll),
+  std::make_tuple(cs("pairwise"),     Cast::pairwise),
   std::make_tuple(cs("poissonloss"),  Cast::poissonloss),
+  std::make_tuple(cs("similar"),      Cast::similar),
   std::make_tuple(cs("smoothl1"),     Cast::smoothl1),
   std::make_tuple(cs("softmargin"),   Cast::softmargin),
   std::make_tuple(cs("triplet"),      Cast::triplet)

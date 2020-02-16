@@ -569,7 +569,7 @@ KAPI Ctc(K a) {
 // lossto - given loss object and device/data type, converts tensors in options (e.g. class weights)
 // loss - main api function that creates/calls loss objects and queries their properties
 // ---------------------------------------------------------------------------------------------------
-static AnyModule lossinit(S s,Cast c,K x,J i) {
+static AnyModule lossinit(Cast c,K x,J i) {
  namespace nn=torch::nn;
  switch(c) {
   case Cast::bce:         return AnyModule(    BCELoss(             reduce<    BCELossOptions>(x,i,c)));
@@ -593,7 +593,10 @@ static AnyModule lossinit(S s,Cast c,K x,J i) {
   case Cast::triplet:     return AnyModule(nn::TripletMarginLoss(triplet(x,i,c))); break;
   case Cast::poissonloss: return AnyModule(nn::PoissonNLLLoss(poisson(x,i,c))); break;
   case Cast::ctc:         return AnyModule(nn::CTCLoss(ctc(x,i,c))); break;
-  default: AT_ERROR("Unrecognized loss function: ",s);
+  case Cast::pairwise:    return AnyModule(nn::PairwiseDistance(pairwise(x,i,c))); break;
+  case Cast::similar:     return AnyModule(nn::CosineSimilarity(similar(x,i,c))); break;
+
+  default: AT_ERROR("Unrecognized loss function: ",lmap(c));
  }
 }
 
@@ -622,6 +625,9 @@ static K lossopt(bool a,Cast c,AnyModule& m) {
   case Cast::triplet:     triplet(a, x, m.get<nn::TripletMarginLoss>()->options); break;
   case Cast::poissonloss: poisson(a, x, m.get<nn::PoissonNLLLoss>()->options); break;
   case Cast::ctc:         ctc(a, x, m.get<nn::CTCLoss>()->options); break;
+  case Cast::pairwise:    pairwise(a, x, m.get<torch::nn::PairwiseDistance>()->options); break;
+  case Cast::similar:     similar (a, x, m.get<torch::nn::CosineSimilarity>()->options); break;
+
   default: AT_ERROR("Unrecognized loss module"); break;
  }
  return x;
@@ -689,9 +695,10 @@ KAPI loss(K x) {
   S s; bool a=env().alloptions; Kmodule *l;
   if(xsyms(x,s) || xsym(x,0,s)) {
    Cast c=lmap(s);
-   return kloss(c, lossinit(s,c,x,1));
+   return kloss(c, lossinit(c,x,1));
   } else if(xdict(x)) {    //define loss from state dictionary
-   AT_ERROR("nyi"); //return lossinit(statesym(State::module,x),statedict(State::options,x),-1);
+   Cast c=lmap(statesym(State::module,x));
+   return kloss(c, lossinit(c,statedict(State::options,x),-1));
   } else if(((l=xloss(x))) || (xbool(x,1,a) && x->n==2 && ((l=xloss(x,0))))) {
    return lossdict(a,false,l->c,l->m); //given allocated loss ptr or ptr w'boolean, return options
   } else if((l=xloss(x,0)) && x->n>1) {

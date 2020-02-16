@@ -1555,6 +1555,87 @@ KAPI Prelu(K x) {
 }
 
 // ----------------------------------------------------------------------------------------------------
+// distance funtions: could be considered layers or cost functions, so not declared static here
+// similar - cosine similarity distance, parse/retrieve optional dimension and epsilon
+// pairwise - pairwise distance, parse/retrieve optional power, eps, deep dimension flag
+// ----------------------------------------------------------------------------------------------------
+torch::nn::CosineSimilarityOptions similar(K x,J i,Cast c) {
+ Pairs p; J n=xargc(x,i,p); torch::nn::CosineSimilarityOptions o;
+ for(J j=0;j<n;++j)
+  switch(j) {
+   case 0: o.dim(int64(x,i+j,c,Setting::dim)); break;
+   case 1: o.eps(mdouble(x,i+j,c,Setting::eps)); break;
+   default: AT_ERROR(msym(c),": unrecognized positional arg(s), up to 2 args(dim,eps) expected, ",n," supplied");
+  }
+ while(xpair(p))
+  switch(mset(p.k)) {
+   case Setting::dim: o.dim(int64(p,c)); break;
+   case Setting::eps: o.eps(mdouble(p,c)); break;
+   default: AT_ERROR("Unrecognized option: ",p.k," for cosine similarity distance");
+  }
+ return o;
+}
+
+void similar(bool a,K x,const torch::nn::CosineSimilarityOptions& o) {
+ torch::nn::CosineSimilarityOptions d; 
+ if(a || (o.dim() != o.dim())) OPTION(x, dim, kj(o.dim()));
+ if(a || (o.eps() != d.eps())) OPTION(x, eps, kf(o.eps()));
+}
+
+torch::nn::PairwiseDistanceOptions pairwise(K x,J i,Cast c) {
+ Pairs p; J n=xargc(x,i,p); torch::nn::PairwiseDistanceOptions o;
+ for(J j=0;j<n;++j)
+  switch(j) {
+   case 0: o.p(mdouble(x,i+j,c,Setting::p)); break;
+   case 1: o.eps(mdouble(x,i+j,c,Setting::eps)); break;
+   case 2: o.keepdim(mbool(x,i+j,c,Setting::keepdim)); break;
+   default: AT_ERROR(msym(c),": unrecognized positional arg(s), up to 3 args(p,eps,keepdim) expected, ",n," supplied");
+  }
+ while(xpair(p))
+  switch(mset(p.k)) {
+   case Setting::p: o.p(mdouble(p,c)); break;
+   case Setting::eps: o.eps(mdouble(p,c)); break;
+   case Setting::keepdim: o.keepdim(mbool(p,c)); break;
+   default: AT_ERROR("Unrecognized option: ",p.k," for pairwise distance");
+  }
+ return o;
+}
+
+void pairwise(bool a,K x,const torch::nn::PairwiseDistanceOptions& o) {
+ torch::nn::PairwiseDistanceOptions d; 
+ if(a || (o.p()       != d.p()))       OPTION(x, p,       kf(o.p()));
+ if(a || (o.eps()     != d.eps()))     OPTION(x, eps,     kf(o.eps()));
+ if(a || (o.keepdim() != d.keepdim())) OPTION(x, keepdim, kb(o.keepdim()));
+}
+
+// ------------------------------------------------------------------------
+// functional form of the distance calculations
+// ------------------------------------------------------------------------
+static K distance(K x,Cast c) {
+ KTRY
+  TORCH_CHECK(!x->t, msym(c)," not implemented for ",kname(x->t));
+  Tensor r, *a=xten(x,0), *b=xten(x,1);
+  switch(c) {
+   case Cast::pairwise: r=torch::nn::functional::pairwise_distance(a ? *a : kput(x,0), b ? *b : kput(x,1), pairwise(x,2,c)); break;
+   case Cast::similar:  r=torch::nn::functional::cosine_similarity(a ? *a : kput(x,0), b ? *b : kput(x,1), similar(x,2,c)); break;
+   default: AT_ERROR("Unrecognized distance function");
+  }
+  return kresult(a||b,r);
+ KCATCH("distance");
+}
+
+KAPI Pairwise(K x) {return distance(x,Cast::pairwise);}
+KAPI Similar(K x)  {return distance(x,Cast::similar);}
+
+KAPI pdist(K x) {
+ KTRY
+  TORCH_CHECK(!x->t, "pdist not implemented for ",kname(x->t));
+  F p=2; bool b=x->n==2 && xnum(x,1,p); Tensor *t = b ? xten(x,0) : xten(x);
+  return kresult(t, torch::pdist(t ? *t : (b ? kput(x,0) : kput(x)), p));
+ KCATCH("pdist");
+}
+
+// ----------------------------------------------------------------------------------------------------
 // flatten - process arg(s) from k and return options
 //         - return options used given a flatten module used
 //         - call flatten as function given input/tensor and optional start & end dimensions
@@ -1755,6 +1836,7 @@ void mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) {
   case Cast::gru:          PUSH(q,n,(rnn<torch::nn::GRU, torch::nn::GRUOptions> (c,x,i))); break;
   case Cast::lstm:         PUSH(q,n,(rnn<torch::nn::LSTM,torch::nn::LSTMOptions>(c,x,i))); break;
 
+  case Cast::identity:     noarg(c,x,i); PUSH(q,n,torch::nn::Identity()); break;
   case Cast::logsigmoid:   noarg(c,x,i); PUSH(q,n,torch::nn::LogSigmoid()); break;
   case Cast::sigmoid:      noarg(c,x,i); PUSH(q,n,torch::nn::Sigmoid()); break;
   case Cast::softsign:     noarg(c,x,i); PUSH(q,n,torch::nn::Softsign()); break;
@@ -1787,6 +1869,9 @@ void mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) {
   case Cast::hardtanh:     PUSH(q,n,torch::nn::Hardtanh(hardtanh(x,i,c))); break;
   case Cast::softplus:     PUSH(q,n,torch::nn::Softplus(softplus(x,i,c))); break;
   case Cast::threshold:    PUSH(q,n,torch::nn::Threshold(threshold(x,i,c))); break;
+
+  case Cast::pairwise:     PUSH(q,n,torch::nn::PairwiseDistance(pairwise(x,i,c))); break;
+  case Cast::similar:      PUSH(q,n,torch::nn::CosineSimilarity(similar(x,i,c))); break;
   default: AT_ERROR("Unrecognized module: ",s); break;
  }
  if(p || f) mparms(s,q,p,f);  // set parms/buffers if k dictionaries supplied
@@ -1885,6 +1970,7 @@ void mopt(Module &g,bool a,K &v,J i) { //g:generic module, a:true if all options
  } else if(auto* m=g.as<torch::nn::GRU>())   { c=Cast::gru;  rnn<torch::nn::GRUImpl,  torch::nn::GRUOptions> (a,x,m);
  } else if(auto* m=g.as<torch::nn::LSTM>())  { c=Cast::lstm; rnn<torch::nn::LSTMImpl, torch::nn::LSTMOptions>(a,x,m);
 
+ } else if(g.as<torch::nn::Identity>())      { c=Cast::identity;
  } else if(g.as<torch::nn::LogSigmoid>())    { c=Cast::logsigmoid;
  } else if(g.as<torch::nn::Sigmoid>())       { c=Cast::sigmoid;
  } else if(g.as<torch::nn::Softsign>())      { c=Cast::softsign;
@@ -1919,6 +2005,8 @@ void mopt(Module &g,bool a,K &v,J i) { //g:generic module, a:true if all options
  } else if(auto* m=g.as<torch::nn::Softplus>())   { c=Cast::softplus;   softplus(a,x,m->options);
  } else if(auto* m=g.as<torch::nn::Threshold>())  { c=Cast::threshold;  threshold(a,x,m->options);
 
+ } else if(auto* m=g.as<torch::nn::PairwiseDistance>())  { c=Cast::pairwise; pairwise(a,x,m->options);
+ } else if(auto* m=g.as<torch::nn::CosineSimilarity>())  { c=Cast::similar;  similar(a,x,m->options);
  } else { AT_ERROR("Unrecognized module: ",g.name());
  }
  S s=msym(c);J j=v->n==3 ? 0 : 1;
@@ -2120,13 +2208,15 @@ void nnfn(K x) {
  fn(x, "tanhshrink", KFN(tanhshrink),  1);
  fn(x, "threshold",  KFN(Threshold),   1);
  fn(x, "unfold",     KFN(Unfold),      1);
+ fn(x, "pairwise",   KFN(Pairwise),    1);
+ fn(x, "pdist",      KFN(pdist),       1);
+ fn(x, "similar",    KFN(Similar),     1);
 }
 
 /*
-fractional pool -- use pytorch version after fix for output ratio, also try w;indices registered as buffer?
 normalize -- functional form & module?
+pairwise distance & cosine similarity: in both module & functional form but forward method needs 2 input tensors
+fractional pool -- use pytorch version after fix for output ratio, also try w;indices registered as buffer?
 embeddingbag -- enable lastoffset option, forward w'defaults should work with sequential
 multi-head attention -- not in 1.4, wait for patch or 1.5
-identity layer, C++ identity doesn't accept multiple args, not useful?
-pairwise & cosine similarity distance 
 */

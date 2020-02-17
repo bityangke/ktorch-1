@@ -331,6 +331,45 @@ static void layernorm(bool a,K x,const torch::nn::LayerNormOptions& o) {
 }
 
 // --------------------------------------------------------------------------------------
+// normalize - pytorch has functional form only
+// --------------------------------------------------------------------------------------
+static torch::nn::functional::NormalizeFuncOptions normalize(K x,J i,Cast c,Tensor& r) {
+ Pairs p; J n=xargc(x,i,p); torch::nn::functional::NormalizeFuncOptions o;
+ if(n>0 && xten(x,i+n-1,r)) n--;
+ for(J j=0;j<n;++j)
+  switch(j) {
+   case 0: o.p(mdouble(x,i+j,c,Setting::p)); break;
+   case 1: o.dim(int64(x,i+j,c,Setting::dim)); break;
+   case 2: o.eps(mdouble(x,i+j,c,Setting::eps)); break;
+   default: AT_ERROR(msym(c),": unrecognized positional arg(s), up to 4 args(p,dim,eps,output tensor) expected, ",n," supplied");
+  }
+ while(xpair(p))
+  switch(mset(p.k)) {
+   case Setting::p: o.p(mdouble(p,c)); break;
+   case Setting::dim: o.dim(int64(p,c)); break;
+   case Setting::eps: o.eps(mdouble(p,c)); break;
+   case Setting::out: if(!pempty(p)) pten(p,r);
+   default: AT_ERROR("Unrecognized option: ",p.k," for normalize");
+  }
+ if(r.defined()) 
+  o.out(r);
+ return o;
+}
+
+KAPI Normalize(K x) {
+ KTRY
+  namespace f=torch::nn::functional;
+  Tensor r,*t=nullptr;
+  if(x->t || (t=xten(x))) {
+   return kresult(t, f::normalize(t ? *t : kput(x), f::NormalizeFuncOptions()));
+  } else {
+   t=xten(x,0);
+   return kresult(t||r.defined(), f::normalize(t ? *t : kput(x,0), normalize(x,1,Cast::normalize,r)));
+  }
+ KCATCH("normalize");
+}
+
+// --------------------------------------------------------------------------------------
 // convpad - translate symbol to variant used for padding mode
 // conv - create 1-3d convolution, set dictionary given module
 //        with version 1.4, the c++ ConvImpl class was split into regular & transposed
@@ -2194,6 +2233,7 @@ void nnfn(K x) {
  fn(x, "maxpool1d",  KFN(maxpool1d),   1);
  fn(x, "maxpool2d",  KFN(maxpool2d),   1);
  fn(x, "maxpool3d",  KFN(maxpool3d),   1);
+ fn(x, "normalize",  KFN(Normalize),   1);
  fn(x, "prelu",      KFN(Prelu),       1);
  fn(x, "gelu",       KFN(gelu),        1);
  fn(x, "relu",       KFN(relu),        1);
@@ -2214,7 +2254,7 @@ void nnfn(K x) {
 }
 
 /*
-normalize -- functional form & module?
+normalize -- functional form implemented, add module?
 pairwise distance & cosine similarity: in both module & functional form but forward method needs 2 input tensors
 fractional pool -- use pytorch version after fix for output ratio, also try w;indices registered as buffer?
 embeddingbag -- enable lastoffset option, forward w'defaults should work with sequential

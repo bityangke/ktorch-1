@@ -118,7 +118,7 @@ enum class Cast:char {
  gru,             hardshrink,      hardtanh,        identity,    instancenorm1d,
  instancenorm2d,  instancenorm3d,  layernorm,       leakyrelu,   linear,
  localnorm,       logsigmoid,      logsoftmax,      lppool1d,    lppool2d,
- lstm,            maxpool1d,       maxpool2d,       maxpool3d,   out,
+ lstm,            maxpool1d,       maxpool2d,       maxpool3d,   normalize,
  pad,             pad1d,           pad2d,           pad3d,       prelu,
  reflect1d,       reflect2d,       relu,            relu6,       replicate1d,
  replicate2d,     replicate3d,     reshape,         rnn,         rrelu,
@@ -575,7 +575,7 @@ typedef struct {
   std::make_tuple(cs("tanh"),torch::nn::RNNActivation::Tanh)
  }};
 
- std::array<std::tuple<S,Cast>,92> module = {{  // module sym -> enum
+ std::array<std::tuple<S,Cast>,93> module = {{  // module sym -> enum
   std::make_tuple(cs("adaptavg1d"),      Cast::adaptavg1d),
   std::make_tuple(cs("adaptavg2d"),      Cast::adaptavg2d),
   std::make_tuple(cs("adaptavg3d"),      Cast::adaptavg3d),
@@ -635,6 +635,7 @@ typedef struct {
   std::make_tuple(cs("maxpool1d"),       Cast::maxpool1d),
   std::make_tuple(cs("maxpool2d"),       Cast::maxpool2d),
   std::make_tuple(cs("maxpool3d"),       Cast::maxpool3d),
+  std::make_tuple(cs("normalize"),       Cast::normalize),
   std::make_tuple(cs("pad"),             Cast::pad),
   std::make_tuple(cs("pad1d"),           Cast::pad1d),
   std::make_tuple(cs("pad2d"),           Cast::pad2d),

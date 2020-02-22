@@ -1,5 +1,23 @@
 #include "ktorch.h"
 #include "knn.h"
+#include "private.h"
+
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-function"
+#elif defined __GNUC__
+# pragma GCC diagnostic push
+# pragma GCC diagnostic ignored "-Wunused-function"
+#endif
+
+ACCESS_PRIVATE_FIELD(torch::nn::SequentialImpl, std::vector<AnyModule>, modules_)
+ACCESS_PRIVATE_FIELD(torch::optim::SGD, int64_t, iteration_)
+
+#ifdef __clang__
+# pragma clang diagnostic pop
+#elif defined __GNUC__
+# pragma GCC diagnostic pop
+#endif
 
 #define OPTION(x,k,v) dictadd(x, lset(Setting::k), v)
 
@@ -11,6 +29,75 @@ KAPI dtest(K x) {
  return(K)0;
 }
 */
+
+KAPI sgdtest(K x) {
+ auto a=torch::optim::SGDOptions(.01);
+ TensorVector v;
+ auto o=torch::optim::SGD(v,a);
+ std::cerr << o.iteration() << "\n";
+ std::cerr << access_private::iteration_(o) << "\n";
+ access_private::iteration_(o)=2;
+ std::cerr << o.iteration() << "\n";
+ std::cerr << access_private::iteration_(o) << "\n";
+ return (K)0;
+}
+
+class TORCH_API SequentialJoin : public torch::nn::Cloneable<SequentialJoin> {
+ public:
+ SequentialJoin(const Sequential& x,const Sequential& y,const AnyModule& z) : q1(std::move(x)),q2(std::move(y)),a(std::move(z)) {reset();}
+ void reset() override {}
+
+ void pretty_print(std::ostream& s) const override {s << "SequentialJoin";}
+
+ Tensor forward(const Tensor& x,const Tensor& y) {
+  if(q1->size() && q2->size())
+   return a.forward(q1->forward(x),q2->forward(y));
+  else if(q1->size())
+   return a.forward(q1->forward(x),y);
+  else if(q2->size())
+   return a.forward(x,q2->forward(y));
+  else
+   return a.forward(x,y);
+ }
+ Sequential q1;
+ Sequential q2;
+ AnyModule  a;
+};
+
+void margs(Sequential& q,K x,J i);
+
+KAPI Join(K x) {
+ KTRY
+  Sequential qx,qy,qc;
+  TORCH_CHECK(!x->t, "not implemented for ",kname(x));
+  TORCH_CHECK(x->n==3, "3 args expected, (sequential x, sequential y, catenating layer)");
+  if(!xseq(x,0,qx)) margs(qx,kK(x)[0],0);
+  if(!xseq(x,1,qy)) margs(qy,kK(x)[1],0);
+  margs(qc,x,2);
+  auto& m=access_private::modules_(*qc);
+  auto a=SequentialJoin(qx,qy,m[0]);
+  auto mx=qx->modules();
+  std::cerr << "qx modules:\n";
+  for(auto &i:mx) std::cerr << *i << "\n";
+  auto my=qy->modules();
+  std::cerr << "qy modules:\n";
+  for(auto &i:my) std::cerr << *i << "\n";
+  std::cerr << "main x<->y module:\n" << a << "\n";
+  return (K)0;
+ KCATCH("Join");
+}
+
+KAPI stest(K x) {
+ auto a=AnyModule(torch::nn::Linear(2,3));
+ Sequential q;
+ auto& m=access_private::modules_(*q);
+ std::cerr << m.size() << "\n";
+ m.push_back(a);
+ std::cerr << m.size() << "\n";
+ (*q).register_module("test",m[0].ptr());
+ std::cerr << q << "\n";
+ return(K)0;
+}
 
 static K metrics(K x) {return (x->t==KS || x->t==-KS) ? x : nullptr;}
 

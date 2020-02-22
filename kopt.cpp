@@ -371,6 +371,7 @@ static K sgd(bool a,double r,SGD* v) { //return all or non-default options as k 
 
 static K sgd(SGD* v) {  //return internal buffer state as k dictionary
  K x=xD(ktn(KS,0),ktn(0,0));
+ dictadd(x, "iteration", kj(v->iteration()));
  OPTBUFFER(x,v,momentum_buffers);
  return x;
 }
@@ -388,7 +389,7 @@ static TensorVector optparms(K x,J i) {
   return *a;
  else if(auto *a=xten(x,i))
   return {*a};
- else if(x->t==-KS || xempty(x,i))
+ else if(x->t==-KS || xempty(x,i) || xdict(x))
   return {};
  else if(xptr(x,i))
   AT_ERROR("Unrecognized pointer, expecting tensor(s) or module(s)");

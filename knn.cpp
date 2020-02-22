@@ -2128,27 +2128,26 @@ static K mchild(bool a,S s1,S s2,const Sequential &q) {
 // mstate - class,module,name,options,parms,buffers for module(s) or selected parm/buffer
 // seqforward - given sequential module and input, run forward calcs, return tensor to k
 // ------------------------------------------------------------------------------------------
-static void margs(bool p,Sequential q,K x) {
- J i=p; S s=nullptr,nm=nullptr;
- if(xsym(x,s) || xsym(x,i,s)) {
-  if(xsym(x,i+1,nm)) i++;
-  mdefine(q,s,nm,i+1,x);
- } else if(x->t == KS) {
-  if(x->n==1 || x->n==2) {
-   s=kS(x)[0];
-   if(x->n==2) nm=kS(x)[1];
-   mdefine(q,s,nm,x->n,x);
+void margs(Sequential& q,K x,J i) {
+ S s=nullptr,nm=nullptr;
+ if(xsym(x,s) || xsym(x,i,s)) {  // x is single sym, or 1st part of arg list is sym
+  if(xsym(x,i+1,nm)) i++;        // increment offset if 2nd elem is sym for name
+  mdefine(q,s,nm,i+1,x);         // add a single module to sequential
+ } else if(x->t == KS) {         // if sym vector, i.e. module type & name
+  if(x->n==1 || x->n==2) {       // only 1 or 2 symbols expected
+   s=kS(x)[0];                   // set module type
+   if(x->n==2) nm=kS(x)[1];      // and name, if supplied
+   mdefine(q,s,nm,x->n,x);       // add a module from sym(s)
   } else {
    AT_ERROR("Unable to process list of ",x->n," symbols");
   }
- } else if(x->t==0 || (p && kK(x)[1]->t==0)) {
-  K y=p ? kK(x)[1] : x;
-  if(y->t)
-   margs(false,q,y);
-  else
-   for(J j=0;j<y->n;++j) margs(false,q,kK(y)[j]);
  } else {
-   AT_ERROR("Unrecognized module arg(s): ",kname(x->t)," supplied");
+  TORCH_CHECK(!x->t, "Unrecognized module arg(s): ",kname(x)," supplied");
+  K y=i ? kK(x)[i] : x;
+  if(y->t)
+   margs(q,y,0);
+  else
+   for(J j=0;j<y->n;++j) margs(q,kK(y)[j],0);
  }
 }
 
@@ -2164,7 +2163,7 @@ KAPI seq(K x) {
   } else if(xstate(x) || (p && x->n==2 && xstate(x,1))) {
    return mdefine(q,p ? kK(x)[1] : x), p ? (K)0 : kseq(q);
   } else {
-   return margs(p,q,x), p ? (K)0 : kseq(q);
+   return margs(q,x,p), p ? (K)0 : kseq(q);
   }
  KCATCH("Sequential module");
 }

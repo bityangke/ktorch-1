@@ -212,7 +212,7 @@ struct TORCH_API Kseq : public Ktag {
 };
 
 struct TORCH_API Kmodule : public Ktag {
- Kmodule(Class x,Cast y,const AnyModule& l) : m(std::move(l)) {a=x; c=y;}
+ Kmodule(Class x,Cast y,const AnyModule& z) : m(std::move(z)) {a=x; c=y;}
  torch::nn::AnyModule m;
 };
 

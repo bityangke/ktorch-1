@@ -249,7 +249,14 @@ class SqueezeImpl : public torch::nn::Cloneable<SqueezeImpl> {
   SqueezeImpl(int64_t d,bool b=false) : SqueezeImpl(SqueezeOptions(d,b)) {}
   SqueezeImpl() : SqueezeImpl(SqueezeOptions()) {}
   explicit SqueezeImpl(const SqueezeOptions& o) : options(o) {reset();}
+
   void reset() override {}
+
+  void pretty_print(std::ostream& s) const override {
+   s << "Squeeze(dim="; options.dim() ? s << options.dim().value() : s << "None";
+   s << ", inplace=" << options.inplace() <<")";
+  }
+
   torch::Tensor forward(const torch::Tensor& t) {
    if(options.dim().has_value()) {
     if(options.inplace())
@@ -271,7 +278,14 @@ class UnsqueezeImpl : public torch::nn::Cloneable<UnsqueezeImpl> {
  public:
   UnsqueezeImpl(int64_t d,bool b=false) : UnsqueezeImpl(SqueezeOptions(d,b)) {}
   explicit UnsqueezeImpl(const SqueezeOptions& o) : options(o) {reset();}
+
   void reset() override {TORCH_CHECK(options.dim().has_value(),"unsqueeze: no dimension given");}
+
+  void pretty_print(std::ostream& s) const override {
+   s << "Unsqueeze(dim="; options.dim() ? s << options.dim().value() : s << "None";
+   s << ", inplace=" << options.inplace() <<")";
+  }
+
   torch::Tensor forward(const torch::Tensor& t) {
    if(options.inplace())
     return t.unsqueeze_(options.dim().value());
@@ -295,6 +309,7 @@ class ExpandImpl : public torch::nn::Cloneable<ExpandImpl> {
  ExpandImpl(std::vector<int64_t> s) : ExpandImpl(SizeOptions(s)) {}
  explicit ExpandImpl(const SizeOptions& o) : options(o) {reset();}
  void reset() override {}
+ void pretty_print(std::ostream& s) const override {s << "Expand(size=" << options.size() << ")";}
  torch::Tensor forward(const torch::Tensor& t) { return t.expand(options.size());}
  SizeOptions options;
 };
@@ -305,10 +320,33 @@ class ReshapeImpl : public torch::nn::Cloneable<ReshapeImpl> {
  ReshapeImpl(std::vector<int64_t> s) : ReshapeImpl(SizeOptions(s)) {}
  explicit ReshapeImpl(const SizeOptions& o) : options(o) {reset();}
  void reset() override {}
+ void pretty_print(std::ostream& s) const override {s << "Reshape(size=" << options.size() << ")";}
  torch::Tensor forward(const torch::Tensor& t) { return t.reshape(options.size());}
  SizeOptions options;
 };
 TORCH_MODULE(Reshape);
+
+// ----------------------------------------------------------------------------------------------------
+// cat - add convenience module for cat(tensors,dim)
+// ----------------------------------------------------------------------------------------------------
+struct TORCH_API CatOptions {
+ CatOptions(int64_t d=0) : dim_(d) {}
+ TORCH_ARG(int64_t, dim) = 0;
+};
+
+class CatImpl : public torch::nn::Cloneable<CatImpl> {
+ public:
+ CatImpl(int64_t d) {CatImpl(CatOptions(d));}
+ explicit CatImpl(const CatOptions& o={}) : options(std::move(o)) {}
+ void reset() override {}
+ void pretty_print(std::ostream& s) const override {s << "Cat(dim=" << options.dim() << ")";}
+ torch::Tensor forward(const torch::Tensor& x,const torch::Tensor& y) {
+  return torch::cat({x,y},options.dim());
+ }
+ CatOptions options;
+};
+TORCH_MODULE(Cat);
+
 
 // ----------------------------------------------------------------------------------------------------
 // Sequence - rework Sequential to accept nested sequentionals, also make push_back of AnyModule public

@@ -11,7 +11,7 @@
 #endif
 
 ACCESS_PRIVATE_FIELD(torch::nn::SequentialImpl, std::vector<AnyModule>, modules_)
-ACCESS_PRIVATE_FIELD(torch::optim::SGD, int64_t, iteration_)
+// PATCH ACCESS_PRIVATE_FIELD(torch::optim::SGD, int64_t, iteration_)
 
 #ifdef __clang__
 # pragma clang diagnostic pop
@@ -30,6 +30,7 @@ KAPI dtest(K x) {
 }
 */
 
+/* PATCH
 KAPI sgdtest(K x) {
  auto a=torch::optim::SGDOptions(.01);
  TensorVector v;
@@ -41,10 +42,16 @@ KAPI sgdtest(K x) {
  std::cerr << access_private::iteration_(o) << "\n";
  return (K)0;
 }
+*/
 
-class TORCH_API SequentialJoin : public torch::nn::Cloneable<SequentialJoin> {
+class TORCH_API SequentialJoinImpl : public torch::nn::Cloneable<SequentialJoinImpl> {
  public:
- SequentialJoin(const Sequential& x,const Sequential& y,const AnyModule& z) : q1(std::move(x)),q2(std::move(y)),a(std::move(z)) {reset();}
+ SequentialJoinImpl(const Sequential& x,const Sequential& y,const AnyModule& z) : q1(std::move(x)),q2(std::move(y)),a(std::move(z)) {
+  register_module("q1", q1);
+  register_module("q2", q2);
+  register_module("a",  a.ptr());
+  reset();
+ }
  void reset() override {}
 
  void pretty_print(std::ostream& s) const override {s << "SequentialJoin";}
@@ -63,6 +70,32 @@ class TORCH_API SequentialJoin : public torch::nn::Cloneable<SequentialJoin> {
  Sequential q2;
  AnyModule  a;
 };
+TORCH_MODULE(SequentialJoin);
+
+void testprint(int64_t d,const std::string s,const Module& m) {
+  std::cerr << "  depth: " << d << ",";
+  std::cerr << "   name: " << (s.size() ? s :  m.name());
+  if(m.children().size()) {
+   std::cerr << " " << m.name() << " (\n";
+   for(auto& a:m.named_children())
+    testprint(d+1,a.key(),*a.value());
+   std::cerr << ")\n";
+  } else {
+  std::cerr << "\t" << m << "\n";
+  }
+}
+
+KAPI testjoin(K x) {
+ KTRY
+  Sequential q1=Sequential(torch::nn::Embedding(10,50), torch::nn::Linear(50,784), Reshape(std::vector<int64_t>{-1,1,28,28}));
+  Sequential q2;
+  Cat c(1);
+  SequentialJoin m=SequentialJoin(q1,q2,AnyModule(c));
+  //std::cerr << m << "\n";
+  testprint(0,"",*m);
+  return (K)0;
+ KCATCH("testjoin");
+}
 
 void margs(Sequential& q,K x,J i);
 

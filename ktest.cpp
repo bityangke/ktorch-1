@@ -44,33 +44,14 @@ KAPI sgdtest(K x) {
 }
 */
 
-class TORCH_API SequentialJoinImpl : public torch::nn::Cloneable<SequentialJoinImpl> {
- public:
- SequentialJoinImpl(const Sequential& x,const Sequential& y,const AnyModule& z) : q1(std::move(x)),q2(std::move(y)),a(std::move(z)) {
-  register_module("q1", q1);
-  register_module("q2", q2);
-  register_module("a",  a.ptr());
-  reset();
- }
- void reset() override {}
-
- void pretty_print(std::ostream& s) const override {s << "SequentialJoin";}
-
- Tensor forward(const Tensor& x,const Tensor& y) {
-  if(q1->size() && q2->size())
-   return a.forward(q1->forward(x),q2->forward(y));
-  else if(q1->size())
-   return a.forward(q1->forward(x),y);
-  else if(q2->size())
-   return a.forward(x,q2->forward(y));
-  else
-   return a.forward(x,y);
- }
- Sequential q1;
- Sequential q2;
- AnyModule  a;
-};
-TORCH_MODULE(SequentialJoin);
+auto childcount(const Module& m) {return m.children().size();}
+auto childcount(Module* m) {std::cerr << "module ptr:\n"; return m->children().size();}
+KAPI testcontainer(K x) {
+ torch::nn::Linear m(1,2);
+ std::cerr << childcount(*m) << "\n";
+ std::cerr << childcount(m.get()) << "\n";
+ return (K)0;
+}
 
 void testprint(int64_t d,const std::string s,const Module& m) {
   std::cerr << "  depth: " << d << ",";
@@ -90,8 +71,8 @@ KAPI testjoin(K x) {
   Sequential q1=Sequential(torch::nn::Embedding(10,50), torch::nn::Linear(50,784), Reshape(std::vector<int64_t>{-1,1,28,28}));
   Sequential q2;
   Cat c(1);
-  SequentialJoin m=SequentialJoin(q1,q2,AnyModule(c));
-  //std::cerr << m << "\n";
+  Join m=Join(q1,q2,AnyModule(c));
+  std::cerr << m << "\n";
   testprint(0,"",*m);
   return (K)0;
  KCATCH("testjoin");
@@ -99,7 +80,7 @@ KAPI testjoin(K x) {
 
 void margs(Sequential& q,K x,J i);
 
-KAPI Join(K x) {
+KAPI kjoin(K x) {
  KTRY
   Sequential qx,qy,qc;
   TORCH_CHECK(!x->t, "not implemented for ",kname(x));
@@ -108,7 +89,7 @@ KAPI Join(K x) {
   if(!xseq(x,1,qy)) margs(qy,kK(x)[1],0);
   margs(qc,x,2);
   auto& m=access_private::modules_(*qc);
-  auto a=SequentialJoin(qx,qy,m[0]);
+  auto a=Join(qx,qy,m[0]);
   auto mx=qx->modules();
   std::cerr << "qx modules:\n";
   for(auto &i:mx) std::cerr << *i << "\n";
@@ -117,7 +98,7 @@ KAPI Join(K x) {
   for(auto &i:my) std::cerr << *i << "\n";
   std::cerr << "main x<->y module:\n" << a << "\n";
   return (K)0;
- KCATCH("Join");
+ KCATCH("join");
 }
 
 KAPI stest(K x) {

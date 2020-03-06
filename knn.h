@@ -349,6 +349,37 @@ TORCH_MODULE(Cat);
 
 
 // ----------------------------------------------------------------------------------------------------
+// Join - define sequential modules for inputs x & y, and a layer for joining the output of each module
+// ----------------------------------------------------------------------------------------------------
+class TORCH_API JoinImpl : public torch::nn::Cloneable<JoinImpl> {
+ public:
+ JoinImpl(const Sequential& x,const Sequential& y,const AnyModule& z) : qx(std::move(x)),qy(std::move(y)),join(std::move(z)) {
+  register_module("qx", qx);
+  register_module("qy", qy);
+  register_module("join", join.ptr());
+  reset();
+ }
+ void reset() override {}
+
+ void pretty_print(std::ostream& s) const override {s << "Join";}
+
+ Tensor forward(const Tensor& x,const Tensor& y) {
+  if(qx->size() && qy->size())
+   return join.forward(qx->forward(x),qy->forward(y));
+  else if(qx->size())
+   return join.forward(qx->forward(x),y);
+  else if(qy->size())
+   return join.forward(x,qy->forward(y));
+  else
+   return join.forward(x,y);
+ }
+ Sequential qx;
+ Sequential qy;
+ AnyModule  join;
+};
+TORCH_MODULE(Join);
+
+// ----------------------------------------------------------------------------------------------------
 // Sequence - rework Sequential to accept nested sequentionals, also make push_back of AnyModule public
 // ----------------------------------------------------------------------------------------------------
 struct TORCH_API SequenceImpl : public torch::nn::SequentialImpl {

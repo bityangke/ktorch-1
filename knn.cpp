@@ -11,6 +11,8 @@
 // kseq - allocate an object to store a pointer to a sequential module
 // seqto - given sequential module & options, change device/data type
 // ----------------------------------------------------------------------------
+K kmodule(Cast c,const AnyModule& m) {return kptr(new Kmodule(Class::module,c,m));}
+
 K kseq(const Sequential& q) {return kptr(new Kseq(q));}
 
 K seqto(Kseq* q,const TensorOptions& o,bool a) {
@@ -1935,10 +1937,12 @@ void mdefine(Sequential &q,K x) { // define modules from k table of options or f
 // mget - extract module options and, optionally, parameters & buffers to k array
 // mtable - extract child modules and return as k table, one row per module
 // --------------------------------------------------------------------------------------------
-void mopt(Module &g,bool a,K &v,J i) { //g:generic module, a:true if all options, v:k values, i:table row
- auto c=Cast::undefined;
- K x=xD(ktn(KS,0),ktn(0,0));
- if       (auto* m=g.as<torch::nn::BatchNorm>())         { c=Cast::batchnorm;      batchnorm(a,x,m->options);
+static std::tuple<Cast,K> mopt(bool a,const Module &g) { //a:all options returned if true, else only non-default
+ Cast c=Cast::undefined; K x=xD(ktn(KS,0),ktn(0,0));
+ if       (auto* m=g.as<torch::nn::Sequential>())        { c=Cast::sequential;
+ } else if(auto* m=g.as<Join>())                         { c=Cast::join;
+
+ } else if(auto* m=g.as<torch::nn::BatchNorm>())         { c=Cast::batchnorm;      batchnorm(a,x,m->options);
  } else if(auto* m=g.as<torch::nn::BatchNorm1d>())       { c=Cast::batchnorm1d;    batchnorm(a,x,m->options);
  } else if(auto* m=g.as<torch::nn::BatchNorm2d>())       { c=Cast::batchnorm2d;    batchnorm(a,x,m->options);
  } else if(auto* m=g.as<torch::nn::BatchNorm3d>())       { c=Cast::batchnorm3d;    batchnorm(a,x,m->options);
@@ -1950,10 +1954,10 @@ void mopt(Module &g,bool a,K &v,J i) { //g:generic module, a:true if all options
  } else if(auto* m=g.as<torch::nn::LocalResponseNorm>()) { c=Cast::localnorm;      localnorm(a,x,c,m->options);
  } else if(auto* m=g.as<torch::nn::CrossMapLRN2d>())     { c=Cast::crossmap2d;     localnorm(a,x,c,m->options);
 
- } else if(auto* m=g.as<torch::nn::Embedding>())      { c=Cast::embed;    embed(a,x,c,m->options,m->weight);
- } else if(auto* m=g.as<torch::nn::EmbeddingBag>())   { c=Cast::embedbag; embed(a,x,c,m->options,m->weight);
- } else if(auto* m=g.as<torch::nn::Linear>())         { c=Cast::linear;   linear(a,x,m);
- } else if(auto* m=g.as<torch::nn::Bilinear>())       { c=Cast::bilinear; bilinear(a,x,m);
+ } else if(auto* m=g.as<torch::nn::Embedding>())         { c=Cast::embed;    embed(a,x,c,m->options,m->weight);
+ } else if(auto* m=g.as<torch::nn::EmbeddingBag>())      { c=Cast::embedbag; embed(a,x,c,m->options,m->weight);
+ } else if(auto* m=g.as<torch::nn::Linear>())            { c=Cast::linear;   linear(a,x,m);
+ } else if(auto* m=g.as<torch::nn::Bilinear>())          { c=Cast::bilinear; bilinear(a,x,m);
 
  } else if(auto* m=g.as<torch::nn::Dropout>())             { c=Cast::drop;   drop(a,x,m->options);
  } else if(auto* m=g.as<torch::nn::Dropout2d>())           { c=Cast::drop2d; drop(a,x,m->options);
@@ -2048,23 +2052,25 @@ void mopt(Module &g,bool a,K &v,J i) { //g:generic module, a:true if all options
  } else if(auto* m=g.as<torch::nn::CosineSimilarity>())  { c=Cast::similar;  similar(a,x,m->options);
  } else { AT_ERROR("Unrecognized module: ",g.name());
  }
- S s=msym(c);J j=v->n==3 ? 0 : 1;
- if(i<0)    kK(v)[j]=ks(s),    kK(v)[j+2]=x;     //dictionary, assign module & options
- else    kS(kK(v)[j])[i]=s, kK(kK(v)[j+2])[i]=x; //table, assign module,options in i'th row
+ return std::make_tuple(c,x);
 }
 
-void mget(const char* s,Module &m,bool a,K &v,J i) {
+void mget(const char* s,const Module &m,bool a,K &v,J i) {
  //s:name in sequence, m:type-erased module, a:true for all options, v:array for values, i:i'th row of table result
- bool b=v->n==6;
- mopt(m,a,v,i);
- if(i<0) {                               //fill in dictionary values[1 3 4], name,parms,buffers
-  kK(v)[1+b]=ks(cs(s));
+ bool b=v->n==6; Cast c; K x;
+ std::tie(c,x)=mopt(a,m);
+ if(i<0) {
+  kK(v)[b]=ks(msym(c));  // module 
+  kK(v)[b+1]=ks(cs(s));  // name
+  kK(v)[b+2]=x;          // dictionary of options
   if(b) {
    kK(v)[4]=kdict(m.named_parameters());
    kK(v)[5]=kdict(m.named_buffers());
   }
- } else {
-  kS(kK(v)[1+b])[i]=cs(s);                //fill in i'th table row
+ } else {                         // fill in i-th table row
+  kS(kK(v)[b])[i]=cs(msym(c));    // module
+  kS(kK(v)[b+1])[i]=cs(s);        // name
+  kK(kK(v)[b+2])[i]=x;            // dictionary of options
   if(b) {
    kK(kK(v)[4])[i]=kdict(m.named_parameters());
    kK(kK(v)[5])[i]=kdict(m.named_buffers());

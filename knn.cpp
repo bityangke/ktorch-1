@@ -1743,7 +1743,7 @@ static void squeeze(bool a,K x,const SqueezeOptions& o) {
 }
 
 // ----------------------------------------------------------------------------------------------------
-// getsize - get size(s) for expand, reshape, ..
+// getsize - get size(s) for expand & reshape
 // expand
 // reshape
 // ----------------------------------------------------------------------------------------------------
@@ -1898,6 +1898,7 @@ void mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) {
   case Cast::unsqueeze:    PUSH(q,n,Unsqueeze(squeeze(x,i,c))); break;
   case Cast::expand:       PUSH(q,n,Expand(getsize(x,i,c))); break;
   case Cast::reshape:      PUSH(q,n,Reshape(getsize(x,i,c))); break;
+//case Cast::cat:        
 
   case Cast::elu:          PUSH(q,n,torch::nn::ELU (alpha<torch::nn::ELUOptions> (x,i,c))); break;
   case Cast::celu:         PUSH(q,n,torch::nn::CELU(alpha<torch::nn::CELUOptions>(x,i,c))); break;
@@ -1937,7 +1938,7 @@ void mdefine(Sequential &q,K x) { // define modules from k table of options or f
 // mget - extract module options and, optionally, parameters & buffers to k array
 // mtable - extract child modules and return as k table, one row per module
 // --------------------------------------------------------------------------------------------
-static std::tuple<Cast,K> mopt(bool a,const Module &g) { //a:all options returned if true, else only non-default
+std::tuple<Cast,K> mopt(bool a,const Module& g) { //a:all options returned if true, else only non-default
  Cast c=Cast::undefined; K x=xD(ktn(KS,0),ktn(0,0));
  if       (auto* m=g.as<torch::nn::Sequential>())        { c=Cast::sequential;
  } else if(auto* m=g.as<Join>())                         { c=Cast::join;
@@ -2030,10 +2031,12 @@ static std::tuple<Cast,K> mopt(bool a,const Module &g) { //a:all options returne
  } else if(auto* m=g.as<torch::nn::Softmin>())    { c=Cast::softmin;    OPTION(x, dim, kj(m->options.dim()));
  } else if(auto* m=g.as<torch::nn::LogSoftmax>()) { c=Cast::logsoftmax; OPTION(x, dim, kj(m->options.dim()));
  } else if(auto* m=g.as<torch::nn::Flatten>())    { c=Cast::flatten;    flatten(a,x,m);
+
  } else if(auto* m=g.as<Squeeze>())    { c=Cast::squeeze;    squeeze(a,x,m->options);
  } else if(auto* m=g.as<Unsqueeze>())  { c=Cast::unsqueeze;  squeeze(a,x,m->options);
  } else if(auto* m=g.as<Expand>())     { c=Cast::expand;     getsize(a,x,m->options);
  } else if(auto* m=g.as<Reshape>())    { c=Cast::reshape;    getsize(a,x,m->options);
+ } else if(auto* m=g.as<Cat>())        { c=Cast::cat;        dim(a,c,x,m->options.dim());
 
  } else if(auto* m=g.as<torch::nn::ELU>())        { c=Cast::elu;  alpha(a,c,x,m->options);
  } else if(auto* m=g.as<torch::nn::CELU>())       { c=Cast::celu; alpha(a,c,x,m->options);

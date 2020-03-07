@@ -106,28 +106,28 @@ enum class Class:char {
 
 enum class Cast:char {
  undefined=0, 
- tensor,          model,         //basic structures
+ tensor,          model,        // basic structures
 
  sequential,      join,         // container modules
 
- adaptavg1d,      adaptavg2d,      adaptavg3d,      adaptmax1d,  adaptmax2d,  // modules
- adaptmax3d,      adrop,           attention,       avgpool1d,   avgpool2d,
- avgpool3d,       batchnorm,       batchnorm1d,     batchnorm2d, batchnorm3d,
- bilinear,        celu,            conv1d,          conv2d,      conv3d,
- convtranspose1d, convtranspose2d, convtranspose3d, crossmap2d,  drop,
- drop2d,          drop3d,          elu,             embed,       embedbag,
- expand,          fadrop,          fdrop,           flatten,     fmaxpool2d,
- fmaxpool3d,      fold,            gelu,            glu,         groupnorm,
- gru,             hardshrink,      hardtanh,        identity,    instancenorm1d,
- instancenorm2d,  instancenorm3d,  layernorm,       leakyrelu,
- linear,          localnorm,       logsigmoid,      logsoftmax,  lppool1d,
- lppool2d,        lstm,            maxpool1d,       maxpool2d,   maxpool3d,
- normalize,       pad,             pad1d,           pad2d,       pad3d,
- prelu,           reflect1d,       reflect2d,       relu,        relu6,
- replicate1d,     replicate2d,     replicate3d,     reshape,     rnn,
- rrelu,           selu,            sigmoid,         softmax,     softmax2d,
- softmin,         softplus,        softshrink,      softsign,    squeeze,
- tanh,            tanhshrink,      threshold,       unfold,      unsqueeze,
+ adaptavg1d,     adaptavg2d,      adaptavg3d,      adaptmax1d,      adaptmax2d,  // modules
+ adaptmax3d,     adrop,           attention,       avgpool1d,       avgpool2d,
+ avgpool3d,      batchnorm,       batchnorm1d,     batchnorm2d,     batchnorm3d,
+ bilinear,       cat,             celu,            conv1d,          conv2d,
+ conv3d,         convtranspose1d, convtranspose2d, convtranspose3d, crossmap2d,
+ drop,           drop2d,          drop3d,          elu,             embed,
+ embedbag,       expand,          fadrop,          fdrop,           flatten,
+ fmaxpool2d,     fmaxpool3d,      fold,            gelu,            glu,
+ groupnorm,      gru,             hardshrink,      hardtanh,        identity,
+ instancenorm1d, instancenorm2d,  instancenorm3d,  layernorm,       leakyrelu,
+ linear,         localnorm,       logsigmoid,      logsoftmax,      lppool1d,
+ lppool2d,       lstm,            maxpool1d,       maxpool2d,       maxpool3d,
+ normalize,      pad,             pad1d,           pad2d,           pad3d,
+ prelu,          reflect1d,       reflect2d,       relu,            relu6,
+ replicate1d,    replicate2d,     replicate3d,     reshape,         rnn,
+ rrelu,          selu,            sigmoid,         softmax,         softmax2d,
+ softmin,        softplus,        softshrink,      softsign,        squeeze,
+ tanh,           tanhshrink,      threshold,       unfold,          unsqueeze,
  zeropad2d,
 
  pairwise,  similar, // distance functions
@@ -217,7 +217,7 @@ struct TORCH_API Kseq : public Ktag {
 
 struct TORCH_API Kmodule : public Ktag {
  Kmodule(Class x,Cast y,const AnyModule& z) : m(std::move(z)) {a=x; c=y;}
- torch::nn::AnyModule m;
+ AnyModule m;
 };
 
 struct TORCH_API Kopt : public Ktag {
@@ -313,6 +313,9 @@ bool xtenarg(K,J,Tensor&,Tensor&);
 bool xtenarg(K,J,Tensor&,Tensor&,Tensor&);
 bool xtenarg(K,Tensor&,Tensor&);
 bool xtenarg(K,Tensor&,Tensor&,Tensor&);
+
+Kmodule* xmodule(K);
+Kmodule* xmodule(K,J);
 bool xseq(K,Sequential&);
 bool xseq(K,J,Sequential&);
 Sequential* xseq(K);
@@ -534,9 +537,10 @@ typedef struct {
  }};
 */
 
- std::array<std::tuple<S,Class>,6> kclass = {{
+ std::array<std::tuple<S,Class>,7> kclass = {{
   std::make_tuple(cs("tensor"),     Class::tensor),          
   std::make_tuple(cs("vector"),     Class::vector),
+  std::make_tuple(cs("module"),     Class::module),
   std::make_tuple(cs("sequential"), Class::sequential),
   std::make_tuple(cs("loss"),       Class::loss),
   std::make_tuple(cs("optimizer"),  Class::optimizer),
@@ -580,7 +584,7 @@ typedef struct {
   std::make_tuple(cs("tanh"),torch::nn::RNNActivation::Tanh)
  }};
 
- std::array<std::tuple<S,Cast>,94> module = {{               // module sym -> enum
+ std::array<std::tuple<S,Cast>,95> module = {{               // module sym -> enum
   std::make_tuple(cs("adaptavg1d"),      Cast::adaptavg1d),
   std::make_tuple(cs("adaptavg2d"),      Cast::adaptavg2d),
   std::make_tuple(cs("adaptavg3d"),      Cast::adaptavg3d),
@@ -597,6 +601,7 @@ typedef struct {
   std::make_tuple(cs("batchnorm2d"),     Cast::batchnorm2d),
   std::make_tuple(cs("batchnorm3d"),     Cast::batchnorm3d),
   std::make_tuple(cs("bilinear"),        Cast::bilinear),
+  std::make_tuple(cs("cat"),             Cast::cat),
   std::make_tuple(cs("celu"),            Cast::celu),
   std::make_tuple(cs("conv1d"),          Cast::conv1d),
   std::make_tuple(cs("conv2d"),          Cast::conv2d),

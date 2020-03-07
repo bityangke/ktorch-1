@@ -74,10 +74,69 @@ KAPI testjoin(K x) {
   Join m=Join(q1,q2,AnyModule(c));
   std::cerr << m << "\n";
   testprint(0,"",*m);
-  return (K)0;
+  return kmodule(Cast::join,AnyModule(m));
  KCATCH("testjoin");
 }
 
+/////////////////////////////////////////////////////////////////////////
+static S msym(Cast c) {
+ for(auto& m:env().module) if(c==std::get<1>(m)) return std::get<0>(m);
+ AT_ERROR("Unrecognized module: ",(I)c);
+}
+
+std::tuple<Cast,K> mopt(bool,const Module&);
+
+bool container(Cast c) {
+ switch(c) {
+  case Cast::sequential:
+  case Cast::join:
+   return true;
+  default: return false;
+ }
+}
+
+void testchild(bool a,int64_t d,const char* s,bool t,const Module& m,K x) {
+ Cast c; K o,*k=kK(x); std::tie(c,o)=mopt(a,m);
+ if(t) {
+  ja(&k[0], &d);
+  js(&k[1], msym(c));
+  js(&k[2], cs(s));
+  jk(&k[3], o);
+  if(x->n == 6)
+   jk(&k[4], kdict(m.named_parameters())),
+   jk(&k[5], kdict(m.named_buffers()));
+  for(auto& i:m.named_children())
+   testchild(a,d+1,i.key().c_str(),t,*i.value(),x);
+ } else {
+  TORCH_CHECK(!m.children().size(), msym(c), ": unexpected child module(s)");
+  k[0]=kj(d);
+  k[1]=ks(msym(c));
+  k[2]=ks(cs(s));
+  k[3]=o;
+  if(x->n == 6)
+   k[4]=kdict(m.named_parameters()),
+   k[5]=kdict(m.named_buffers());
+ }
+}
+
+K moduleget(bool a,bool b,Cast c,const Module& m) {
+ K v=ktn(0,b ? 6 : 4);  // values for depth,module,name,options w'parms,buffers if b true
+ if(container(c)) {
+  for(J i=0; i<v->n; ++i) kK(v)[i]=ktn(!i ? KJ : (i<3 ? KS : 0), 0);
+  testchild(a,0,"",true,m,v);
+ } else {
+  testchild(a,0,"",false,m,v);
+ }
+ return v;
+}
+
+KAPI testdepth(K x) {
+ KTRY
+  Kmodule *m=xmodule(x);
+  TORCH_CHECK(m, "not a module");
+  return moduleget(true,false,m->c,*(m->m.ptr()));
+ KCATCH("testdepth");
+}
 void margs(Sequential& q,K x,J i);
 
 KAPI kjoin(K x) {

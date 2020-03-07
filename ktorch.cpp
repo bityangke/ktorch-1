@@ -432,11 +432,15 @@ bool xtenarg(K x,Tensor& a,Tensor &b)           {return xtenarg(x,0,a,b);}
 bool xtenarg(K x,Tensor& a,Tensor &b,Tensor &c) {return xtenarg(x,0,a,b,c);}
  
 // ------------------------------------------------------------------------------------------------------
+// xmodule - check arg(s) for allocated module pointer
 // xseq - check arg(s) for allocated sequential module, return boolean/pointer
 // xloss - check arg(s) for allocated loss module
 // xoptim - check arg(s) for allocated optimizer pointer
 // xmodel - check arg(s) for allocated model pointer (module, loss & optimizer)
 // ------------------------------------------------------------------------------------------------------
+Kmodule* xmodule(K x) {auto* g=xtag(x); return (g && g->a==Class::module) ? (Kmodule*)g : nullptr;}
+Kmodule* xmodule(K x,J i) {return xind(x,i) ? xmodule(kK(x)[i]) : nullptr;}
+
 bool xseq(K x,Sequential &q) {
  if(auto* a=xtag(x))
   if(a->a==Class::sequential && a->c==Cast::sequential) 

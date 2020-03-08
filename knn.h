@@ -331,13 +331,12 @@ TORCH_MODULE(Reshape);
 // ----------------------------------------------------------------------------------------------------
 struct TORCH_API CatOptions {
  CatOptions(int64_t d=0) : dim_(d) {}
- TORCH_ARG(int64_t, dim) = 0;
+ TORCH_ARG(int64_t, dim);
 };
 
 class CatImpl : public torch::nn::Cloneable<CatImpl> {
  public:
- CatImpl(int64_t d) {CatImpl(CatOptions(d));}
- explicit CatImpl(const CatOptions& o={}) : options(std::move(o)) {}
+ CatImpl(const CatOptions& o) : options(o) {}
  void reset() override {}
  void pretty_print(std::ostream& s) const override {s << "Cat(dim=" << options.dim() << ")";}
  torch::Tensor forward(const torch::Tensor& x,const torch::Tensor& y) {

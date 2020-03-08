@@ -1329,9 +1329,15 @@ static double lambda(K x,J i,Cast c) {
 static void lambda(bool a,Cast c,K x,double l) {if(a || l != lambda(c)) OPTION(x,lambda,kf(l));}
 
 // ------------------------------------------------------------------------------------
-// glu & softmax,softmax,logsoftmax (modules only) accepts single dimension
+// cat, glu & softmax,softmax,logsoftmax (modules only) accept single dimension arg
 // ------------------------------------------------------------------------------------
-static int64_t dim(Cast c) { return c==Cast::glu ? torch::nn::GLUOptions().dim() : nj;}
+static int64_t dim(Cast c) {
+ switch(c) {
+  case Cast::glu: return torch::nn::GLUOptions().dim();
+  case Cast::cat: return CatOptions().dim();
+  default:        return nj;
+ }
+}
 
 static int64_t dim(K x,J i,Cast c) {
  int64_t d=dim(c); Pairs p; J n=xargc(x,i,p);
@@ -1894,11 +1900,12 @@ void mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) {
   case Cast::softmin:      PUSH(q,n,torch::nn::Softmin(dim(x,i,c))); break;
   case Cast::logsoftmax:   PUSH(q,n,torch::nn::LogSoftmax(dim(x,i,c))); break;
   case Cast::flatten:      PUSH(q,n,torch::nn::Flatten(flatten(x,i))); break;
+
   case Cast::squeeze:      PUSH(q,n,Squeeze(squeeze(x,i,c))); break;
   case Cast::unsqueeze:    PUSH(q,n,Unsqueeze(squeeze(x,i,c))); break;
   case Cast::expand:       PUSH(q,n,Expand(getsize(x,i,c))); break;
   case Cast::reshape:      PUSH(q,n,Reshape(getsize(x,i,c))); break;
-//case Cast::cat:        
+  case Cast::cat:          PUSH(q,n,Cat(dim(x,i,c))); break;
 
   case Cast::elu:          PUSH(q,n,torch::nn::ELU (alpha<torch::nn::ELUOptions> (x,i,c))); break;
   case Cast::celu:         PUSH(q,n,torch::nn::CELU(alpha<torch::nn::CELUOptions>(x,i,c))); break;
@@ -2190,10 +2197,13 @@ K mstate(K x) {
  }
 }
 
-K seqforward(Sequential& q,K x) {
- TORCH_CHECK(!x->t && x->n==2, "forward expects two args: sequential/model & input tensor or array");
- Tensor *t=xten(x,1);
- return kten(q->forward(t ? *t : kput(x,1)));
+K seqforward(Sequential& q,K a) {
+ Tensor *x,*y;
+ TORCH_CHECK(!a->t && (a->n==2 || a->n==3), "forward expects 2-3 args: model/module & input tensor/arrays, e.g. (m;x) or (m;x;y)");
+ x=xten(a,1);
+ if(a->n==3) y=xten(a,2);
+ return kten(a->n==2 ? q->forward(x ? *x : kput(a,1))
+                     : q->forward(x ? *x : kput(a,1), y ? *y : kput(a,2)));
 }
 
 // ---------------------------------------------------------------------------------------

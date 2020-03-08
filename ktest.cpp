@@ -95,7 +95,7 @@ bool container(Cast c) {
  }
 }
 
-void testchild(bool a,int64_t d,const char* s,bool t,const Module& m,K x) {
+void mget(bool a,int64_t d,const char* s,bool t,const Module& m,K x) {
  Cast c; K o,*k=kK(x); std::tie(c,o)=mopt(a,m);
  if(t) {
   ja(&k[0], &d);
@@ -106,7 +106,7 @@ void testchild(bool a,int64_t d,const char* s,bool t,const Module& m,K x) {
    jk(&k[4], kdict(m.named_parameters())),
    jk(&k[5], kdict(m.named_buffers()));
   for(auto& i:m.named_children())
-   testchild(a,d+1,i.key().c_str(),t,*i.value(),x);
+   mget(a,d+1,i.key().c_str(),t,*i.value(),x);
  } else {
   TORCH_CHECK(!m.children().size(), msym(c), ": unexpected child module(s)");
   k[0]=kj(d);
@@ -119,22 +119,31 @@ void testchild(bool a,int64_t d,const char* s,bool t,const Module& m,K x) {
  }
 }
 
-K moduleget(bool a,bool b,Cast c,const Module& m) {
- K v=ktn(0,b ? 6 : 4);  // values for depth,module,name,options w'parms,buffers if b true
+K mget(bool a,bool b,Cast c,const Module& m) {
+ K k=ktn(KS, b ? 6 : 4);
+ kS(k)[0]=cs("depth");
+ kS(k)[1]=cs("module");
+ kS(k)[2]=cs("name");
+ kS(k)[3]=cs("options");
+ if(b)
+  kS(k)[4]=cs("parms"),
+  kS(k)[5]=cs("buffers");
+ K v=ktn( 0, b ? 6 : 4);  // values for depth,module,name,options w'parms,buffers if b
  if(container(c)) {
   for(J i=0; i<v->n; ++i) kK(v)[i]=ktn(!i ? KJ : (i<3 ? KS : 0), 0);
-  testchild(a,0,"",true,m,v);
+  mget(a,0,"",true,m,v);
+  return xT(xD(k,v));
  } else {
-  testchild(a,0,"",false,m,v);
+  mget(a,0,"",false,m,v);
+  return xD(k,v);
  }
- return v;
 }
 
 KAPI testdepth(K x) {
  KTRY
   Kmodule *m=xmodule(x);
   TORCH_CHECK(m, "not a module");
-  return moduleget(true,false,m->c,*(m->m.ptr()));
+  return mget(true,false,m->c,*(m->m.ptr()));
  KCATCH("testdepth");
 }
 void margs(Sequential& q,K x,J i);

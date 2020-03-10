@@ -44,6 +44,13 @@ KAPI sgdtest(K x) {
 }
 */
 
+KAPI nameany(K x) {
+ //auto m=torch::nn::NamedAnyModule("fc",torch::nn::Linear(1,2));
+ auto m=torch::nn::NamedAnyModule("",torch::nn::Linear(1,2));
+ std::cerr << m.name() << "\n";
+ return (K)0;
+}
+
 auto childcount(const Module& m) {return m.children().size();}
 auto childcount(Module* m) {std::cerr << "module ptr:\n"; return m->children().size();}
 KAPI testcontainer(K x) {
@@ -69,9 +76,13 @@ void testprint(int64_t d,const std::string s,const Module& m) {
 KAPI testjoin(K x) {
  KTRY
   Sequential q1=Sequential(torch::nn::Embedding(10,50), torch::nn::Linear(50,784), Reshape(std::vector<int64_t>{-1,1,28,28}));
-  Sequential q2;
+  Sequential q2=nullptr;
   Cat c(1);
-  Join m=Join(q1,q2,AnyModule(c));
+  Join m;
+  m->push_back(q1);
+  m->push_back(q2);
+  m->push_back(AnyModule(c));
+  std::cerr << "qy empty: " << m->qy.is_empty() << "\n";
   std::cerr << m << "\n";
   testprint(0,"",*m);
   return kmodule(Cast::join,AnyModule(m));
@@ -103,8 +114,8 @@ void mget(bool a,int64_t d,const char* s,bool t,const Module& m,K x) {
   js(&k[2], cs(s));
   jk(&k[3], o);
   if(x->n == 6)
-   jk(&k[4], kdict(m.named_parameters())),
-   jk(&k[5], kdict(m.named_buffers()));
+   jk(&k[4], kdict(m.named_parameters(false))),
+   jk(&k[5], kdict(m.named_buffers(false)));
   for(auto& i:m.named_children())
    mget(a,d+1,i.key().c_str(),t,*i.value(),x);
  } else {
@@ -114,21 +125,22 @@ void mget(bool a,int64_t d,const char* s,bool t,const Module& m,K x) {
   k[2]=ks(cs(s));
   k[3]=o;
   if(x->n == 6)
-   k[4]=kdict(m.named_parameters()),
-   k[5]=kdict(m.named_buffers());
+   k[4]=kdict(m.named_parameters(false)),
+   k[5]=kdict(m.named_buffers(false));
  }
 }
 
+K mkeys(bool b) {
+ K x=ktn(KS, b ? 6 : 4); J i=0;
+ for(auto& m:env().mstate) {
+  kS(x)[i++]=std::get<0>(m);
+  if(i==x->n) break;
+ }
+ return x;
+}
+
 K mget(bool a,bool b,Cast c,const Module& m) {
- K k=ktn(KS, b ? 6 : 4);
- kS(k)[0]=cs("depth");
- kS(k)[1]=cs("module");
- kS(k)[2]=cs("name");
- kS(k)[3]=cs("options");
- if(b)
-  kS(k)[4]=cs("parms"),
-  kS(k)[5]=cs("buffers");
- K v=ktn( 0, b ? 6 : 4);  // values for depth,module,name,options w'parms,buffers if b
+ K k=mkeys(b),v=ktn( 0, b ? 6 : 4);  // key,val for depth,module,name,options w'parms & buffers if b
  if(container(c)) {
   for(J i=0; i<v->n; ++i) kK(v)[i]=ktn(!i ? KJ : (i<3 ? KS : 0), 0);
   mget(a,0,"",true,m,v);
@@ -155,9 +167,12 @@ KAPI kjoin(K x) {
   TORCH_CHECK(x->n==3, "3 args expected, (sequential x, sequential y, catenating layer)");
   if(!xseq(x,0,qx)) margs(qx,kK(x)[0],0);
   if(!xseq(x,1,qy)) margs(qy,kK(x)[1],0);
-  margs(qc,x,2);
+  margs(qc,kK(x)[2],0);
   auto& m=access_private::modules_(*qc);
-  auto a=Join(qx,qy,m[0]);
+  Join a;
+  a->push_back(qx);
+  a->push_back(qy);
+  a->push_back(m[0]);
   auto mx=qx->modules();
   std::cerr << "qx modules:\n";
   for(auto &i:mx) std::cerr << *i << "\n";
@@ -167,6 +182,24 @@ KAPI kjoin(K x) {
   std::cerr << "main x<->y module:\n" << a << "\n";
   return (K)0;
  KCATCH("join");
+}
+
+KAPI join1(K x) {
+ KTRY
+  Join j;  // j=nullptr;
+  Sequential q1=Sequential(torch::nn::Embedding(10,50), torch::nn::Linear(50,784), Reshape(std::vector<int64_t>{-1,1,28,28}));
+  j->push_back("zshape",q1);
+  j->push_back("empty",Sequential());
+  j->push_back("cat",AnyModule(Cat(1)));
+  std::cerr << "is empty: " << j.is_empty() << "\n";
+  std::cerr << "join siz: " << j->children().size() << "\n";
+  std::cerr << "qx empty: " << j->qx.is_empty() << "\n";
+  std::cerr << "qy empty: " << j->qy.is_empty() << "\n";
+  std::cerr << "jn empty: " << j->join.is_empty() << "\n";
+  return mget(true,true,Cast::join,*j);
+  Cast c; K o; std::tie(c,o)=mopt(true,*AnyModule(j).ptr());
+  return o;
+ KCATCH("join1");
 }
 
 KAPI stest(K x) {

@@ -352,34 +352,47 @@ TORCH_MODULE(Cat);
 // ----------------------------------------------------------------------------------------------------
 class TORCH_API JoinImpl : public torch::nn::Cloneable<JoinImpl> {
  public:
- JoinImpl(const Sequential& x,const Sequential& y,const AnyModule& z) : qx(std::move(x)),qy(std::move(y)),join(std::move(z)) {
-  register_module("qx", qx);
-  register_module("qy", qy);
-  register_module("join", join.ptr());
-  reset();
- }
+ JoinImpl() = default;
  void reset() override {}
-
  void pretty_print(std::ostream& s) const override {s << "Join";}
 
- Tensor forward(const Tensor& x,const Tensor& y) {
-  if(qx->size() && qy->size())
-   return join.forward(qx->forward(x),qy->forward(y));
-  else if(qx->size())
-   return join.forward(qx->forward(x),y);
-  else if(qy->size())
-   return join.forward(x,qy->forward(y));
-  else
-   return join.forward(x,y);
+ void push_back(torch::nn::Sequential q) {
+  push_back(children().size()==0 ? "qx" : "qy", q);
  }
- Sequential qx;
- Sequential qy;
+
+ void push_back(std::string s,torch::nn::Sequential q) {
+  if(children().size()==0)
+   qx=register_module(s,std::move(q));
+  else if(children().size()==1)
+   qy=register_module(s,std::move(q));
+  else
+   AT_ERROR("both sequential layers already defined");
+ }
+
+ void push_back(torch::nn::AnyModule a) {
+  push_back("join",a);
+ }
+
+ void push_back(std::string s,torch::nn::AnyModule a) {
+  TORCH_CHECK(children().size()==2, "Both sequential layers must be defined first");
+  TORCH_CHECK(join.is_empty(), "join layer already defined");
+  join=std::move(a);
+  register_module(s,join.ptr());
+ }
+
+ Tensor forward(const Tensor& x,const Tensor& y) {
+  TORCH_CHECK(!join.is_empty(), "join layer not defined");
+  return join.forward(qx.is_empty() || !qx->children().size() ? x : qx->forward(x),
+                      qy.is_empty() || !qy->children().size() ? y : qy->forward(y));
+ }
+ Sequential qx = nullptr;
+ Sequential qy = nullptr;
  AnyModule  join;
 };
 TORCH_MODULE(Join);
 
 // ----------------------------------------------------------------------------------------------------
-// Sequence - rework Sequential to accept nested sequentionals, also make push_back of AnyModule public
+// Sequence - rework Sequential to accept nested sequentials
 // ----------------------------------------------------------------------------------------------------
 struct TORCH_API SequenceImpl : public torch::nn::SequentialImpl {
   using SequentialImpl::SequentialImpl;

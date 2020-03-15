@@ -697,7 +697,7 @@ KAPI loss(K x) {
    Cast c=lmap(s);
    return kloss(c, lossinit(c,x,1));
   } else if(xdict(x)) {    //define loss from state dictionary
-   Cast c=lmap(statesym(State::module,x));
+   Cast c=lmap(statemodule(x));
    return kloss(c, lossinit(c,statedict(State::options,x),-1));
   } else if(((l=xloss(x))) || (xbool(x,1,a) && x->n==2 && ((l=xloss(x,0))))) {
    return lossdict(a,false,l->c,l->m); //given allocated loss ptr or ptr w'boolean, return options

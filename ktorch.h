@@ -264,8 +264,10 @@ Enum emap(S);
 S statekey(State);
 K statekeys();
 J statefind(State,K);
-S statesym(State e,K x,J j=-1);
 K statedict(State e,K x,J j=-1);
+J statedepth(K x,J j=-1);
+S statemodule(K x,J j=-1);
+S statename(K x,J j=-1);
 void stateparms(S,Module&,K,bool);
 
 bool xnull(K);
@@ -760,7 +762,7 @@ typedef struct {
   std::make_tuple(cs("buffers"), State::buffers)
  }};
 
- std::array<std::tuple<S,State>,6> mstate = {{         //state dictionary keys: map symbol -> enum
+ std::array<std::tuple<S,State>,6> mstate = {{        //module state dictionary keys: map symbol -> enum
   std::make_tuple(cs("depth"),   State::depth),
   std::make_tuple(cs("module"),  State::module),
   std::make_tuple(cs("name"),    State::name),

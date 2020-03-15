@@ -1930,8 +1930,8 @@ void mdefine(Sequential &q,K x) { // define modules from k table of options or f
  J n=x->t==99 ? 0 : xlen(x);
  for(J i=98-x->t;i<n;++i)
    mdefine(q,
-    statesym(State::module,x,i),
-    statesym(State::name,x,i),
+    statemodule(x,i),
+    statename(x,i),
     -1,
     statedict(State::options,x,i),
     statedict(State::parms,x,i),

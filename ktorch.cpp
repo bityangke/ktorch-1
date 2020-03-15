@@ -187,12 +187,14 @@ Enum emap(S s) {
 // statekey - map from state attribute enumeration to symbol, e.g. State::parms -> `parms
 // statekeys - return dictionary keys for full state: class,module,name,options,parms,buffers
 // statefind - search dictionary keys/table colums for symbol matching given enumeration
+// statelong - search dict/table for long value
 // statesym - given dict/table defining module(s), find symbols for module else null
 // statedict - given enumeration, return k dictionary stored at matching key/col else null
 // stateparms - set parms/buffers from k values in dictionary with matching names/types/dims
 // ------------------------------------------------------------------------------------------
 S statekey(State e) {
  for(auto &m:env().state) if(e==std::get<1>(m)) return std::get<0>(m);
+ for(auto &m:env().mstate)if(e==std::get<1>(m)) return std::get<0>(m);
  AT_ERROR("Unrecognized module attribute: ",(I)e);
 }
 
@@ -205,28 +207,59 @@ K statekeys() {
 
 J statefind(State e,K x) {
  if(!xstate(x))
-  AT_ERROR("Unrecognized module state: ",kname(x->t),", expected dictionary or table");
+  AT_ERROR("Expected dictionary or table describing state, given ",kname(x));
  S s=statekey(e); K k=kK(x->t == 98 ? x->k : x)[0];
  for(J i=0;i<k->n;++i) if(kS(k)[i]==s) return i;
  return -1;
 }
 
-S statesym(State e,K x,J j) { //e:enum, e.g. State::module, x:dict/table, j:table row (-1 for dict)
+static J statelong(State e,bool r,K x,J j) { //e:enum, e.g. State::depth, r:required flag, x:dict/table, j:table row
  J i=statefind(e,x);
  if(i<0) {
-  if(e==State::module) AT_ERROR("Unable to find module ",(x->t==98 ? "column" : "key"));
-  return nullptr;
- } else {
-  K v=x->t == 98 ? kK(kK(x->k)[1])[i] : kK(x)[1];
-  if(v->t && v->t != KS)
-   AT_ERROR("Module ",(e==State::module ? "type" : "name")," expected as symbol, given as: ",kname(kK(v)[j]->t));
-  if(x->t == 99) j=i;
-  if(j<0 || j>=v->n) {
-   AT_ERROR("Attempting to index element[",j,"] from module definition of length ",v->n);
-  } else if(!v->t && kK(v)[j]->t != -KS) {
-   AT_ERROR("Module ",(e==State::module ? "type" : "name")," is a ",kname(kK(v)[j]->t),", expected a symbol\n");
+  TORCH_CHECK(!r,"unable to find ",statekey(e)," attribute");
+  return nj;
+ } else if(x->t==99) {
+  K v=kK(x)[1];
+  if(v->t) {
+   TORCH_CHECK(v->t==KJ, statekey(e),": expected long, given ",kname(v));
+   return kJ(v)[i];
+  } else {
+   v=kK(v)[i];
+   TORCH_CHECK(v->t==-KJ, statekey(e),": expected long, given ",kname(v));
+   return kK(v)[i]->j;
   }
-  return v->t ? kS(v)[j] : kK(v)[j]->s;
+ } else if(x->t==98) {
+  K v=kK(kK(x->k)[1])[i];
+  TORCH_CHECK(v->t==KJ, statekey(e),": expected long, given ",kname(v));
+  TORCH_CHECK(j>-1 && j<v->n, statekey(e),"[", j,"] index beyond ",v->n,"-row table");
+  return kJ(v)[j];
+ } else {
+  AT_ERROR("expecting state dictionary or table, given ",kname(x));
+ }
+}
+
+static S statesym(State e, bool r,K x,J j) { //e:enum, e.g. State::module, r:required, x:dict/table, j:table row
+ J i=statefind(e,x);
+ if(i<0) {
+  TORCH_CHECK(!r,"unable to find `",statekey(e)," attribute");
+  return nullptr;
+ } else if(x->t==99) {
+  K v=kK(x)[1];
+  if(v->t) {
+   TORCH_CHECK(v->t==KS, statekey(e),": expected symbol, given ",kname(v));
+   return kS(v)[i];
+  } else {
+   v=kK(v)[i];
+   TORCH_CHECK(v->t==-KS, statekey(e),": expected symbol, given ",kname(v));
+   return v->s;
+  }
+ } else if(x->t==98) {
+  K v=kK(kK(x->k)[1])[i];
+  TORCH_CHECK(v->t==KS, statekey(e),": expected symbol, given ",kname(v));
+  TORCH_CHECK(j>-1 && j<v->n, statekey(e),"[", j,"] index beyond ",v->n,"-row table");
+  return kS(v)[j];
+ } else {
+  AT_ERROR("expecting state dictionary or table, given ",kname(x));
  }
 }
 
@@ -248,6 +281,13 @@ K statedict(State e,K x,J j) {  // e:enum, e.g. State::options, x:dict/table, j:
   return nullptr;
  }
 }
+
+// --------------------------------------------
+// convenience functions to return state value
+// --------------------------------------------
+J statedepth(K x,J j)  {return statelong(State::depth,true,x,j);}
+S statemodule(K x,J j) {return statesym(State::module,true,x,j);}
+S statename(K x,J j)   {return statesym(State::name,false,x,j);}
 
 // --------------------------------------------------------------------------------------
 // xnull  - true if null, i.e. (::)

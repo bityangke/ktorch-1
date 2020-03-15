@@ -347,9 +347,9 @@ class CatImpl : public torch::nn::Cloneable<CatImpl> {
 TORCH_MODULE(Cat);
 
 
-// ----------------------------------------------------------------------------------------------------
-// Join - define sequential modules for inputs x & y, and a layer for joining the output of each module
-// ----------------------------------------------------------------------------------------------------
+// --------------------------------------------------------------------------------------------------
+// Join - define sequential modules for inputs x & y with layer for joining the output of each module
+// --------------------------------------------------------------------------------------------------
 class TORCH_API JoinImpl : public torch::nn::Cloneable<JoinImpl> {
  public:
  JoinImpl() = default;
@@ -391,9 +391,11 @@ class TORCH_API JoinImpl : public torch::nn::Cloneable<JoinImpl> {
 };
 TORCH_MODULE(Join);
 
-// ----------------------------------------------------------------------------------------------------
-// Sequence - rework Sequential to accept nested sequentials
-// ----------------------------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------------
+// Sequence - derived from Sequential to accept nested sequentials 
+//          - uses fixed result type of tensor for forward calc
+//          - no templatized forward result means can also be stored as an AnyModule
+// -----------------------------------------------------------------------------------------
 struct TORCH_API SequenceImpl : public torch::nn::SequentialImpl {
   using SequentialImpl::SequentialImpl;
 

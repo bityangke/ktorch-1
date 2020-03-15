@@ -1,3 +1,4 @@
+#include <stack>
 #include "ktorch.h"
 #include "knn.h"
 #include "private.h"
@@ -44,10 +45,29 @@ KAPI sgdtest(K x) {
 }
 */
 
+KAPI statetest(K x) {
+ KTRY
+  //return kj(statedepth(x, x->t==98 ? xlen(x)-1 : -1));
+  return ks(statemodule(x, x->t==98 ? xlen(x)-1 : -1));
+ KCATCH("statetest");
+}
+
 KAPI nameany(K x) {
  //auto m=torch::nn::NamedAnyModule("fc",torch::nn::Linear(1,2));
  auto m=torch::nn::NamedAnyModule("",torch::nn::Linear(1,2));
  std::cerr << m.name() << "\n";
+ //Sequential q1=Sequential(torch::nn::Embedding(10,50), torch::nn::Linear(50,784), Reshape(std::vector<int64_t>{-1,1,28,28}));
+ auto q1=Sequence(torch::nn::Embedding(10,50), torch::nn::Linear(50,784), Reshape(std::vector<int64_t>{-1,1,28,28}));
+ auto a=torch::nn::AnyModule(q1.ptr());
+ std::cerr << q1 << "\n";
+ std::cerr<<  a.get<Sequence>() << "\n";
+/*
+ auto a=torch::nn::NamedAnyModule("sequence",q1);
+ auto a=torch::nn::NamedAnyModule("sequence",q1);
+ std::cerr << "Sequential name: " << a.name() << "\n";
+ AnyModule<Sequential>(q1);
+*/
+ 
  return (K)0;
 }
 
@@ -106,6 +126,64 @@ bool container(Cast c) {
  }
 }
 
+K mkeys(bool b) {
+ K x=ktn(KS, b ? 6 : 4); J i=0;
+ for(auto& m:env().mstate) {
+  kS(x)[i++]=std::get<0>(m);
+  if(i==x->n) break;
+ }
+ return x;
+}
+
+/*
+addchild:{[p;v;nm] -2 $[count p; string[p],"->pushback(",string[` sv v,nm],")"; "creating container: ",string v]}
+{[p;pd;d;v;nm] if[d<pd;p:pop p]; addchild[first p;v;nm]; $[container[v] & d>pd;push[p]` sv v,nm;p]}
+
+void mput(int64_t pd, int64_t d, Cast c, std::string n) {
+  if(d<pd) p.pop();
+  p.top()->push_back(name, AnyModule);
+  if(container(c) && d>pd)
+   p.push(ContainerModule);
+}
+*/
+
+void mput1(K x) {
+ J n=x->t==99 ? 0 : xlen(x);
+ for(J i=98-x->t;i<n;++i) {
+  std::cerr << "row "  << i << ":  ";
+  std::cerr << "depth: "   << statedepth(x,i) << ", ";
+  std::cerr << "module: "  << statemodule(x,i) << ", ";
+  std::cerr << "name: "    << statename(x,i) << ", ";
+  std::cerr << "\n";
+  /*
+   mdefine(q,
+    statemodule(x,i),
+    statename(x,i),
+    -1,
+    statedict(State::options,x,i),
+    statedict(State::parms,x,i),
+    statedict(State::buffers,x,i));
+  */
+ }
+}
+
+K mput(K x) {
+ mput1(x);
+ std::stack<AnyModule> p;
+ p.push(AnyModule(torch::nn::Linear(1,2)));
+ p.push(AnyModule(Reshape(std::vector<int64_t>{1,1,2})));
+ std::cerr << *p.top().ptr() << "\n";
+ p.pop();
+ std::cerr << *p.top().ptr() << "\n";
+ return (K)0;
+}
+
+KAPI mdef(K x) {
+ KTRY
+  return mput(x);
+ KCATCH("mdef");
+}
+
 void mget(bool a,int64_t d,const char* s,bool t,const Module& m,K x) {
  Cast c; K o,*k=kK(x); std::tie(c,o)=mopt(a,m);
  if(t) {
@@ -128,15 +206,6 @@ void mget(bool a,int64_t d,const char* s,bool t,const Module& m,K x) {
    k[4]=kdict(m.named_parameters(false)),
    k[5]=kdict(m.named_buffers(false));
  }
-}
-
-K mkeys(bool b) {
- K x=ktn(KS, b ? 6 : 4); J i=0;
- for(auto& m:env().mstate) {
-  kS(x)[i++]=std::get<0>(m);
-  if(i==x->n) break;
- }
- return x;
 }
 
 K mget(bool a,bool b,Cast c,const Module& m) {
@@ -186,19 +255,16 @@ KAPI kjoin(K x) {
 
 KAPI join1(K x) {
  KTRY
+  Sequence q;
   Join j;  // j=nullptr;
+  q->push_back(j);
   Sequential q1=Sequential(torch::nn::Embedding(10,50), torch::nn::Linear(50,784), Reshape(std::vector<int64_t>{-1,1,28,28}));
   j->push_back("zshape",q1);
   j->push_back("empty",Sequential());
   j->push_back("cat",AnyModule(Cat(1)));
-  std::cerr << "is empty: " << j.is_empty() << "\n";
-  std::cerr << "join siz: " << j->children().size() << "\n";
-  std::cerr << "qx empty: " << j->qx.is_empty() << "\n";
-  std::cerr << "qy empty: " << j->qy.is_empty() << "\n";
-  std::cerr << "jn empty: " << j->join.is_empty() << "\n";
-  return mget(true,true,Cast::join,*j);
-  Cast c; K o; std::tie(c,o)=mopt(true,*AnyModule(j).ptr());
-  return o;
+  return mget(true,true,Cast::sequential,*q);
+  //Cast c; K o; std::tie(c,o)=mopt(true,*AnyModule(q).ptr());
+  //return o;
  KCATCH("join1");
 }
 

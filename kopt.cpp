@@ -461,12 +461,10 @@ KAPI opt(K x) {
   if(xsym(x,s) || (xsym(x,0,s) && (xptr(x,1) || xempty(x,1)))) {
    return optinit(s,x);
   } else if(xdict(x)) {
-   return optinit(statemodule(x),statedict(State::options,x));
+   return optinit(statemodule(x),stateoptions(x));
   } else if(xdict(x,0) && x->n==2 && (xptr(x,1) || xempty(x,1))) {
    K d=kK(x)[0];
-   return optinit(statemodule(d),
-                  statedict(State::options,d),
-                  statedict(State::buffers,d));
+   return optinit(statemodule(d),stateoptions(d),statebuffers(d));
   } else if((o=xoptim(x)) || (xbool(x,1,a) && (o=xoptim(x,0)) && x->n==2)) {
    return optstate(a,false,o->c,o->get());
   } else if((o=xoptim(x,0)) && xptr(x,1) && x->n==2) {

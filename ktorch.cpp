@@ -190,7 +190,6 @@ Enum emap(S s) {
 // statelong - search dict/table for long value
 // statesym - given dict/table defining module(s), find symbols for module else null
 // statedict - given enumeration, return k dictionary stored at matching key/col else null
-// stateparms - set parms/buffers from k values in dictionary with matching names/types/dims
 // ------------------------------------------------------------------------------------------
 S statekey(State e) {
  for(auto &m:env().state) if(e==std::get<1>(m)) return std::get<0>(m);
@@ -263,31 +262,28 @@ static S statesym(State e, bool r,K x,J j) { //e:enum, e.g. State::module, r:req
  }
 }
 
-K statedict(State e,K x,J j) {  // e:enum, e.g. State::options, x:dict/table, j:row (-1 if dict)
+static K statedict(State e,K x,J j) {  // e:enum, e.g. State::options, x:dict/table, j:row (-1 if dict)
  J i=statefind(e,x);
- if(-1 < i) {
+ if(i<0)
+  return nullptr;
   K v=x->t == 98 ? kK(kK(x->k)[1])[i] : kK(x)[1];
   if(x->t == 99) j=i;
-  if(v->t) {
-    AT_ERROR("Unexpected ",kname(v->t)," for module ",statekey(e));
-  } else if(j<0 || j>=v->n) {
-   AT_ERROR("Attempting to index element[",j,"] from module definition of length ",v->n);
-  }
-  K r=kK(v)[j];
-  if(r->t != 99)
-   AT_ERROR("Unexpected ",kname(v->t)," for module ",statekey(e),", expected dictionary");
-  return r;
- } else {
-  return nullptr;
- }
+  TORCH_CHECK(!v->t, statekey(e),": expected dictionary, given ",kname(v));
+  TORCH_CHECK(-1<j && j<v->n, statekey(e),"[",j,"] index beyond ",v->n,"-row table");
+  v=kK(v)[j];
+  TORCH_CHECK(v->t==99, statekey(e),": expected dictionary, given ",kname(v));
+  return v;
 }
 
 // --------------------------------------------
 // convenience functions to return state value
 // --------------------------------------------
-J statedepth(K x,J j)  {return statelong(State::depth,true,x,j);}
-S statemodule(K x,J j) {return statesym(State::module,true,x,j);}
-S statename(K x,J j)   {return statesym(State::name,false,x,j);}
+J statedepth(K x,J j)   {return statelong(State::depth,true,x,j);}
+S statemodule(K x,J j)  {return statesym(State::module,true,x,j);}
+S statename(K x,J j)    {return statesym(State::name,false,x,j);}
+K stateoptions(K x,J j) {return statedict(State::options,x,j);}
+K stateparms(K x,J j)   {return statedict(State::parms,x,j);}
+K statebuffers(K x,J j) {return statedict(State::buffers,x,j);}
 
 // --------------------------------------------------------------------------------------
 // xnull  - true if null, i.e. (::)

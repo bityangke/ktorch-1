@@ -264,10 +264,12 @@ Enum emap(S);
 S statekey(State);
 K statekeys();
 J statefind(State,K);
-K statedict(State e,K x,J j=-1);
 J statedepth(K x,J j=-1);
 S statemodule(K x,J j=-1);
 S statename(K x,J j=-1);
+K stateoptions(K x,J j=-1);
+K stateparms(K x,J j=-1);
+K statebuffers(K x,J j=-1);
 void stateparms(S,Module&,K,bool);
 
 bool xnull(K);

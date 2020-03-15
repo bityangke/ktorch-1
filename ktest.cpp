@@ -48,7 +48,8 @@ KAPI sgdtest(K x) {
 KAPI statetest(K x) {
  KTRY
   //return kj(statedepth(x, x->t==98 ? xlen(x)-1 : -1));
-  return ks(statemodule(x, x->t==98 ? xlen(x)-1 : -1));
+  //return ks(statemodule(x, x->t==98 ? xlen(x)-1 : -1));
+  return stateoptions(x, x->t==98 ? xlen(x)-1 : -1);
  KCATCH("statetest");
 }
 
@@ -160,9 +161,9 @@ void mput1(K x) {
     statemodule(x,i),
     statename(x,i),
     -1,
-    statedict(State::options,x,i),
-    statedict(State::parms,x,i),
-    statedict(State::buffers,x,i));
+    stateoptions(x,i),
+    stateparms(x,i),
+    statebuffers(x,i));
   */
  }
 }

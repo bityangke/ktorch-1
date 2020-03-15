@@ -1929,13 +1929,7 @@ void mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) {
 void mdefine(Sequential &q,K x) { // define modules from k table of options or full state
  J n=x->t==99 ? 0 : xlen(x);
  for(J i=98-x->t;i<n;++i)
-   mdefine(q,
-    statemodule(x,i),
-    statename(x,i),
-    -1,
-    statedict(State::options,x,i),
-    statedict(State::parms,x,i),
-    statedict(State::buffers,x,i));
+   mdefine(q,statemodule(x,i),statename(x,i),-1,stateoptions(x,i),stateparms(x,i),statebuffers(x,i));
 }
 
 // --------------------------------------------------------------------------------------------

@@ -28,6 +28,7 @@ K seqto(Kseq* q,const TensorOptions& o,bool a) {
 // sym<-rnnfn(options) return symbol matching activation fn, else null (e.g. for gru/lstm)
 // rnnfn(options,sym)  set activation function if rnn options, else no-op
 // --------------------------------------------------------------------------------------------
+/*
 static torch::nn::RNNActivation rnnfn(S s) {
  for(auto& m:env().rnnfn) if (s==std::get<0>(m)) return std::get<1>(m);
  AT_ERROR("Unrecognized rnn activiation function: ",s);
@@ -41,6 +42,7 @@ template<> S rnnfn<torch::nn::RNNOptions>(torch::nn::RNNOptions& o) {
 
 template<typename O> static void rnnfn(O& o,torch::nn::RNNActivation f) {}
 template<> void rnnfn<torch::nn::RNNOptions>(torch::nn::RNNOptions& o,torch::nn::RNNActivation f) {o.activation(f);}
+*/
 
 // -----------------------------------------------------------------------------------
 // msym - map to/from sym & enum for module, e.g. `conv3d <-> Cast::conv3d
@@ -846,11 +848,11 @@ KAPI Bilinear(K x) {
 // --------------------------------------------------------------------------------------
 template<typename M,typename O>
 static M rnn(Cast c,K x,J k) {
- auto f=torch::nn::RNNActivation::ReLU;
+ // PATCH: auto f=torch::nn::RNNActivation::ReLU;
  bool b=true,bi=false,ba=false; Pairs p; J i=-1,h=-1,l=1,n=xargc(x,k,p); double d=0.0;
  if(!((n==0 && p.n) || (xlong(x,k,i) && (n==1 || (n==2 && xlong(x,k+1,h))))))
   AT_ERROR("Unrecognized arguments for ",msym(c)," module");
- bool r=std::is_same<M,torch::nn::RNN>::value;
+ // PATCH: bool r=std::is_same<M,torch::nn::RNN>::value;
  while(xpair(p))
   switch(mset(p.k)) {
    case Setting::in:          i=plong(p); break;
@@ -860,23 +862,24 @@ static M rnn(Cast c,K x,J k) {
    case Setting::bi:         bi=pbool(p); break;
    case Setting::batchfirst: ba=pbool(p); break;
    case Setting::dropout:   d=pdouble(p); break;
-   case Setting::fn: if(r) f=rnnfn(psym(p)); else AT_ERROR("activation function only for RNN module"); break;
+   // PATCH: case Setting::fn: if(r) f=rnnfn(psym(p)); else AT_ERROR("activation function only for RNN module"); break;
    default: AT_ERROR(msym(c)," option: ",p.k," unrecognized, expected one of in,hidden,layers,bias,bi,batchfirst,drop,fn");
   }
- auto o=O(i,h).layers(l).dropout(d).with_bias(b).bidirectional(bi).batch_first(ba);
- if(r) rnnfn(o,f);
+ // PATCH: layers -> num_layers, with_bias -> bias
+ auto o=O(i,h).num_layers(l).dropout(d).bias(b).bidirectional(bi).batch_first(ba);
+ // PATCH: if(r) rnnfn(o,f);
  return M(o);
 }
 
 template<typename M,typename O>
 static void rnn(bool a,K x,const M* m) {
- O o=m->options, d(o.input_size(),o.hidden_size()); S f=rnnfn(o);
+ O o=m->options, d(o.input_size(),o.hidden_size()); // PATCH: S f=rnnfn(o);
  OPTION(x, in,     kj(o.input_size()));
  OPTION(x, hidden, kj(o.hidden_size()));
- if(a || (o.layers()        != d.layers()))       OPTION(x, layers,     kj(o.layers()));
+ if(a || (o.num_layers()    != d.num_layers()))   OPTION(x, layers,     kj(o.num_layers()));
  if(a || (o.dropout()       != d.dropout()))      OPTION(x, dropout,    kf(o.dropout()));
- if((a && f) || f           != rnnfn(d))          OPTION(x, fn,         ks(f));
- if(a || (o.with_bias()     != d.with_bias()))    OPTION(x, bias,       kb(o.with_bias()));
+ // PATCH: if((a && f) || f           != rnnfn(d))          OPTION(x, fn,         ks(f));
+ if(a || (o.bias()          != d.bias()))         OPTION(x, bias,       kb(o.bias()));
  if(a || (o.bidirectional() != d.bidirectional()))OPTION(x, bi,         kb(o.bidirectional()));
  if(a || (o.batch_first()   != d.batch_first()))  OPTION(x, batchfirst, kb(o.batch_first()));
 }
@@ -989,8 +992,8 @@ template<typename M> static void adapt(K x,const M* m) {
 // ----------------------------------------------------------------------------------
 // fpool - fractional max pooling for 2 & 3d layers
 // ----------------------------------------------------------------------------------
-template<size_t D> static FractionalMaxPoolOptions<D> fpool(K x,J i,Cast c) {
- FractionalMaxPoolOptions<D> o(0);
+template<size_t D> static torch::nn::FractionalMaxPoolOptions<D> fpool(K x,J i,Cast c) {
+ torch::nn::FractionalMaxPoolOptions<D> o(0);
  bool e,sz=false; Pairs p; J n=xargc(x,i,p);
  for(J j=0;j<n;++j) {
    e=xempty(x,i+j);
@@ -1017,7 +1020,7 @@ template<size_t D> static FractionalMaxPoolOptions<D> fpool(K x,J i,Cast c) {
 }
 
 template<size_t D,typename M> static void fpool(bool a,K x,const M* m) {
- FractionalMaxPoolOptions<D> o=m->options;
+ torch::nn::FractionalMaxPoolOptions<D> o=m->options;
  OPTION(x, size, KEX(o.kernel_size()));
  if(a || o.output_size().has_value())    OPTION(x, outsize, o.output_size() ? KEX(o.output_size().value())  : ktn(0,0));
  if(a || o.output_ratio().has_value())   OPTION(x, ratio,   o.output_ratio()? KEX(o.output_ratio().value()) : ktn(0,0));
@@ -1080,8 +1083,8 @@ static K pool(K x,Cast c) {
    case Cast::adaptavg1d: r=torch::nn::functional::adaptive_avg_pool1d(t ? *t : kput(x,0), adapt<1,torch::nn::AdaptiveAvgPool1dOptions>(x,1,c)); break;
    case Cast::adaptavg2d: r=torch::nn::functional::adaptive_avg_pool2d(t ? *t : kput(x,0), adapt<2,torch::nn::AdaptiveAvgPool2dOptions>(x,1,c)); break;
    case Cast::adaptavg3d: r=torch::nn::functional::adaptive_avg_pool3d(t ? *t : kput(x,0), adapt<3,torch::nn::AdaptiveAvgPool3dOptions>(x,1,c)); break;
-   case Cast::fmaxpool2d: r=functional::fractional_max_pool2d(t ? *t : kput(x,0), fpool<2>(x,1,c)); break;
-   case Cast::fmaxpool3d: r=functional::fractional_max_pool3d(t ? *t : kput(x,0), fpool<3>(x,1,c)); break;
+   case Cast::fmaxpool2d: r=torch::nn::functional::fractional_max_pool2d(t ? *t : kput(x,0), fpool<2>(x,1,c)); break;
+   case Cast::fmaxpool3d: r=torch::nn::functional::fractional_max_pool3d(t ? *t : kput(x,0), fpool<3>(x,1,c)); break;
    case Cast::lppool1d:   r=torch::nn::functional::lp_pool1d(t ? *t : kput(x,0), lppool<1>(x,1,c)); break;
    case Cast::lppool2d:   r=torch::nn::functional::lp_pool2d(t ? *t : kput(x,0), lppool<2>(x,1,c)); break;
    default: AT_ERROR("Unrecognized pooling function");
@@ -1809,7 +1812,7 @@ void mdefine(Sequential &q,S s,S n=nullptr,J i=-1,K x=nullptr,K p=nullptr,K f=nu
 void mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) { 
  Cast c=msym(s);
  switch(c) {
-  case Cast::batchnorm:    PUSH(q,n,torch::nn::BatchNorm  (batchnorm<torch::nn::BatchNormOptions>(x,i,c))); break;
+  // PATCH: case Cast::batchnorm:    PUSH(q,n,torch::nn::BatchNorm  (batchnorm<torch::nn::BatchNormOptions>(x,i,c))); break;
   case Cast::batchnorm1d:  PUSH(q,n,torch::nn::BatchNorm1d(batchnorm<torch::nn::BatchNormOptions>(x,i,c))); break;
   case Cast::batchnorm2d:  PUSH(q,n,torch::nn::BatchNorm2d(batchnorm<torch::nn::BatchNormOptions>(x,i,c))); break;
   case Cast::batchnorm3d:  PUSH(q,n,torch::nn::BatchNorm3d(batchnorm<torch::nn::BatchNormOptions>(x,i,c))); break;
@@ -1831,7 +1834,7 @@ void mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) {
   case Cast::drop:         PUSH(q,n,torch::nn::Dropout(drop(x,i,c))); break;
   case Cast::drop2d:       PUSH(q,n,torch::nn::Dropout2d(drop(x,i,c))); break;
   case Cast::drop3d:       PUSH(q,n,torch::nn::Dropout3d(drop(x,i,c))); break;
-  case Cast::fdrop:        PUSH(q,n,torch::nn::FeatureDropout(drop(x,i,c))); break;
+ // PATCH: case Cast::fdrop:        PUSH(q,n,torch::nn::FeatureDropout(drop(x,i,c))); break;
   case Cast::adrop:        PUSH(q,n,torch::nn::AlphaDropout(drop(x,i,c))); break;
   case Cast::fadrop:       PUSH(q,n,torch::nn::FeatureAlphaDropout(drop(x,i,c))); break;
 
@@ -1862,8 +1865,8 @@ void mdefine(Sequential &q,S s,S n,J i,K x,K p,K f) {
   case Cast::adaptavg2d:   PUSH(q,n,torch::nn::AdaptiveAvgPool2d(adapt<2,torch::nn::AdaptiveAvgPool2dOptions>(x,i,c))); break;
   case Cast::adaptavg3d:   PUSH(q,n,torch::nn::AdaptiveAvgPool3d(adapt<3,torch::nn::AdaptiveAvgPool3dOptions>(x,i,c))); break;
 
-  case Cast::fmaxpool2d:   PUSH(q,n,FractionalMaxPool2d(fpool<2>(x,i,c))); break;
-  case Cast::fmaxpool3d:   PUSH(q,n,FractionalMaxPool3d(fpool<3>(x,i,c))); break;
+  case Cast::fmaxpool2d:   PUSH(q,n,torch::nn::FractionalMaxPool2d(fpool<2>(x,i,c))); break;
+  case Cast::fmaxpool3d:   PUSH(q,n,torch::nn::FractionalMaxPool3d(fpool<3>(x,i,c))); break;
 
   case Cast::lppool1d:     PUSH(q,n,torch::nn::LPPool1d(lppool<1>(x,i,c))); break;
   case Cast::lppool2d:     PUSH(q,n,torch::nn::LPPool2d(lppool<2>(x,i,c))); break;
@@ -1944,7 +1947,7 @@ std::tuple<Cast,K> mopt(bool a,const Module& g) { //a:all options returned if tr
  if       (auto* m=g.as<torch::nn::Sequential>())        { c=Cast::sequential;
  } else if(auto* m=g.as<Join>())                         { c=Cast::join;
 
- } else if(auto* m=g.as<torch::nn::BatchNorm>())         { c=Cast::batchnorm;      batchnorm(a,x,m->options);
+ // PATCH: } else if(auto* m=g.as<torch::nn::BatchNorm>())         { c=Cast::batchnorm;      batchnorm(a,x,m->options);
  } else if(auto* m=g.as<torch::nn::BatchNorm1d>())       { c=Cast::batchnorm1d;    batchnorm(a,x,m->options);
  } else if(auto* m=g.as<torch::nn::BatchNorm2d>())       { c=Cast::batchnorm2d;    batchnorm(a,x,m->options);
  } else if(auto* m=g.as<torch::nn::BatchNorm3d>())       { c=Cast::batchnorm3d;    batchnorm(a,x,m->options);
@@ -1964,7 +1967,7 @@ std::tuple<Cast,K> mopt(bool a,const Module& g) { //a:all options returned if tr
  } else if(auto* m=g.as<torch::nn::Dropout>())             { c=Cast::drop;   drop(a,x,m->options);
  } else if(auto* m=g.as<torch::nn::Dropout2d>())           { c=Cast::drop2d; drop(a,x,m->options);
  } else if(auto* m=g.as<torch::nn::Dropout3d>())           { c=Cast::drop3d; drop(a,x,m->options);
- } else if(auto* m=g.as<torch::nn::FeatureDropout>())      { c=Cast::fdrop;  drop(a,x,m->options);
+ // PATCH: } else if(auto* m=g.as<torch::nn::FeatureDropout>())      { c=Cast::fdrop;  drop(a,x,m->options);
  } else if(auto* m=g.as<torch::nn::AlphaDropout>())        { c=Cast::adrop;  drop(a,x,m->options);
  } else if(auto* m=g.as<torch::nn::FeatureAlphaDropout>()) { c=Cast::fadrop; drop(a,x,m->options);
 
@@ -1994,8 +1997,8 @@ std::tuple<Cast,K> mopt(bool a,const Module& g) { //a:all options returned if tr
  } else if(auto* m=g.as<torch::nn::AdaptiveAvgPool2d>())   { c=Cast::adaptmax2d; adapt<torch::nn::AdaptiveAvgPool2dImpl>(x,m);
  } else if(auto* m=g.as<torch::nn::AdaptiveAvgPool3d>())   { c=Cast::adaptmax3d; adapt<torch::nn::AdaptiveAvgPool3dImpl>(x,m);
 
- } else if(auto* m=g.as<FractionalMaxPool2d>()) { c=Cast::fmaxpool2d; fpool<2,FractionalMaxPool2dImpl>(a,x,m);
- } else if(auto* m=g.as<FractionalMaxPool3d>()) { c=Cast::fmaxpool3d; fpool<3,FractionalMaxPool3dImpl>(a,x,m);
+ } else if(auto* m=g.as<torch::nn::FractionalMaxPool2d>()) { c=Cast::fmaxpool2d; fpool<2,torch::nn::FractionalMaxPool2dImpl>(a,x,m);
+ } else if(auto* m=g.as<torch::nn::FractionalMaxPool3d>()) { c=Cast::fmaxpool3d; fpool<3,torch::nn::FractionalMaxPool3dImpl>(a,x,m);
 
  } else if(auto* m=g.as<torch::nn::LPPool1d>())         { c=Cast::lppool1d; lppool<1,torch::nn::LPPool1dImpl>(a,x,m);
  } else if(auto* m=g.as<torch::nn::LPPool2d>())         { c=Cast::lppool2d; lppool<2,torch::nn::LPPool2dImpl>(a,x,m);

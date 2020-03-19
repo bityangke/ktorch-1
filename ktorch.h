@@ -70,10 +70,9 @@ using TensorList=torch::TensorList;
 using Module=torch::nn::Module;
 using AnyModule=torch::nn::AnyModule;
 using Sequential=torch::nn::Sequential;
-using OptimizerBase=torch::optim::detail::OptimizerBase;
-using Optptr=std::shared_ptr<OptimizerBase>;
 using Optimizer=torch::optim::Optimizer;
-using LossClosureOptimizer=torch::optim::LossClosureOptimizer;
+using Optptr=std::shared_ptr<Optimizer>;
+//PATCH: using LossClosureOptimizer=torch::optim::LossClosureOptimizer;
 using TensorDict = torch::OrderedDict<std::string, torch::Tensor>;
 using at::detail::computeStorageSize;
 
@@ -224,7 +223,7 @@ struct TORCH_API Kopt : public Ktag {
  Optptr o;
  Kopt(Cast x,const Optptr& y) : o(std::move(y)) {a=Class::optimizer; c=x;}
  bool is_empty() const noexcept {return o == nullptr;}
- OptimizerBase* get() {TORCH_CHECK(!is_empty(), "Undefined optimizer"); return o.get();}
+ Optimizer* get() {TORCH_CHECK(!is_empty(), "Undefined optimizer"); return o.get();}
 };
 
 struct TORCH_API Kmodel : public Ktag {
@@ -480,7 +479,7 @@ void lossfn(K);
 // optimization functions:
 K kopt(Cast,const Optptr&);
 K optstate(Ktag*,K);
-K optstate(bool,bool,Cast,OptimizerBase*);
+K optstate(bool,bool,Cast,Optimizer*);
 K optattr(const Optptr&,Ktype,Attr);
 void optstep(Cast,Optptr&);
 void optstep(Kopt*);
@@ -583,10 +582,12 @@ typedef struct {
   std::make_tuple(cs("uniform"),     Prob::uniform),
  }};
 
+/* PATCH
  std::array<std::tuple<S,torch::nn::RNNActivation>,2> rnnfn = {{
   std::make_tuple(cs("relu"),torch::nn::RNNActivation::ReLU),
   std::make_tuple(cs("tanh"),torch::nn::RNNActivation::Tanh)
  }};
+*/
 
  std::array<std::tuple<S,Cast>,95> module = {{               // module sym -> enum
   std::make_tuple(cs("adaptavg1d"),      Cast::adaptavg1d),

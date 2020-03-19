@@ -3,6 +3,7 @@
 // fractional max pool 2,3d
 // defined here due to bug with 1.4 versions, output ratio defined as integer instead of float
 // -------------------------------------------------------------------------------------------
+/* PATCH: 
 template <size_t D>
 struct FractionalMaxPoolOptions {
   FractionalMaxPoolOptions(ExpandingArray<D> kernel_size) : kernel_size_(kernel_size) {}
@@ -182,6 +183,7 @@ class TORCH_API FractionalMaxPool3dImpl : public torch::nn::Cloneable<Fractional
   Tensor _random_samples;
 };
 TORCH_MODULE(FractionalMaxPool3d);
+*/
 
 // -----------------------------------------------------------------------------------------
 //  transposed convolutions forward fn requires 2 args: input & optional output size
@@ -393,13 +395,12 @@ TORCH_MODULE(Join);
 
 // -----------------------------------------------------------------------------------------
 // Sequence - derived from Sequential to accept nested sequentials 
-//          - uses fixed result type of tensor for forward calc
 //          - no templatized forward result means can also be stored as an AnyModule
 // -----------------------------------------------------------------------------------------
 struct TORCH_API SequenceImpl : public torch::nn::SequentialImpl {
   using SequentialImpl::SequentialImpl;
 
-  torch::Tensor forward(torch::Tensor x) {
+  torch::Tensor forward(const torch::Tensor& x) {
     return SequentialImpl::forward(x);
   }
 };

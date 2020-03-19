@@ -53,6 +53,48 @@ KAPI statetest(K x) {
  KCATCH("statetest");
 }
 
+enum TensorPair {TensorPair};
+enum TensorTriple {triple};
+Tensor                           f1(const Tensor& x) {return x;}
+std::tuple<Tensor,Tensor>        f1(const Tensor& x,enum TensorPair)   { return std::make_tuple(x,x+100);}
+std::tuple<Tensor,Tensor,Tensor> f1(const Tensor& x,TensorTriple) { return std::make_tuple(x,x+10,x+1000);}
+
+KAPI ftest1(K a) {
+ Tensor x,y,z;
+ x=torch::arange(8);
+ switch(a->j) {
+  case 2: std::tie(x,y)  =f1(x,TensorPair);   return kget(y);
+  case 3: std::tie(x,y,z)=f1(x,triple); return kget(z);
+  default: return kget(f1(x));
+ }
+}
+
+using SeqResult=c10::variant<int,double,Tensor>;
+SeqResult f(J a,Tensor x) { if(a) return x; else return 2.5;}
+
+KAPI ftest2(K x) {
+ KTRY
+  Sequential q; Join j; Tensor a,b; bool p;
+  j->push_back(Sequential());
+  j->push_back(Sequential());
+  j->push_back(AnyModule(Cat(0)));
+  q->push_back(j);
+  q->push_back(Reshape(std::vector<int64_t>{1,1,-1}));
+  p=xtenpair(x,a,b);
+  std::cerr << a << "\n";
+  std::cerr << b << "\n";
+  return kget(q->forward(a,b));
+ KCATCH("ftest2");
+}
+
+KAPI ftest3(K x) {
+ KTRY
+  Sequential q;
+  q->push_back(Reshape(std::vector<int64_t>{1,1,-1}));
+  return kget(q->forward(kput(x)));
+ KCATCH("ftest2");
+}
+
 KAPI nameany(K x) {
  //auto m=torch::nn::NamedAnyModule("fc",torch::nn::Linear(1,2));
  auto m=torch::nn::NamedAnyModule("",torch::nn::Linear(1,2));
@@ -115,6 +157,10 @@ static S msym(Cast c) {
  for(auto& m:env().module) if(c==std::get<1>(m)) return std::get<0>(m);
  AT_ERROR("Unrecognized module: ",(I)c);
 }
+static Cast msym(S s) {
+ for(auto& m:env().module) if(s==std::get<0>(m)) return std::get<1>(m);
+ AT_ERROR("Unrecognized module: ",s);
+}
 
 std::tuple<Cast,K> mopt(bool,const Module&);
 
@@ -148,34 +194,52 @@ void mput(int64_t pd, int64_t d, Cast c, std::string n) {
 }
 */
 
+void mdefine(Sequential &q,S s,S n=nullptr,J i=-1,K x=nullptr,K p=nullptr,K f=nullptr);
+
 void mput1(K x) {
- J n=x->t==99 ? 0 : xlen(x);
+ J d,pd=0,n=x->t==99 ? 0 : xlen(x); std::stack<Module*> p;
+ Sequential q,Q; Module *m; AnyModule a; Cast c;
  for(J i=98-x->t;i<n;++i) {
-  std::cerr << "row "  << i << ":  ";
-  std::cerr << "depth: "   << statedepth(x,i) << ", ";
-  std::cerr << "module: "  << statemodule(x,i) << ", ";
-  std::cerr << "name: "    << statename(x,i) << ", ";
-  std::cerr << "\n";
-  /*
-   mdefine(q,
-    statemodule(x,i),
-    statename(x,i),
-    -1,
-    stateoptions(x,i),
-    stateparms(x,i),
-    statebuffers(x,i));
-  */
+  c=msym(statemodule(x,i));
+  d=statedepth(x,i);
+  if(i==0)     
+   p.push(q.get());
+  else if(d<pd)
+   p.pop();
+  m=p.top();
+  if(container(c)) {
+   std::cerr << "container: " << statemodule(x,i) << "\n";
+   if(i==0) {
+    p.push(q.get());
+   } else { 
+    if(c==Cast::join) {
+     Join j;
+     p.push(j.get());
+    } else if (c==Cast::sequential) {
+     Sequential q;
+     p.push(q.get());
+    }
+   }
+  } else {
+   mdefine(Q, statemodule(x,i), statename(x,i), -1, stateoptions(x,i), stateparms(x,i), statebuffers(x,i));
+   //*Q[Q->size()-1];
+  }
+  pd=d;
  }
+ std::cerr << Q << "\n";
 }
 
 K mput(K x) {
  mput1(x);
- std::stack<AnyModule> p;
- p.push(AnyModule(torch::nn::Linear(1,2)));
- p.push(AnyModule(Reshape(std::vector<int64_t>{1,1,2})));
- std::cerr << *p.top().ptr() << "\n";
+ std::stack<Module*> p;
+ //p.push(torch::nn::Linear(1,2).get());
+ torch::nn::Linear l(1,2);
+ p.push(l.get());
+ Reshape r(std::vector<int64_t>{1,1,2});
+ p.push(r.get());
+ std::cerr << *p.top() << "\n";
  p.pop();
- std::cerr << *p.top().ptr() << "\n";
+ std::cerr << *p.top() << "\n";
  return (K)0;
 }
 
@@ -258,15 +322,41 @@ KAPI join1(K x) {
  KTRY
   Sequence q;
   Join j;  // j=nullptr;
-  q->push_back(j);
+  q->push_back("xy",j);
   Sequential q1=Sequential(torch::nn::Embedding(10,50), torch::nn::Linear(50,784), Reshape(std::vector<int64_t>{-1,1,28,28}));
   j->push_back("zshape",q1);
   j->push_back("empty",Sequential());
   j->push_back("cat",AnyModule(Cat(1)));
+  for(auto& c:q->named_modules()) std::cerr << "child: " <<  c.key() << "\n";
   return mget(true,true,Cast::sequential,*q);
   //Cast c; K o; std::tie(c,o)=mopt(true,*AnyModule(q).ptr());
   //return o;
  KCATCH("join1");
+}
+
+using Container=c10::variant<Sequential, Join>;
+void addchild(const std::stack<Container>& c,const AnyModule& a) {
+ auto& p=c.top();
+ switch(p.index()) {
+  case 0: std::cerr << *c10::get<Sequential>(p).ptr() << "\n"; break;
+  case 1: std::cerr << *c10::get<Join>(p).ptr() << "\n"; break;
+  default: break;
+ }
+}
+
+KAPI contain(K x) {
+ KTRY
+  std::stack<Container> p;
+  AnyModule a;
+  Sequential q;
+  Join j;
+  p.push(q);
+  p.push(j);
+  addchild(p,a);
+  p.pop();
+  addchild(p,a);
+  return (K)0;
+ KCATCH("container");
 }
 
 KAPI stest(K x) {
@@ -900,8 +990,8 @@ KAPI gan(K x) {
 
   auto data_loader = torch::data::make_data_loader(std::move(dataset),torch::data::DataLoaderOptions().batch_size(kBatchSize).workers(2));
 
-  torch::optim::Adam generator_optimizer(generator->parameters(), torch::optim::AdamOptions(2e-4).beta1(0.5));
-  torch::optim::Adam discriminator_optimizer(discriminator->parameters(), torch::optim::AdamOptions(2e-4).beta1(0.5));
+  torch::optim::Adam generator_optimizer(generator->parameters(), torch::optim::AdamOptions(2e-4).betas(std::make_tuple(0.5,.999)));
+  torch::optim::Adam discriminator_optimizer(discriminator->parameters(), torch::optim::AdamOptions(2e-4).betas(std::make_tuple(0.5,.999)));
 
   int64_t checkpoint_counter = 1;
   for (int64_t epoch = 1; epoch <= kNumberOfEpochs; ++epoch) {
